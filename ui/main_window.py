@@ -6,6 +6,7 @@ from PyQt6.QtCore import Qt
 
 from ui.dashboard_window import DashboardWindow
 from ui.inventory_window import InventoryWindow
+from ui.sales_screen import SalesScreen
 
 class PlaceholderWindow(QWidget):
     def __init__(self, title):
@@ -46,7 +47,7 @@ class MainWindow(QMainWindow):
         # Initialize screens (Screens act as reusable components)
         self.dashboard_view = DashboardWindow()
         self.inventory_view = InventoryWindow()
-        self.sales_view = PlaceholderWindow("Sales Screen (Coming Soon)")
+        self.sales_view = SalesScreen()
         self.purchases_view = PlaceholderWindow("Purchases Screen (Coming Soon)")
 
         # Add screens to stack
