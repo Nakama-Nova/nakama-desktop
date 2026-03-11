@@ -4,7 +4,7 @@ from PyQt6.QtWidgets import (
 )
 
 from services.auth_service import login
-
+from ui.dashboard_window import DashboardWindow
 
 class LoginWindow(QWidget):
 
@@ -40,6 +40,8 @@ class LoginWindow(QWidget):
         result = login(username, password)
 
         if result:
-            QMessageBox.information(self, "Success", "Login successful")
+            self.dashboard = DashboardWindow()
+            self.dashboard.show()
+            self.close()
         else:
             QMessageBox.warning(self, "Error", "Invalid credentials")
