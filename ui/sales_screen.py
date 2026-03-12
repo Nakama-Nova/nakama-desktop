@@ -23,6 +23,7 @@ from PyQt6.QtCore import Qt, QStringListModel
 
 from services.api_client import APIClient
 from services.session import Session
+from services.event_bus import EventBus, SALE_CREATED
 
 # ---------------------------------------------------------------------------
 # Controller – isolates file I/O and orchestration from the widget
@@ -37,6 +38,23 @@ class SalesController:
 
     def __init__(self, api: APIClient):
         self._api = api
+
+    def lookup_customer(self, phone: str) -> dict | None:
+        """Find an existing customer by phone number."""
+        return self._api.get_customer_by_phone(Session.token, phone)
+
+    def ensure_customer(self, name: str, phone: str) -> int | None:
+        """
+        Ensures a customer exists. If phone found, return ID. 
+        If not, create and return new ID.
+        """
+        customer = self.lookup_customer(phone)
+        if customer:
+            return customer.get("id")
+        
+        # Create new customer
+        new_customer = self._api.create_customer(Session.token, name=name, phone=phone, address="")
+        return new_customer.get("id") if new_customer else None
 
     def submit_sale(self, items: list[dict], customer_id: int | None = None) -> dict | None:
         """POST /sales and return the response dict (SaleResponse)."""
@@ -117,11 +135,32 @@ class SalesScreen(QWidget):
         root.setContentsMargins(20, 20, 20, 20)
         root.setSpacing(14)
 
-        # ── Customer name ────────────────────────────────────────────
-        root.addWidget(QLabel("<b>Customer Name</b>"))
+        # ── Customer lookup ──────────────────────────────────────────
+        customer_group = QHBoxLayout()
+        
+        # Phone
+        phone_vbox = QVBoxLayout()
+        phone_vbox.addWidget(QLabel("<b>Customer Phone</b>"))
+        self.phone_input = QLineEdit()
+        self.phone_input.setPlaceholderText("Enter phone number...")
+        phone_vbox.addWidget(self.phone_input)
+        customer_group.addLayout(phone_vbox)
+
+        # Name
+        name_vbox = QVBoxLayout()
+        name_vbox.addWidget(QLabel("<b>Customer Name</b>"))
         self.customer_input = QLineEdit()
-        self.customer_input.setPlaceholderText("Enter customer name...")
-        root.addWidget(self.customer_input)
+        self.customer_input.setPlaceholderText("Customer Name")
+        name_vbox.addWidget(self.customer_input)
+        customer_group.addLayout(name_vbox)
+
+        # Search Bio
+        self.search_customer_btn = QPushButton("Search")
+        self.search_customer_btn.setFixedWidth(80)
+        self.search_customer_btn.clicked.connect(self._handle_customer_lookup)
+        customer_group.addWidget(self.search_customer_btn, alignment=Qt.AlignmentFlag.AlignBottom)
+        
+        root.addLayout(customer_group)
 
         # ── Item search row ──────────────────────────────────────────
         search_row = QHBoxLayout()
@@ -191,6 +230,23 @@ class SalesScreen(QWidget):
         names = [item["name"] for item in items]
         model = QStringListModel(names)
         self._completer.setModel(model)
+
+    # ------------------------------------------------------------------
+    # Customer operations
+    # ------------------------------------------------------------------
+    def _handle_customer_lookup(self):
+        phone = self.phone_input.text().strip()
+        if not phone:
+            QMessageBox.warning(self, "Input Error", "Please enter a phone number.")
+            return
+        
+        customer = self._controller.lookup_customer(phone)
+        if customer:
+            self.customer_input.setText(customer.get("name", ""))
+            QMessageBox.information(self, "Found", f"Customer found: {customer.get('name')}")
+        else:
+            QMessageBox.information(self, "Not Found", "No customer found with this phone number. Please enter name manually.")
+            self.customer_input.setFocus()
 
     # ------------------------------------------------------------------
     # Cart operations
@@ -284,7 +340,12 @@ class SalesScreen(QWidget):
     # Invoice generation
     # ------------------------------------------------------------------
     def _generate_invoice(self):
+        phone = self.phone_input.text().strip()
         customer_name = self.customer_input.text().strip()
+        
+        if not phone:
+            QMessageBox.warning(self, "Missing Info", "Please enter a customer phone number.")
+            return
         if not customer_name:
             QMessageBox.warning(self, "Missing Info", "Please enter a customer name.")
             return
@@ -292,13 +353,18 @@ class SalesScreen(QWidget):
             QMessageBox.warning(self, "Empty Cart", "Please add at least one item.")
             return
 
-        # Step 1 – POST /sales  (backend SaleCreate: items + optional customer_id)
+        # Step 1 – Resolve Customer (Lookup or Create)
+        customer_id = self._controller.ensure_customer(customer_name, phone)
+        if customer_id is None:
+            QMessageBox.critical(self, "Error", "Failed to resolve/create customer. Check backend.")
+            return
+
+        # Step 2 – POST /sales
         payload_items = [
             {"item_id": c.item_id, "quantity": c.quantity}
             for c in self._cart
         ]
-        # customer_name is kept in UI for display/records; backend uses customer_id (guest sale = None)
-        sale_data = self._controller.submit_sale(items=payload_items)
+        sale_data = self._controller.submit_sale(items=payload_items, customer_id=customer_id)
         if sale_data is None:
             QMessageBox.critical(self, "Error", "Failed to create sale. Check backend connection.")
             return
@@ -309,13 +375,13 @@ class SalesScreen(QWidget):
             QMessageBox.critical(self, "Error", "Sale created but invoice_number missing in response.")
             return
 
-        # Step 2 – Download PDF  (route: GET /invoices/{invoice_number}/pdf)
+        # Step 3 – Download PDF  (route: GET /invoices/{invoice_number}/pdf)
         pdf_path = self._controller.fetch_and_save_pdf(invoice_number)
         if pdf_path is None:
             QMessageBox.critical(self, "Error", "Sale created but PDF download failed.")
             return
 
-        # Step 3 – Open PDF with system viewer
+        # Step 4 – Open PDF with system viewer
         self._controller.open_pdf(pdf_path)
 
         QMessageBox.information(
@@ -323,5 +389,10 @@ class SalesScreen(QWidget):
             "Invoice Generated",
             f"Invoice {invoice_number} saved to:\n{pdf_path.resolve()}"
         )
+        
+        # Invalidate caches and trigger refreshes
+        EventBus.emit(SALE_CREATED)
+        
         self._clear_cart()
         self.customer_input.clear()
+        self.phone_input.clear()
