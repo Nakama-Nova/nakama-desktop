@@ -7,6 +7,9 @@ from PyQt6.QtCore import Qt
 from ui.dashboard_window import DashboardWindow
 from ui.inventory_window import InventoryWindow
 from ui.sales_screen import SalesScreen
+from ui.customers_screen import CustomersScreen
+from ui.reports_screen import ReportsScreen
+from ui.sales_history_screen import SalesHistoryScreen
 
 class PlaceholderWindow(QWidget):
     def __init__(self, title):
@@ -48,24 +51,32 @@ class MainWindow(QMainWindow):
         self.dashboard_view = DashboardWindow()
         self.inventory_view = InventoryWindow()
         self.sales_view = SalesScreen()
-        self.purchases_view = PlaceholderWindow("Purchases Screen (Coming Soon)")
+        self.customers_view = CustomersScreen()
+        self.reports_view = ReportsScreen()
+        self.sales_history_view = SalesHistoryScreen()
 
         # Add screens to stack
         self.content_stack.addWidget(self.dashboard_view)
         self.content_stack.addWidget(self.inventory_view)
         self.content_stack.addWidget(self.sales_view)
-        self.content_stack.addWidget(self.purchases_view)
+        self.content_stack.addWidget(self.customers_view)
+        self.content_stack.addWidget(self.reports_view)
+        self.content_stack.addWidget(self.sales_history_view)
 
         # Navigation buttons
         self.btn_dashboard = self._create_nav_button("Dashboard", 0)
         self.btn_inventory = self._create_nav_button("Inventory", 1)
         self.btn_sales = self._create_nav_button("Sales", 2)
-        self.btn_purchases = self._create_nav_button("Purchases", 3)
+        self.btn_customers = self._create_nav_button("Customers", 3)
+        self.btn_reports = self._create_nav_button("Reports", 4)
+        self.btn_sales_history = self._create_nav_button("Sales History", 5)
 
         sidebar_layout.addWidget(self.btn_dashboard)
         sidebar_layout.addWidget(self.btn_inventory)
         sidebar_layout.addWidget(self.btn_sales)
-        sidebar_layout.addWidget(self.btn_purchases)
+        sidebar_layout.addWidget(self.btn_customers)
+        sidebar_layout.addWidget(self.btn_reports)
+        sidebar_layout.addWidget(self.btn_sales_history)
         sidebar_layout.addStretch()
 
         # Set default view
