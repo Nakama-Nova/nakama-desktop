@@ -14,7 +14,7 @@ The following versions of NakamaDesk Desktop are currently supported with securi
 If you discover a potential security vulnerability in this project, please report it responsibly by following these steps:
 
 1. **Do not open a public issue.**
-2. Email the details to `security@nakama.com` (replace with actual contact).
+2. Email the details to `chaithu.moorpa@gmail.com`.
 3. Provide a detailed description of the vulnerability, including steps to reproduce.
 4. We will acknowledge your report within 48 hours and provide a timeline for a fix.
 
