@@ -24,6 +24,7 @@ from ui.sales_screen import SalesScreen
 from ui.customers_screen import CustomersScreen
 from ui.reports_screen import ReportsScreen
 from ui.sales_history_screen import SalesHistoryScreen
+from ui.attendance_screen import AttendanceScreen
 from services.session import Session
 from services.enums import UserRole
 
@@ -37,6 +38,7 @@ class MainWindow(QMainWindow):
         ("👤", "Buyers", 3),
         ("📜", "Bill History", 4),
         ("📊", "Reports", 5),
+        ("👷", "Workforce", 6),
     ]
 
     def __init__(self):
@@ -145,6 +147,7 @@ class MainWindow(QMainWindow):
         self.customers_view = CustomersScreen()
         self.sales_history_view = SalesHistoryScreen()
         self.reports_view = ReportsScreen()
+        self.attendance_view = AttendanceScreen()
 
         self.content_stack.addWidget(self.dashboard_view)  # 0
         self.content_stack.addWidget(self.sales_view)  # 1
@@ -152,6 +155,7 @@ class MainWindow(QMainWindow):
         self.content_stack.addWidget(self.customers_view)  # 3
         self.content_stack.addWidget(self.sales_history_view)  # 4
         self.content_stack.addWidget(self.reports_view)  # 5
+        self.content_stack.addWidget(self.attendance_view)  # 6
 
         # Set default (Home)
         self._switch_page(0)
@@ -171,11 +175,11 @@ class MainWindow(QMainWindow):
                     allowed.append((icon, label, index))
             elif role == UserRole.ACHARI:
                 # Achari focuses on stock/manufacturing, no billing/reports
-                if label in ["Home", "Stock"]:
+                if label in ["Home", "Stock", "Workforce"]:
                     allowed.append((icon, label, index))
             elif role == UserRole.WORKER:
                 # Worker only sees home and stock, no billing/buyers/reports
-                if label in ["Home", "Stock"]:
+                if label in ["Home", "Stock", "Workforce"]:
                     allowed.append((icon, label, index))
             else:
                 # Default safety

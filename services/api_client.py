@@ -282,6 +282,63 @@ class APIClient:
             return None
 
     # ------------------------------------------------------------------
+    # Attendance / Workforce
+    # ------------------------------------------------------------------
+    def get_users(self, token: str) -> list | None:
+        """GET /auth/ — list all users (admin only)"""
+        try:
+            return self._get("/auth/", token)
+        except APIError:
+            return None
+
+    def check_in(self, token: str, user_id: str) -> dict | None:
+        """POST /attendance/check-in"""
+        try:
+            return self._post("/attendance/check-in", token, params={"user_id": user_id})
+        except ForbiddenError:
+            raise
+        except APIError:
+            return None
+
+    def check_out(self, token: str, attendance_id: str) -> dict | None:
+        """POST /attendance/check-out"""
+        try:
+            return self._post(
+                "/attendance/check-out", token, params={"attendance_id": attendance_id}
+            )
+        except ForbiddenError:
+            raise
+        except APIError:
+            return None
+
+    def get_my_attendance(self, token: str) -> list | None:
+        """GET /attendance/my"""
+        try:
+            return self._get("/attendance/my", token)
+        except APIError:
+            return None
+
+    def get_all_attendance(
+        self,
+        token: str,
+        user_id: str = None,
+        start_date: str = None,
+        end_date: str = None,
+    ) -> list | None:
+        """GET /attendance/all"""
+        params: dict[str, Any] = {}
+        if user_id:
+            params["user_id"] = user_id
+        if start_date:
+            params["start_date"] = start_date
+        if end_date:
+            params["end_date"] = end_date
+        try:
+            return self._get("/attendance/all", token, params=params or None)
+        except APIError:
+            return None
+
+    # ------------------------------------------------------------------
     # Sync endpoints
     # ------------------------------------------------------------------
     def push_sync(self, token: str, operations: list[dict]) -> dict | None:
