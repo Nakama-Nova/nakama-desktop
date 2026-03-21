@@ -1,155 +1,256 @@
+"""
+services/api_client.py
+
+Thin HTTP transport layer. Handles only network calls and token injection.
+No business logic lives here — domain services call these methods.
+
+Routes aligned with actual backend API endpoints:
+  - /auth/login
+  - /items (GET, POST)
+  - /customers (GET, POST), /customers/{id} (PUT, DELETE), /customers/search
+  - /sales (GET, POST), /sales/{id}, /sales/{id}/items
+  - /invoices/{number}/pdf
+  - /reports/sales, /reports/inventory
+  - /dashboard/summary
+  - /sync/push, /sync/pull
+"""
+
 import requests
+from typing import Any
 
 BASE_URL = "http://127.0.0.1:8000"
 
 
-class APIClient:
+class APIError(Exception):
+    """Raised when an API call fails."""
 
+    def __init__(self, status_code: int, detail: str = ""):
+        self.status_code = status_code
+        self.detail = detail
+        super().__init__(f"API Error {status_code}: {detail}")
+
+
+class APIClient:
+    """Low-level HTTP client for the Nakama backend."""
+
+    def __init__(self, base_url: str = BASE_URL):
+        self._base_url = base_url
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+    def _headers(self, token: str) -> dict[str, str]:
+        return {"Authorization": f"Bearer {token}"}
+
+    def _get(self, path: str, token: str, params: dict | None = None) -> Any:
+        response = requests.get(
+            f"{self._base_url}{path}",
+            headers=self._headers(token),
+            params=params,
+        )
+        if response.status_code != 200:
+            raise APIError(response.status_code, response.text)
+        return response.json()
+
+    def _post(self, path: str, token: str, json: dict | None = None,
+              data: dict | None = None) -> Any:
+        response = requests.post(
+            f"{self._base_url}{path}",
+            headers=self._headers(token),
+            json=json,
+            data=data,
+        )
+        if response.status_code not in (200, 201):
+            raise APIError(response.status_code, response.text)
+        return response.json()
+
+    def _put(self, path: str, token: str, json: dict) -> Any:
+        response = requests.put(
+            f"{self._base_url}{path}",
+            headers=self._headers(token),
+            json=json,
+        )
+        if response.status_code != 200:
+            raise APIError(response.status_code, response.text)
+        return response.json()
+
+    def _delete(self, path: str, token: str) -> bool:
+        response = requests.delete(
+            f"{self._base_url}{path}",
+            headers=self._headers(token),
+        )
+        return response.status_code in (200, 204)
+
+    def _get_bytes(self, path: str, token: str) -> bytes | None:
+        response = requests.get(
+            f"{self._base_url}{path}",
+            headers=self._headers(token),
+        )
+        return response.content if response.status_code == 200 else None
+
+    # ------------------------------------------------------------------
+    # Auth
+    # ------------------------------------------------------------------
     def login(self, username: str, password: str) -> dict | None:
         response = requests.post(
-            f"{BASE_URL}/auth/login",
+            f"{self._base_url}/auth/login",
             data={"username": username, "password": password},
         )
         return response.json() if response.status_code == 200 else None
 
+    # ------------------------------------------------------------------
+    # Items  (ItemResponse fields: id, sku, name, selling_price,
+    #         purchase_price, gst_percent, current_stock, min_stock, ...)
+    # ------------------------------------------------------------------
     def get_items(self, token: str) -> list | None:
-        """Fetch all inventory items from the backend."""
-        response = requests.get(
-            f"{BASE_URL}/items",
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        return response.json() if response.status_code == 200 else None
+        try:
+            return self._get("/items", token)
+        except APIError:
+            return None
 
-    def create_sale(self, token: str, items: list, customer_id: int | None = None) -> dict | None:
-        """
-        POST /sales
-        Payload matches backend SaleCreate: items + optional customer_id.
-        items: [{"item_id": int, "quantity": int}, ...]
-        Returns SaleResponse JSON containing id and invoice_number.
-        """
-        payload = {"items": items}
-        if customer_id is not None:
-            payload["customer_id"] = customer_id
-        response = requests.post(
-            f"{BASE_URL}/sales",
-            json=payload,
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        return response.json() if response.status_code in (200, 201) else None
-
-    def get_invoice_pdf(self, token: str, invoice_number: str) -> bytes | None:
-        """
-        GET /invoices/{invoice_number}/pdf
-        Returns raw PDF bytes or None on failure.
-        """
-        response = requests.get(
-            f"{BASE_URL}/invoices/{invoice_number}/pdf",
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        return response.content if response.status_code == 200 else None
-
-    # --- Customer Management ---
-
+    # ------------------------------------------------------------------
+    # Customers  (CustomerResponse fields: id, name, phone, email,
+    #             address, pincode, gstin, customer_type, created_at)
+    # ------------------------------------------------------------------
     def get_customers(self, token: str) -> list | None:
-        response = requests.get(
-            f"{BASE_URL}/customers",
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        return response.json() if response.status_code == 200 else None
+        try:
+            return self._get("/customers", token)
+        except APIError:
+            return None
 
-    def create_customer(self, token: str, name: str, phone: str = None, address: str = None) -> dict | None:
-        payload = {"name": name, "phone": phone, "address": address}
-        response = requests.post(
-            f"{BASE_URL}/customers",
-            json=payload,
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        return response.json() if response.status_code in (200, 201) else None
+    def create_customer(self, token: str, name: str,
+                        phone: str = None, address: str = None) -> dict | None:
+        try:
+            return self._post("/customers", token,
+                              json={"name": name, "phone": phone, "address": address})
+        except APIError:
+            return None
 
     def search_customer_by_phone(self, token: str, phone: str) -> dict | None:
-        response = requests.get(
-            f"{BASE_URL}/customers/search",
-            params={"phone": phone},
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        return response.json() if response.status_code == 200 else None
+        try:
+            return self._get("/customers/search", token, params={"phone": phone})
+        except APIError:
+            return None
 
     def get_customer_by_phone(self, token: str, phone: str) -> dict | None:
-        """Helper to find a customer by phone number from the full list."""
         customers = self.get_customers(token)
         if not customers:
             return None
         return next((c for c in customers if c.get("phone") == phone), None)
 
-    def update_customer(self, token: str, customer_id: int, name: str, phone: str = None, address: str = None) -> dict | None:
-        payload = {"name": name, "phone": phone, "address": address}
-        response = requests.put(
-            f"{BASE_URL}/customers/{customer_id}",
-            json=payload,
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        return response.json() if response.status_code == 200 else None
+    def update_customer(self, token: str, customer_id: str, name: str,
+                        phone: str = None, address: str = None) -> dict | None:
+        try:
+            return self._put(f"/customers/{customer_id}", token,
+                             json={"name": name, "phone": phone, "address": address})
+        except APIError:
+            return None
 
-    def delete_customer(self, token: str, customer_id: int) -> bool:
-        response = requests.delete(
-            f"{BASE_URL}/customers/{customer_id}",
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        return response.status_code == 200
+    def delete_customer(self, token: str, customer_id: str) -> bool:
+        return self._delete(f"/customers/{customer_id}", token)
 
-    # --- Sales History ---
+    # ------------------------------------------------------------------
+    # Sales  (SaleResponse fields: id, invoice_number, customer_id,
+    #         total_amount, created_at, items: [SaleItemResponse])
+    # ------------------------------------------------------------------
+    def create_sale(self, token: str, items: list,
+                    customer_id: str | None = None) -> dict | None:
+        """
+        POST /sales
+        items: [{"item_id": "<uuid>", "quantity": int}, ...]
+        """
+        payload: dict[str, Any] = {"items": items}
+        if customer_id is not None:
+            payload["customer_id"] = customer_id
+        try:
+            return self._post("/sales", token, json=payload)
+        except APIError:
+            return None
 
-    def get_sales(self, token: str, customer_id: int = None, date: str = None) -> list | None:
-        params = {}
-        if customer_id: params["customer_id"] = customer_id
-        if date: params["date"] = date
-        response = requests.get(
-            f"{BASE_URL}/sales",
-            params=params,
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        return response.json() if response.status_code == 200 else None
+    def get_sales(self, token: str, customer_id: str = None,
+                  date: str = None) -> list | None:
+        params: dict[str, Any] = {}
+        if customer_id:
+            params["customer_id"] = customer_id
+        if date:
+            params["date"] = date
+        try:
+            return self._get("/sales", token, params=params or None)
+        except APIError:
+            return None
 
-    def get_sale_details(self, token: str, sale_id: int) -> dict | None:
-        response = requests.get(
-            f"{BASE_URL}/sales/{sale_id}",
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        return response.json() if response.status_code == 200 else None
+    def get_sale_details(self, token: str, sale_id: str) -> dict | None:
+        try:
+            return self._get(f"/sales/{sale_id}", token)
+        except APIError:
+            return None
 
-    def get_sale_items(self, token: str, sale_id: int) -> list | None:
-        response = requests.get(
-            f"{BASE_URL}/sales/{sale_id}/items",
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        return response.json() if response.status_code == 200 else None
+    def get_sale_items(self, token: str, sale_id: str) -> list | None:
+        try:
+            return self._get(f"/sales/{sale_id}/items", token)
+        except APIError:
+            return None
 
-    # --- Reports ---
+    # ------------------------------------------------------------------
+    # Invoices
+    # ------------------------------------------------------------------
+    def get_invoice_pdf(self, token: str, invoice_number: str) -> bytes | None:
+        return self._get_bytes(f"/invoices/{invoice_number}/pdf", token)
 
-    def get_reports_daily(self, token: str) -> dict | None:
-        response = requests.get(
-            f"{BASE_URL}/reports/sales/daily",
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        return response.json() if response.status_code == 200 else None
+    # ------------------------------------------------------------------
+    # Reports  (actual backend routes)
+    #   GET /reports/sales          -> SalesReportResponse
+    #   GET /reports/inventory      -> List[InventoryReportResponse]
+    #   GET /dashboard/summary      -> {today_sales_count, today_revenue, low_stock_count, ...}
+    # ------------------------------------------------------------------
+    def get_sales_report(self, token: str, start_date: str = None,
+                         end_date: str = None) -> dict | None:
+        """GET /reports/sales — SalesReportResponse"""
+        params: dict[str, str] = {}
+        if start_date:
+            params["start_date"] = start_date
+        if end_date:
+            params["end_date"] = end_date
+        try:
+            return self._get("/reports/sales", token, params=params or None)
+        except APIError:
+            return None
 
-    def get_reports_summary(self, token: str) -> dict | None:
-        response = requests.get(
-            f"{BASE_URL}/reports/sales/summary",
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        return response.json() if response.status_code == 200 else None
+    def get_inventory_report(self, token: str) -> list | None:
+        """GET /reports/inventory — List[InventoryReportResponse]"""
+        try:
+            return self._get("/reports/inventory", token)
+        except APIError:
+            return None
 
     def get_dashboard_summary(self, token: str) -> dict | None:
-        response = requests.get(
-            f"{BASE_URL}/dashboard/summary",
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        return response.json() if response.status_code == 200 else None
+        """GET /dashboard/summary"""
+        try:
+            return self._get("/dashboard/summary", token)
+        except APIError:
+            return None
 
-    def get_low_stock_items(self, token: str) -> list | None:
-        response = requests.get(
-            f"{BASE_URL}/reports/inventory/low-stock",
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        return response.json() if response.status_code == 200 else None
+    # ------------------------------------------------------------------
+    # Sync endpoints
+    # ------------------------------------------------------------------
+    def push_sync(self, token: str, operations: list[dict]) -> dict | None:
+        """POST /sync/push — upload outbox operations."""
+        try:
+            return self._post("/sync/push", token, json={"operations": operations})
+        except APIError:
+            return None
+
+    def pull_sync(self, token: str, last_sync: str) -> dict | None:
+        """GET /sync/pull — download incremental updates."""
+        try:
+            return self._get("/sync/pull", token, params={"last_sync": last_sync})
+        except APIError:
+            return None
+
+    def health_check(self) -> bool:
+        """Check if the backend is reachable."""
+        try:
+            response = requests.get(f"{self._base_url}/health", timeout=3)
+            return response.status_code == 200
+        except requests.ConnectionError:
+            return False
