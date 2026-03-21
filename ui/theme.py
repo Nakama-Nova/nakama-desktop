@@ -53,6 +53,7 @@ class Colors:
 
 class Fonts:
     """Font sizes used across the app."""
+
     FAMILY = "Segoe UI"
     HEADING_XL = 24
     HEADING_LG = 20

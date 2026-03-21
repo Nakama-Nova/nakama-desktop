@@ -16,6 +16,7 @@ class EventBus:
                 except Exception as e:
                     print(f"Error in event listener for {event_type}: {e}")
 
+
 # Event Types
 SALE_CREATED = "sale_created"
 CUSTOMER_CREATED = "customer_created"

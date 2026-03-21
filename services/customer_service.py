@@ -25,10 +25,13 @@ class CustomerService:
     def create(self, name: str, phone: str = None, address: str = None) -> dict | None:
         return self._api.create_customer(self._token(), name, phone, address)
 
-    def update(self, customer_id: str, name: str,
-               phone: str = None, address: str = None) -> dict | None:
+    def update(
+        self, customer_id: str, name: str, phone: str = None, address: str = None
+    ) -> dict | None:
         """Update customer, preserving fields the desktop doesn't edit."""
-        return self._api.update_customer(self._token(), customer_id, name, phone, address)
+        return self._api.update_customer(
+            self._token(), customer_id, name, phone, address
+        )
 
     def delete(self, customer_id: str) -> bool:
         return self._api.delete_customer(self._token(), customer_id)

@@ -1,0 +1,9 @@
+[flake8]
+max-line-length = 127
+exclude = .git,__pycache__,build,dist,venv,.venv
+# F401: imported but unused
+# E402: module level import not at top of file
+# F541: f-string is missing placeholders (sometimes useful for alignment)
+ignore = E203, W503
+per-file-ignores =
+    __init__.py: F401

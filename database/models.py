@@ -13,11 +13,11 @@ from datetime import datetime, timezone
 class OutboxEntry:
     """A pending sync operation queued for push to the backend."""
 
-    entity: str          # "sale", "item", "attendance", "raw_material"
-    action: str          # "create", "update", "delete"
-    payload: str         # JSON-encoded payload
+    entity: str  # "sale", "item", "attendance", "raw_material"
+    action: str  # "create", "update", "delete"
+    payload: str  # JSON-encoded payload
     status: str = "pending"  # "pending", "synced", "failed"
-    id: str = ""         # Auto-assigned by DB
+    id: str = ""  # Auto-assigned by DB
     created_at: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )

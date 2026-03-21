@@ -5,9 +5,15 @@ Reports screen — hides UUID item IDs, user-friendly column names.
 """
 
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QTableWidget, QTableWidgetItem, QHeaderView,
-    QPushButton, QGridLayout,
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QTableWidget,
+    QTableWidgetItem,
+    QHeaderView,
+    QPushButton,
+    QGridLayout,
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor
@@ -54,18 +60,12 @@ class ReportsScreen(QWidget):
         self.card_today_revenue = MetricCard(
             "Today's Revenue", "₹0.00", Colors.BLUE, icon="💰"
         )
-        self.card_all_orders = MetricCard(
-            "Total Bills", "0", Colors.TEAL, icon="📜"
-        )
+        self.card_all_orders = MetricCard("Total Bills", "0", Colors.TEAL, icon="📜")
         self.card_total_revenue = MetricCard(
             "Total Revenue", "₹0.00", Colors.ORANGE, icon="📈"
         )
-        self.card_total_tax = MetricCard(
-            "Total Tax", "₹0.00", Colors.PURPLE, icon="🏛️"
-        )
-        self.card_low_stock = MetricCard(
-            "Low Stock Items", "0", Colors.RED, icon="⚠️"
-        )
+        self.card_total_tax = MetricCard("Total Tax", "₹0.00", Colors.PURPLE, icon="🏛️")
+        self.card_low_stock = MetricCard("Low Stock Items", "0", Colors.RED, icon="⚠️")
 
         cards_grid.addWidget(self.card_today_orders, 0, 0)
         cards_grid.addWidget(self.card_today_revenue, 0, 1)
@@ -84,15 +84,49 @@ class ReportsScreen(QWidget):
         # Table — NO UUID Item ID, friendly column names
         self.table = QTableWidget()
         self.table.setColumnCount(4)
-        self.table.setHorizontalHeaderLabels([
-            "Item Name", "Code", "In Stock", "Reorder At"
-        ])
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.table.setHorizontalHeaderLabels(
+            ["Item Name", "Code", "In Stock", "Reorder At"]
+        )
+        self.table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeMode.Stretch
+        )
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
         self.table.setStyleSheet(Theme.table_style())
 
         layout.addWidget(self.table)
+
+        # ── RBAC Overlay ──────────────────────────────
+        self._enforce_rbac()
+
+    def _enforce_rbac(self):
+        from services.session import Session
+        from services.enums import UserRole
+
+        if not Session.is_authorized([UserRole.OWNER, UserRole.MANAGER]):
+            # Hide the main content and show a permission denied message
+            for i in range(self.layout().count()):
+                widget = self.layout().itemAt(i).widget()
+                if widget:
+                    widget.hide()
+
+            # Show lock icon and message
+            lock_label = QLabel("🛡️ Permission Denied")
+            lock_label.setStyleSheet(Theme.heading(Fonts.HEADING_XL))
+            lock_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+            sub_label = QLabel(
+                "Only Owners and Managers can view business reports and analytics."
+            )
+            sub_label.setStyleSheet(
+                f"color: {Colors.TEXT_SECONDARY}; font-size: {Fonts.BODY}px;"
+            )
+            sub_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+            self.layout().addStretch()
+            self.layout().addWidget(lock_label)
+            self.layout().addWidget(sub_label)
+            self.layout().addStretch()
 
     def refresh_data(self):
         # Dashboard summary (today's data)
@@ -111,9 +145,7 @@ class ReportsScreen(QWidget):
             self.card_total_revenue.set_value(
                 f"₹{float(sales.get('total_revenue', 0)):,.2f}"
             )
-            self.card_total_tax.set_value(
-                f"₹{float(sales.get('total_tax', 0)):,.2f}"
-            )
+            self.card_total_tax.set_value(f"₹{float(sales.get('total_tax', 0)):,.2f}")
 
         # Low stock items
         low_stock = self._report_service.get_low_stock_items()

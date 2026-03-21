@@ -34,9 +34,11 @@ class OutboxRepository:
 
     def get_pending(self) -> list[OutboxEntry]:
         """Return all entries with status='pending', ordered FIFO."""
-        rows = self._conn().execute(
-            "SELECT * FROM outbox WHERE status = 'pending' ORDER BY id ASC"
-        ).fetchall()
+        rows = (
+            self._conn()
+            .execute("SELECT * FROM outbox WHERE status = 'pending' ORDER BY id ASC")
+            .fetchall()
+        )
         return [
             OutboxEntry(
                 id=str(row["id"]),
@@ -65,9 +67,11 @@ class OutboxRepository:
 
     def get_last_sync(self) -> str:
         """Return the ISO-8601 last sync timestamp, or '' if never synced."""
-        row = self._conn().execute(
-            "SELECT last_sync_at FROM sync_metadata WHERE id = 1"
-        ).fetchone()
+        row = (
+            self._conn()
+            .execute("SELECT last_sync_at FROM sync_metadata WHERE id = 1")
+            .fetchone()
+        )
         return row["last_sync_at"] if row else ""
 
     def set_last_sync(self, ts: str) -> None:

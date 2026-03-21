@@ -5,14 +5,23 @@ Buyers screen — hides UUIDs, user-friendly labels, styled buttons.
 """
 
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
-    QTableWidget, QTableWidgetItem, QHeaderView,
-    QMessageBox, QDialog, QFormLayout, QLineEdit,
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
+    QHeaderView,
+    QMessageBox,
+    QDialog,
+    QFormLayout,
+    QLineEdit,
     QLabel,
 )
 from PyQt6.QtCore import Qt
 
 from ui.theme import Theme, Colors, Fonts
+from ui.errors import handle_permissions
 from services.customer_service import CustomerService
 from services.session import Session
 from services.enums import UserRole
@@ -116,9 +125,10 @@ class CustomersScreen(QWidget):
         header_row.addWidget(self.add_btn)
 
         # RBAC: Hide add button for unauthorized roles
-        role = Session.get_role()
-        can_edit = role in [UserRole.OWNER, UserRole.MANAGER, UserRole.SALES]
-        self.add_btn.setVisible(can_edit)
+        self._can_edit = Session.is_authorized(
+            [UserRole.OWNER, UserRole.MANAGER, UserRole.SALES]
+        )
+        self.add_btn.setVisible(self._can_edit)
 
         layout.addLayout(header_row)
 
@@ -131,23 +141,20 @@ class CustomersScreen(QWidget):
 
         # Table — NO UUID ID column, NO "Created At"
         self.table = QTableWidget()
-        
-        role = Session.get_role()
-        can_edit = role in [UserRole.OWNER, UserRole.MANAGER, UserRole.SALES]
-        
-        self.table.setColumnCount(4 if can_edit else 3)
+
+        self.table.setColumnCount(4 if self._can_edit else 3)
         headers = ["Name", "Phone", "Address"]
-        if can_edit:
+        if self._can_edit:
             headers.append("Actions")
         self.table.setHorizontalHeaderLabels(headers)
-        
+
         hdr = self.table.horizontalHeader()
         hdr.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        
-        if can_edit:
+
+        if self._can_edit:
             hdr.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
             self.table.setColumnWidth(3, 160)
-            
+
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
@@ -155,6 +162,7 @@ class CustomersScreen(QWidget):
 
         layout.addWidget(self.table)
 
+    @handle_permissions
     def refresh_data(self):
         customers = self._customer_service.get_all()
         self._all_customers = customers or []
@@ -200,9 +208,8 @@ class CustomersScreen(QWidget):
 
             actions_layout.addWidget(edit_btn)
             actions_layout.addWidget(del_btn)
-            
-            role = Session.get_role()
-            if role in [UserRole.OWNER, UserRole.MANAGER, UserRole.SALES]:
+
+            if self._can_edit:
                 self.table.setCellWidget(row, 3, actions)
 
     def _filter_table(self, text: str):
@@ -211,11 +218,13 @@ class CustomersScreen(QWidget):
             self._populate_table(self._all_customers)
             return
         filtered = [
-            c for c in self._all_customers
+            c
+            for c in self._all_customers
             if query in c["name"].lower() or query in (c.get("phone", "") or "")
         ]
         self._populate_table(filtered)
 
+    @handle_permissions
     def add_customer(self):
         dialog = CustomerDialog(self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
@@ -230,6 +239,7 @@ class CustomersScreen(QWidget):
             else:
                 QMessageBox.critical(self, "Error", "Failed to add buyer.")
 
+    @handle_permissions
     def edit_customer(self, customer: dict):
         dialog = CustomerDialog(self, customer)
         if dialog.exec() == QDialog.DialogCode.Accepted:
@@ -239,14 +249,18 @@ class CustomersScreen(QWidget):
                 return
             result = self._customer_service.update(str(customer["id"]), **data)
             if result:
-                QMessageBox.information(self, "Updated ✅", "Buyer updated successfully!")
+                QMessageBox.information(
+                    self, "Updated ✅", "Buyer updated successfully!"
+                )
                 self.refresh_data()
             else:
                 QMessageBox.critical(self, "Error", "Failed to update buyer.")
 
+    @handle_permissions
     def delete_customer(self, customer: dict):
         confirm = QMessageBox.question(
-            self, "Confirm Delete",
+            self,
+            "Confirm Delete",
             f"Are you sure you want to delete {customer['name']}?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )

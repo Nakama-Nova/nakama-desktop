@@ -9,15 +9,24 @@ Billing POS screen — simplified for non-technical users.
 """
 
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QLineEdit, QPushButton, QTableWidget, QTableWidgetItem,
-    QHeaderView, QMessageBox, QSpinBox, QCompleter,
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
+    QHeaderView,
+    QMessageBox,
+    QSpinBox,
+    QCompleter,
 )
 from PyQt6.QtCore import Qt, QStringListModel
 
 
-
 from ui.theme import Theme, Colors, Fonts
+from ui.errors import handle_permissions
 from services.sales_service import SalesService
 from services.customer_service import CustomerService
 from services.inventory_service import InventoryService
@@ -27,8 +36,9 @@ from services.event_bus import EventBus, SALE_CREATED
 class CartItem:
     __slots__ = ("item_id", "name", "price", "gst_pct", "quantity")
 
-    def __init__(self, item_id: str, name: str, price: float,
-                 gst_pct: float, quantity: int = 1):
+    def __init__(
+        self, item_id: str, name: str, price: float, gst_pct: float, quantity: int = 1
+    ):
         self.item_id = item_id
         self.name = name
         self.price = price
@@ -43,10 +53,10 @@ class CartItem:
 class SalesScreen(QWidget):
     """Billing / POS screen."""
 
-    COL_NAME  = 0
+    COL_NAME = 0
     COL_PRICE = 1
-    COL_QTY   = 2
-    COL_GST   = 3
+    COL_QTY = 2
+    COL_GST = 3
     COL_TOTAL = 4
     COL_REMOVE = 5
 
@@ -138,9 +148,9 @@ class SalesScreen(QWidget):
         # ── Cart table ────────────────────────────────
         self.table = QTableWidget()
         self.table.setColumnCount(6)
-        self.table.setHorizontalHeaderLabels([
-            "Item Name", "Price (₹)", "Qty", "GST %", "Total (₹)", ""
-        ])
+        self.table.setHorizontalHeaderLabels(
+            ["Item Name", "Price (₹)", "Qty", "GST %", "Total (₹)", ""]
+        )
         header_view = self.table.horizontalHeader()
         header_view.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         header_view.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)
@@ -164,11 +174,17 @@ class SalesScreen(QWidget):
         totals_layout.setContentsMargins(20, 14, 20, 14)
 
         self.subtotal_lbl = QLabel("Subtotal: ₹0.00")
-        self.subtotal_lbl.setStyleSheet(f"font-size: {Fonts.BODY}px; color: {Colors.TEXT_SECONDARY};")
+        self.subtotal_lbl.setStyleSheet(
+            f"font-size: {Fonts.BODY}px; color: {Colors.TEXT_SECONDARY};"
+        )
         self.cgst_lbl = QLabel("CGST: ₹0.00")
-        self.cgst_lbl.setStyleSheet(f"font-size: {Fonts.BODY}px; color: {Colors.TEXT_SECONDARY};")
+        self.cgst_lbl.setStyleSheet(
+            f"font-size: {Fonts.BODY}px; color: {Colors.TEXT_SECONDARY};"
+        )
         self.sgst_lbl = QLabel("SGST: ₹0.00")
-        self.sgst_lbl.setStyleSheet(f"font-size: {Fonts.BODY}px; color: {Colors.TEXT_SECONDARY};")
+        self.sgst_lbl.setStyleSheet(
+            f"font-size: {Fonts.BODY}px; color: {Colors.TEXT_SECONDARY};"
+        )
 
         self.grandtotal_lbl = QLabel("Total: ₹0.00")
         self.grandtotal_lbl.setStyleSheet(f"""
@@ -198,14 +214,36 @@ class SalesScreen(QWidget):
         invoice_btn.setStyleSheet(Theme.btn_primary())
         invoice_btn.clicked.connect(self._generate_invoice)
 
-        actions_row.addStretch()
         actions_row.addWidget(clear_btn)
         actions_row.addWidget(invoice_btn)
         root.addLayout(actions_row)
 
+        # ── RBAC Enforcement ──────────────────────────
+        self._enforce_rbac()
+
+    def _enforce_rbac(self):
+        from services.session import Session
+        from services.enums import UserRole
+
+        # Acharis and Workers cannot create bills
+        can_bill = Session.is_authorized(
+            [UserRole.OWNER, UserRole.MANAGER, UserRole.SALES]
+        )
+
+        # self.btn_new_bill.setEnabled(can_bill) # This button doesn't exist in SalesScreen
+        self.search_btn.setEnabled(can_bill)
+
+        if not can_bill:
+            self.subtitle_lbl = QLabel("⚠️ You do not have permission to create bills.")
+            self.subtitle_lbl.setStyleSheet(
+                f"color: {Colors.RED}; font-size: {Fonts.BODY}px;"
+            )
+            self.layout().insertWidget(1, self.subtitle_lbl)
+
     # ------------------------------------------------------------------
     # Data Loading
     # ------------------------------------------------------------------
+    @handle_permissions
     def _load_items(self):
         items = self._inventory_service.get_items()
         if not items:
@@ -220,6 +258,7 @@ class SalesScreen(QWidget):
     # ------------------------------------------------------------------
     # Customer lookup
     # ------------------------------------------------------------------
+    @handle_permissions
     def _handle_customer_lookup(self):
         phone = self.phone_input.text().strip()
         if not phone:
@@ -229,10 +268,13 @@ class SalesScreen(QWidget):
         customer = self._customer_service.search_by_phone(phone)
         if customer:
             self.customer_input.setText(customer.get("name", ""))
-            QMessageBox.information(self, "Found ✅", f"Buyer found: {customer.get('name')}")
+            QMessageBox.information(
+                self, "Found ✅", f"Buyer found: {customer.get('name')}"
+            )
         else:
             QMessageBox.information(
-                self, "Not Found",
+                self,
+                "Not Found",
                 "No buyer found. Enter the name — we'll create a new record automatically.",
             )
             self.customer_input.setFocus()
@@ -242,7 +284,9 @@ class SalesScreen(QWidget):
     # ------------------------------------------------------------------
     def _find_item_by_name(self, name: str) -> dict | None:
         name_lower = name.strip().lower()
-        return next((i for i in self._all_items if i["name"].lower() == name_lower), None)
+        return next(
+            (i for i in self._all_items if i["name"].lower() == name_lower), None
+        )
 
     def _add_item_to_cart(self):
         name = self.search_input.text().strip()
@@ -259,12 +303,14 @@ class SalesScreen(QWidget):
         if existing:
             existing.quantity += 1
         else:
-            self._cart.append(CartItem(
-                item_id=item_id,
-                name=item_data["name"],
-                price=float(item_data.get("selling_price", 0) or 0.0),
-                gst_pct=float(item_data.get("gst_percent", 0.0) or 0.0),
-            ))
+            self._cart.append(
+                CartItem(
+                    item_id=item_id,
+                    name=item_data["name"],
+                    price=float(item_data.get("selling_price", 0) or 0.0),
+                    gst_pct=float(item_data.get("gst_percent", 0.0) or 0.0),
+                )
+            )
 
         self.search_input.clear()
         self._refresh_table()
@@ -286,10 +332,16 @@ class SalesScreen(QWidget):
 
         for row, ci in enumerate(self._cart):
             self.table.setRowHeight(row, 42)
-            self.table.setItem(row, self.COL_NAME,  QTableWidgetItem(ci.name))
-            self.table.setItem(row, self.COL_PRICE, QTableWidgetItem(f"₹{ci.price:,.2f}"))
-            self.table.setItem(row, self.COL_GST,   QTableWidgetItem(f"{ci.gst_pct:.1f}%"))
-            self.table.setItem(row, self.COL_TOTAL,  QTableWidgetItem(f"₹{ci.line_total:,.2f}"))
+            self.table.setItem(row, self.COL_NAME, QTableWidgetItem(ci.name))
+            self.table.setItem(
+                row, self.COL_PRICE, QTableWidgetItem(f"₹{ci.price:,.2f}")
+            )
+            self.table.setItem(
+                row, self.COL_GST, QTableWidgetItem(f"{ci.gst_pct:.1f}%")
+            )
+            self.table.setItem(
+                row, self.COL_TOTAL, QTableWidgetItem(f"₹{ci.line_total:,.2f}")
+            )
 
             # Quantity spinner — compact style for table cells
             qty_spin = QSpinBox()
@@ -308,7 +360,9 @@ class SalesScreen(QWidget):
                     border-color: {Colors.INPUT_FOCUS};
                 }}
             """)
-            qty_spin.valueChanged.connect(lambda val, idx=row: self._on_qty_changed(idx, val))
+            qty_spin.valueChanged.connect(
+                lambda val, idx=row: self._on_qty_changed(idx, val)
+            )
             self.table.setCellWidget(row, self.COL_QTY, qty_spin)
 
             # Remove button — visible with border
@@ -338,7 +392,8 @@ class SalesScreen(QWidget):
         if row < len(self._cart):
             self._cart[row].quantity = value
             self.table.setItem(
-                row, self.COL_TOTAL,
+                row,
+                self.COL_TOTAL,
                 QTableWidgetItem(f"₹{self._cart[row].line_total:,.2f}"),
             )
             self._update_totals()
@@ -361,12 +416,15 @@ class SalesScreen(QWidget):
     # ------------------------------------------------------------------
     # Invoice generation
     # ------------------------------------------------------------------
+    @handle_permissions
     def _generate_invoice(self):
         phone = self.phone_input.text().strip()
         customer_name = self.customer_input.text().strip()
 
         if not phone:
-            QMessageBox.warning(self, "Missing Info", "Please enter the buyer's phone number.")
+            QMessageBox.warning(
+                self, "Missing Info", "Please enter the buyer's phone number."
+            )
             return
         if not customer_name:
             QMessageBox.warning(self, "Missing Info", "Please enter the buyer's name.")
@@ -377,21 +435,28 @@ class SalesScreen(QWidget):
 
         customer_id = self._customer_service.ensure_customer(customer_name, phone)
         if customer_id is None:
-            QMessageBox.critical(self, "Error", "Could not create buyer record. Check connection.")
+            QMessageBox.critical(
+                self, "Error", "Could not create buyer record. Check connection."
+            )
             return
 
         payload_items = [
-            {"item_id": c.item_id, "quantity": c.quantity}
-            for c in self._cart
+            {"item_id": c.item_id, "quantity": c.quantity} for c in self._cart
         ]
-        sale_data = self._sales_service.create_sale(items=payload_items, customer_id=customer_id)
+        sale_data = self._sales_service.create_sale(
+            items=payload_items, customer_id=customer_id
+        )
         if sale_data is None:
-            QMessageBox.critical(self, "Error", "Failed to create bill. Check backend connection.")
+            QMessageBox.critical(
+                self, "Error", "Failed to create bill. Check backend connection."
+            )
             return
 
         invoice_number = sale_data.get("invoice_number")
         if not invoice_number:
-            QMessageBox.critical(self, "Error", "Bill created but invoice number missing.")
+            QMessageBox.critical(
+                self, "Error", "Bill created but invoice number missing."
+            )
             return
 
         pdf_path = self._sales_service.fetch_and_save_pdf(invoice_number)
@@ -399,7 +464,8 @@ class SalesScreen(QWidget):
             self._sales_service.open_pdf(pdf_path)
 
         QMessageBox.information(
-            self, "Bill Created ✅",
+            self,
+            "Bill Created ✅",
             f"Bill {invoice_number} created successfully!",
         )
 

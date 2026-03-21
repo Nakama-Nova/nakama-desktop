@@ -6,8 +6,13 @@ auto-refresh on page switch, and themed layout.
 """
 
 from PyQt6.QtWidgets import (
-    QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
-    QPushButton, QStackedWidget, QLabel,
+    QMainWindow,
+    QWidget,
+    QHBoxLayout,
+    QVBoxLayout,
+    QPushButton,
+    QStackedWidget,
+    QLabel,
 )
 from PyQt6.QtCore import Qt
 
@@ -26,12 +31,12 @@ from services.enums import UserRole
 class MainWindow(QMainWindow):
 
     NAV_ITEMS = [
-        ("🏠", "Home",         0),
-        ("🧾", "New Bill",     1),
-        ("📦", "Stock",        2),
-        ("👤", "Buyers",       3),
+        ("🏠", "Home", 0),
+        ("🧾", "New Bill", 1),
+        ("📦", "Stock", 2),
+        ("👤", "Buyers", 3),
         ("📜", "Bill History", 4),
-        ("📊", "Reports",      5),
+        ("📊", "Reports", 5),
     ]
 
     def __init__(self):
@@ -62,15 +67,14 @@ class MainWindow(QMainWindow):
 
         # Brand header
         brand_container = QWidget()
-        brand_container.setStyleSheet(f"""
-            background-color: {Colors.SIDEBAR_BG};
-            border-bottom: 1px solid #252b48;
-        """)
+        brand_container.setStyleSheet(
+            f"background-color: {Colors.SIDEBAR_BG}; border-bottom: 1px solid #252b48;"
+        )
         brand_layout = QVBoxLayout(brand_container)
         brand_layout.setContentsMargins(20, 24, 20, 20)
 
         brand_lbl = QLabel("🪑 FurniBiz")
-        brand_lbl.setStyleSheet(f"""
+        brand_lbl.setStyleSheet("""
             font-size: 22px;
             font-weight: bold;
             color: white;
@@ -142,35 +146,35 @@ class MainWindow(QMainWindow):
         self.sales_history_view = SalesHistoryScreen()
         self.reports_view = ReportsScreen()
 
-        self.content_stack.addWidget(self.dashboard_view)    # 0
-        self.content_stack.addWidget(self.sales_view)        # 1
-        self.content_stack.addWidget(self.inventory_view)    # 2
-        self.content_stack.addWidget(self.customers_view)    # 3
+        self.content_stack.addWidget(self.dashboard_view)  # 0
+        self.content_stack.addWidget(self.sales_view)  # 1
+        self.content_stack.addWidget(self.inventory_view)  # 2
+        self.content_stack.addWidget(self.customers_view)  # 3
         self.content_stack.addWidget(self.sales_history_view)  # 4
-        self.content_stack.addWidget(self.reports_view)      # 5
+        self.content_stack.addWidget(self.reports_view)  # 5
 
         # Set default (Home)
         self._switch_page(0)
 
     def _get_allowed_nav_items(self):
         role = Session.get_role()
-        
+
         # OWNER and MANAGER see everything
         if role in [UserRole.OWNER, UserRole.MANAGER]:
             return self.NAV_ITEMS
-            
+
         allowed = []
         for icon, label, index in self.NAV_ITEMS:
             if role == UserRole.SALES:
-                # Sales can sell and manage buyers, but not see reports or edit master stock (usually)
-                if label in ["Home", "New Bill", "Buyers", "Bill History", "Stock"]:
+                # Sales can sell and manage buyers, but not see reports
+                if label not in ["Reports"]:
                     allowed.append((icon, label, index))
             elif role == UserRole.ACHARI:
-                # Achari focuses on stock/manufacturing
+                # Achari focuses on stock/manufacturing, no billing/reports
                 if label in ["Home", "Stock"]:
                     allowed.append((icon, label, index))
             elif role == UserRole.WORKER:
-                # Worker only sees dashboard/home
+                # Worker only sees home and stock, no billing/buyers/reports
                 if label in ["Home", "Stock"]:
                     allowed.append((icon, label, index))
             else:
@@ -253,8 +257,10 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
     def _handle_logout(self):
         from services.auth_service import AuthService
+
         AuthService().logout()
         from ui.login_window import LoginWindow
+
         self._login_window = LoginWindow()
         self._login_window.show()
         self.close()

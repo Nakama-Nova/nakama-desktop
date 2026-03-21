@@ -30,6 +30,12 @@ class APIError(Exception):
         super().__init__(f"API Error {status_code}: {detail}")
 
 
+class ForbiddenError(APIError):
+    """Raised when the user doesn't have permission for an action (403)."""
+
+    pass
+
+
 class APIClient:
     """Low-level HTTP client for the Nakama backend."""
 
@@ -48,21 +54,30 @@ class APIClient:
             headers=self._headers(token),
             params=params,
         )
+        if response.status_code == 403:
+            raise ForbiddenError(
+                403, "Access Denied: You don't have permission for this action."
+            )
         if response.status_code != 200:
             raise APIError(response.status_code, response.text)
         return response.json()
 
-    def _post(self, path: str, token: str, json: dict | None = None,
-              data: dict | None = None) -> Any:
+    def _post(
+        self, path: str, token: str, json: dict | None = None, data: dict | None = None
+    ) -> Any:
         response = requests.post(
             f"{self._base_url}{path}",
             headers=self._headers(token),
             json=json,
             data=data,
         )
-        if response.status_code not in (200, 201):
+        if response.status_code == 403:
+            raise ForbiddenError(
+                403, "Access Denied: You don't have permission for this action."
+            )
+        if response.status_code not in (200, 201, 204):
             raise APIError(response.status_code, response.text)
-        return response.json()
+        return response.json() if response.status_code != 204 else {}
 
     def _put(self, path: str, token: str, json: dict) -> Any:
         response = requests.put(
@@ -70,6 +85,10 @@ class APIClient:
             headers=self._headers(token),
             json=json,
         )
+        if response.status_code == 403:
+            raise ForbiddenError(
+                403, "Access Denied: You don't have permission for this action."
+            )
         if response.status_code != 200:
             raise APIError(response.status_code, response.text)
         return response.json()
@@ -79,6 +98,10 @@ class APIClient:
             f"{self._base_url}{path}",
             headers=self._headers(token),
         )
+        if response.status_code == 403:
+            raise ForbiddenError(
+                403, "Access Denied: You don't have permission for this action."
+            )
         return response.status_code in (200, 204)
 
     def _get_bytes(self, path: str, token: str) -> bytes | None:
@@ -86,6 +109,10 @@ class APIClient:
             f"{self._base_url}{path}",
             headers=self._headers(token),
         )
+        if response.status_code == 403:
+            raise ForbiddenError(
+                403, "Access Denied: You don't have permission for this action."
+            )
         return response.content if response.status_code == 200 else None
 
     # ------------------------------------------------------------------
@@ -105,6 +132,8 @@ class APIClient:
     def get_items(self, token: str) -> list | None:
         try:
             return self._get("/items", token)
+        except ForbiddenError:
+            raise
         except APIError:
             return None
 
@@ -115,14 +144,22 @@ class APIClient:
     def get_customers(self, token: str) -> list | None:
         try:
             return self._get("/customers", token)
+        except ForbiddenError:
+            raise
         except APIError:
             return None
 
-    def create_customer(self, token: str, name: str,
-                        phone: str = None, address: str = None) -> dict | None:
+    def create_customer(
+        self, token: str, name: str, phone: str = None, address: str = None
+    ) -> dict | None:
         try:
-            return self._post("/customers", token,
-                              json={"name": name, "phone": phone, "address": address})
+            return self._post(
+                "/customers",
+                token,
+                json={"name": name, "phone": phone, "address": address},
+            )
+        except ForbiddenError:
+            raise
         except APIError:
             return None
 
@@ -138,11 +175,20 @@ class APIClient:
             return None
         return next((c for c in customers if c.get("phone") == phone), None)
 
-    def update_customer(self, token: str, customer_id: str, name: str,
-                        phone: str = None, address: str = None) -> dict | None:
+    def update_customer(
+        self,
+        token: str,
+        customer_id: str,
+        name: str,
+        phone: str = None,
+        address: str = None,
+    ) -> dict | None:
         try:
-            return self._put(f"/customers/{customer_id}", token,
-                             json={"name": name, "phone": phone, "address": address})
+            return self._put(
+                f"/customers/{customer_id}",
+                token,
+                json={"name": name, "phone": phone, "address": address},
+            )
         except APIError:
             return None
 
@@ -153,8 +199,9 @@ class APIClient:
     # Sales  (SaleResponse fields: id, invoice_number, customer_id,
     #         total_amount, created_at, items: [SaleItemResponse])
     # ------------------------------------------------------------------
-    def create_sale(self, token: str, items: list,
-                    customer_id: str | None = None) -> dict | None:
+    def create_sale(
+        self, token: str, items: list, customer_id: str | None = None
+    ) -> dict | None:
         """
         POST /sales
         items: [{"item_id": "<uuid>", "quantity": int}, ...]
@@ -164,11 +211,14 @@ class APIClient:
             payload["customer_id"] = customer_id
         try:
             return self._post("/sales", token, json=payload)
+        except ForbiddenError:
+            raise
         except APIError:
             return None
 
-    def get_sales(self, token: str, customer_id: str = None,
-                  date: str = None) -> list | None:
+    def get_sales(
+        self, token: str, customer_id: str = None, date: str = None
+    ) -> list | None:
         params: dict[str, Any] = {}
         if customer_id:
             params["customer_id"] = customer_id
@@ -203,8 +253,9 @@ class APIClient:
     #   GET /reports/inventory      -> List[InventoryReportResponse]
     #   GET /dashboard/summary      -> {today_sales_count, today_revenue, low_stock_count, ...}
     # ------------------------------------------------------------------
-    def get_sales_report(self, token: str, start_date: str = None,
-                         end_date: str = None) -> dict | None:
+    def get_sales_report(
+        self, token: str, start_date: str = None, end_date: str = None
+    ) -> dict | None:
         """GET /reports/sales — SalesReportResponse"""
         params: dict[str, str] = {}
         if start_date:

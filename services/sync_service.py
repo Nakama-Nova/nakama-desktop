@@ -56,13 +56,15 @@ class SyncService:
         # Build operations matching the backend's SyncOperation schema
         operations = []
         for entry in pending:
-            operations.append({
-                "id": entry.id,
-                "entity": entry.entity,
-                "action": entry.action,
-                "payload": json.loads(entry.payload),
-                "updated_at": entry.created_at,
-            })
+            operations.append(
+                {
+                    "id": entry.id,
+                    "entity": entry.entity,
+                    "action": entry.action,
+                    "payload": json.loads(entry.payload),
+                    "updated_at": entry.created_at,
+                }
+            )
 
         result = self._api.push_sync(token, operations)
 

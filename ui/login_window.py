@@ -5,11 +5,16 @@ Branded login screen — centered, styled, with inline error feedback.
 """
 
 from PyQt6.QtWidgets import (
-    QWidget, QLabel, QLineEdit, QPushButton,
-    QVBoxLayout, QHBoxLayout, QSpacerItem, QSizePolicy,
+    QWidget,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QVBoxLayout,
+    QSpacerItem,
+    QSizePolicy,
 )
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QFont
+# No QtGui imports needed here
 
 from ui.theme import Theme, Colors, Fonts
 from services.auth_service import AuthService
@@ -44,7 +49,9 @@ class LoginWindow(QWidget):
         root.setSpacing(0)
 
         # ── Brand ─────────────────────────────────────
-        root.addSpacerItem(QSpacerItem(0, 20, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding))
+        root.addSpacerItem(
+            QSpacerItem(0, 20, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
+        )
 
         brand = QLabel("🪑 FurniBiz")
         brand.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -137,7 +144,9 @@ class LoginWindow(QWidget):
 
         root.addWidget(card)
 
-        root.addSpacerItem(QSpacerItem(0, 20, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding))
+        root.addSpacerItem(
+            QSpacerItem(0, 20, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
+        )
 
     def _input_css(self) -> str:
         return f"""
@@ -168,12 +177,14 @@ class LoginWindow(QWidget):
 
         # Force UI repaint before network call
         from PyQt6.QtWidgets import QApplication
+
         QApplication.processEvents()
 
         result = self._auth.login(username, password)
 
         if result:
             from ui.main_window import MainWindow
+
             self.main_window = MainWindow()
             self.main_window.show()
             self.close()

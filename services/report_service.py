@@ -21,8 +21,9 @@ class ReportService:
     def _token(self) -> str:
         return Session.get_token()
 
-    def get_sales_report(self, start_date: str = None,
-                         end_date: str = None) -> dict | None:
+    def get_sales_report(
+        self, start_date: str = None, end_date: str = None
+    ) -> dict | None:
         """
         GET /reports/sales
         Returns: {total_sales, total_orders, total_revenue, total_tax, total_discount}

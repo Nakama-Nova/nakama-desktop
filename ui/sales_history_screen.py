@@ -5,13 +5,20 @@ Bill History screen — no UUID customer IDs visible, styled actions.
 """
 
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
-    QTableWidget, QTableWidgetItem, QHeaderView,
-    QMessageBox, QLabel, QDateEdit,
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
+    QHeaderView,
+    QMessageBox,
+    QLabel,
+    QDateEdit,
 )
 from PyQt6.QtCore import Qt, QDate
 
-from ui.theme import Theme, Colors, Fonts
+from ui.theme import Theme, Fonts
 from services.sales_service import SalesService
 from services.event_bus import EventBus, SALE_CREATED
 
@@ -78,9 +85,9 @@ class SalesHistoryScreen(QWidget):
         # Table — NO UUID Customer ID column
         self.table = QTableWidget()
         self.table.setColumnCount(4)
-        self.table.setHorizontalHeaderLabels([
-            "Bill No.", "Amount (₹)", "Date", "Actions"
-        ])
+        self.table.setHorizontalHeaderLabels(
+            ["Bill No.", "Amount (₹)", "Date", "Actions"]
+        )
         hdr = self.table.horizontalHeader()
         hdr.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         hdr.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
@@ -118,7 +125,9 @@ class SalesHistoryScreen(QWidget):
             self.table.setItem(row, 0, QTableWidgetItem(bill_no))
 
             amount_item = QTableWidgetItem(f"₹{amount:,.2f}")
-            amount_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            amount_item.setTextAlignment(
+                Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+            )
             self.table.setItem(row, 1, amount_item)
 
             self.table.setItem(row, 2, QTableWidgetItem(created))

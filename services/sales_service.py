@@ -26,8 +26,9 @@ class SalesService:
     # ------------------------------------------------------------------
     # Sale creation
     # ------------------------------------------------------------------
-    def create_sale(self, items: list[dict],
-                    customer_id: str | None = None) -> dict | None:
+    def create_sale(
+        self, items: list[dict], customer_id: str | None = None
+    ) -> dict | None:
         """POST /sales and return the SaleResponse dict."""
         return self._api.create_sale(self._token(), items, customer_id)
 

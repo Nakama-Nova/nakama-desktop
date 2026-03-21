@@ -7,8 +7,12 @@ Home dashboard — greeting, KPI metric cards, quick action buttons.
 from datetime import datetime
 
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QGridLayout, QPushButton, QSpacerItem, QSizePolicy,
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QGridLayout,
+    QPushButton,
 )
 from PyQt6.QtCore import Qt
 
@@ -52,18 +56,12 @@ class DashboardWindow(QWidget):
         cards_grid = QGridLayout()
         cards_grid.setSpacing(16)
 
-        self.card_sales = MetricCard(
-            "Today's Sales", "0", Colors.GREEN, icon="🧾"
-        )
+        self.card_sales = MetricCard("Today's Sales", "0", Colors.GREEN, icon="🧾")
         self.card_revenue = MetricCard(
             "Today's Revenue", "₹0.00", Colors.BLUE, icon="💰"
         )
-        self.card_low_stock = MetricCard(
-            "Low Stock Alert", "0", Colors.RED, icon="⚠️"
-        )
-        self.card_wages = MetricCard(
-            "Wages Due", "₹0.00", Colors.PURPLE, icon="👷"
-        )
+        self.card_low_stock = MetricCard("Low Stock Alert", "0", Colors.RED, icon="⚠️")
+        self.card_wages = MetricCard("Wages Due", "₹0.00", Colors.PURPLE, icon="👷")
 
         cards_grid.addWidget(self.card_sales, 0, 0)
         cards_grid.addWidget(self.card_revenue, 0, 1)
@@ -120,13 +118,16 @@ class DashboardWindow(QWidget):
         self.greeting_lbl.setText(greeting)
 
         role = Session.get_role()
-        is_admin = role in [UserRole.OWNER, UserRole.MANAGER]
-        
+        is_admin = Session.is_authorized([UserRole.OWNER, UserRole.MANAGER])
+        can_sell = Session.is_authorized(
+            [UserRole.OWNER, UserRole.MANAGER, UserRole.SALES]
+        )
+
         # Role-based UI visibility
         self.metrics_container.setVisible(is_admin)
-        self.btn_new_bill.setVisible(is_admin or role == UserRole.SALES)
-        self.btn_add_buyer.setVisible(is_admin or role == UserRole.SALES)
-        
+        self.btn_new_bill.setVisible(can_sell)
+        self.btn_add_buyer.setVisible(can_sell)
+
         if role == UserRole.ACHARI:
             self.subtitle_lbl.setText("Manage manufacturing and stock")
         elif role == UserRole.WORKER:
@@ -138,9 +139,13 @@ class DashboardWindow(QWidget):
             summary = self._report_service.get_dashboard_summary()
             if summary:
                 self.card_sales.set_value(summary.get("today_sales_count", 0))
-                self.card_revenue.set_value(f"₹{float(summary.get('today_revenue', 0)):,.2f}")
+                self.card_revenue.set_value(
+                    f"₹{float(summary.get('today_revenue', 0)):,.2f}"
+                )
                 self.card_low_stock.set_value(summary.get("low_stock_count", 0))
-                self.card_wages.set_value(f"₹{float(summary.get('pending_wages_total', 0)):,.2f}")
+                self.card_wages.set_value(
+                    f"₹{float(summary.get('pending_wages_total', 0)):,.2f}"
+                )
 
     def _navigate(self, page_name: str):
         """Navigate to another page via MainWindow."""

@@ -8,6 +8,7 @@ Backward compatibility: Session.token still works via a custom metaclass
 descriptor, so existing code doesn't break during migration.
 """
 
+from datetime import datetime
 from services.enums import UserRole
 
 
@@ -73,3 +74,12 @@ class Session(metaclass=_SessionMeta):
     @classmethod
     def set_last_sync(cls, ts: datetime) -> None:
         cls._last_sync_at = ts
+
+    @classmethod
+    def is_authorized(cls, allowed_roles: list[UserRole] | UserRole) -> bool:
+        """Check if the current user has one of the allowed roles."""
+        if not cls._role:
+            return False
+        if isinstance(allowed_roles, UserRole):
+            return cls._role == allowed_roles
+        return cls._role in allowed_roles

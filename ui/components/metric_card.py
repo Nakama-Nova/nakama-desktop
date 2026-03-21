@@ -6,16 +6,15 @@ Redesigned: emoji icon support, softer shadows, hover effect.
 """
 
 from PyQt6.QtWidgets import QFrame, QVBoxLayout, QLabel
-from PyQt6.QtCore import Qt
-
 from ui.theme import Colors, Fonts
 
 
 class MetricCard(QFrame):
     """A styled card displaying an icon+title and a large value."""
 
-    def __init__(self, title: str, value: str = "0", color: str = "#3b82f6",
-                 icon: str = ""):
+    def __init__(
+        self, title: str, value: str = "0", color: str = "#3b82f6", icon: str = ""
+    ):
         super().__init__()
         self.setFrameShape(QFrame.Shape.NoFrame)
         self._color = color
