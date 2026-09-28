@@ -3,6 +3,7 @@ from PyQt6.QtWidgets import QApplication, QMessageBox
 from ui.login_window import LoginWindow
 from ui.theme import Theme
 from services.api_client import ForbiddenError, APIError
+from services.session import Session
 
 
 def exception_hook(exctype, value, traceback):
@@ -21,7 +22,12 @@ def main():
     app = QApplication(sys.argv)
     app.setStyleSheet(Theme.global_stylesheet())
 
-    window = LoginWindow()
+    if Session.restore():
+        from ui.main_window import MainWindow
+
+        window = MainWindow()
+    else:
+        window = LoginWindow()
     window.show()
 
     sys.exit(app.exec())
