@@ -33,7 +33,7 @@ class LocalDB:
         conn = self._conn or sqlite3.connect(str(self._db_path))
         conn.executescript("""
             CREATE TABLE IF NOT EXISTS outbox (
-                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                id          TEXT    PRIMARY KEY,
                 entity      TEXT    NOT NULL,
                 action      TEXT    NOT NULL,
                 payload     TEXT    NOT NULL,

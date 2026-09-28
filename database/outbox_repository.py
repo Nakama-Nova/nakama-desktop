@@ -6,6 +6,7 @@ Pure repository — no business logic, no API calls.
 """
 
 import json
+import uuid
 from datetime import datetime, timezone
 
 from database.local_db import LocalDB
@@ -21,22 +22,33 @@ class OutboxRepository:
     def _conn(self):
         return self._db.get_connection()
 
-    def add_entry(self, entity: str, action: str, payload: dict) -> int:
-        """Queue a new outbox operation. Returns the row ID."""
+    def add_entry(self, entity: str, action: str, payload: dict) -> str:
+        """
+        Queue a new outbox operation. Returns the entry's id.
+
+        The id is a UUID generated here (not SQLite's rowid) because it
+        doubles as the sync engine's idempotency key (client_id) once
+        pushed — a per-install autoincrement integer would collide across
+        multiple desktop installs pushing to the same backend.
+        """
+        entry_id = str(uuid.uuid4())
         now = datetime.now(timezone.utc).isoformat()
-        cursor = self._conn().execute(
-            "INSERT INTO outbox (entity, action, payload, status, created_at) "
-            "VALUES (?, ?, ?, 'pending', ?)",
-            (entity, action, json.dumps(payload), now),
+        self._conn().execute(
+            "INSERT INTO outbox (id, entity, action, payload, status, created_at) "
+            "VALUES (?, ?, ?, ?, 'pending', ?)",
+            (entry_id, entity, action, json.dumps(payload), now),
         )
         self._conn().commit()
-        return cursor.lastrowid
+        return entry_id
 
     def get_pending(self) -> list[OutboxEntry]:
         """Return all entries with status='pending', ordered FIFO."""
+        # Order by rowid (SQLite's implicit, monotonically-increasing insert
+        # order) rather than id — id is now a random UUID, not a sortable
+        # sequence, since it doubles as the sync idempotency key.
         rows = (
             self._conn()
-            .execute("SELECT * FROM outbox WHERE status = 'pending' ORDER BY id ASC")
+            .execute("SELECT * FROM outbox WHERE status = 'pending' ORDER BY rowid ASC")
             .fetchall()
         )
         return [

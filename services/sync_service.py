@@ -129,6 +129,6 @@ class SyncService:
     # ------------------------------------------------------------------
     # Queue an operation for later push
     # ------------------------------------------------------------------
-    def queue_operation(self, entity: str, action: str, payload: dict) -> int:
+    def queue_operation(self, entity: str, action: str, payload: dict) -> str:
         """Add an operation to the outbox for later sync. Returns entry ID."""
         return self._outbox.add_entry(entity, action, payload)
