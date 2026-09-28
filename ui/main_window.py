@@ -5,6 +5,8 @@ Main application shell — dark sidebar with emoji icons, active state,
 auto-refresh on page switch, and themed layout.
 """
 
+import logging
+
 from PyQt6.QtWidgets import (
     QMainWindow,
     QWidget,
@@ -14,7 +16,7 @@ from PyQt6.QtWidgets import (
     QStackedWidget,
     QLabel,
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 
 from ui.theme import Theme, Colors, Fonts
 
@@ -27,6 +29,12 @@ from ui.sales_history_screen import SalesHistoryScreen
 from ui.attendance_screen import AttendanceScreen
 from services.session import Session
 from services.enums import UserRole
+from services.sync_service import SyncService
+
+logger = logging.getLogger(__name__)
+
+# How often to run a background push/pull sync cycle, in milliseconds.
+SYNC_INTERVAL_MS = 60_000
 
 
 class MainWindow(QMainWindow):
@@ -160,6 +168,39 @@ class MainWindow(QMainWindow):
         # Set default (Home)
         self._switch_page(0)
 
+        # ── Background sync ───────────────────────────
+        # Runs the offline sync engine (push queued outbox operations, then
+        # pull incremental updates) on a timer so it's actually exercised —
+        # previously SyncService was never invoked from anywhere in the app.
+        self._sync_service = SyncService()
+        self._sync_timer = QTimer(self)
+        self._sync_timer.timeout.connect(self._run_sync_cycle)
+        self._sync_timer.start(SYNC_INTERVAL_MS)
+        # Run one cycle shortly after startup too, rather than waiting a
+        # full interval for the first sync.
+        QTimer.singleShot(2000, self._run_sync_cycle)
+
+    # ------------------------------------------------------------------
+    # Background sync cycle
+    # ------------------------------------------------------------------
+    def _run_sync_cycle(self):
+        """
+        Push any queued offline changes, then pull incremental updates.
+
+        Runs on a timer (see SYNC_INTERVAL_MS) and once shortly after
+        startup. Silently skips when the backend is unreachable, and never
+        raises — a background sync failure shouldn't interrupt the user.
+        """
+        try:
+            if not self._sync_service.is_online():
+                return
+            push_result = self._sync_service.push_sync()
+            if push_result.get("failed"):
+                logger.warning("Background sync push had failures: %s", push_result)
+            self._sync_service.pull_sync()
+        except Exception:
+            logger.exception("Background sync cycle failed")
+
     def _get_allowed_nav_items(self):
         role = Session.get_role()
 
@@ -260,6 +301,8 @@ class MainWindow(QMainWindow):
     # Logout
     # ------------------------------------------------------------------
     def _handle_logout(self):
+        self._sync_timer.stop()
+
         from services.auth_service import AuthService
 
         AuthService().logout()
