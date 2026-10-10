@@ -88,6 +88,7 @@ class APIClient:
         token: str,
         json: dict | None = None,
         data: dict | None = None,
+        params: dict | None = None,
         quiet: bool = False,
     ) -> Any:
         response = requests.post(
@@ -95,6 +96,7 @@ class APIClient:
             headers=self._headers(token),
             json=json,
             data=data,
+            params=params,
         )
         if response.status_code == 403:
             raise ForbiddenError(
