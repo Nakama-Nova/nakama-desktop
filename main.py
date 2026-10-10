@@ -11,7 +11,8 @@ def exception_hook(exctype, value, traceback):
     if issubclass(exctype, ForbiddenError):
         QMessageBox.warning(None, "Permission Denied 🛡️", str(value))
     elif issubclass(exctype, APIError):
-        QMessageBox.critical(None, "Server Error ❌", str(value))
+        if not value.reported:
+            QMessageBox.critical(None, "Server Error ❌", str(value))
     else:
         sys.__excepthook__(exctype, value, traceback)
 

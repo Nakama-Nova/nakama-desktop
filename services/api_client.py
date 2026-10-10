@@ -15,10 +15,16 @@ Routes aligned with actual backend API endpoints:
   - /sync/push, /sync/pull
 """
 
-import requests
+import os
+import sys
 from typing import Any
 
-BASE_URL = "http://127.0.0.1:8000"
+import requests
+from dotenv import load_dotenv
+
+load_dotenv()
+
+BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000")
 
 
 class APIError(Exception):
@@ -27,6 +33,7 @@ class APIError(Exception):
     def __init__(self, status_code: int, detail: str = ""):
         self.status_code = status_code
         self.detail = detail
+        self.reported = False  # already shown to the user via the global hook
         super().__init__(f"API Error {status_code}: {detail}")
 
 
@@ -48,7 +55,20 @@ class APIClient:
     def _headers(self, token: str) -> dict[str, str]:
         return {"Authorization": f"Bearer {token}"}
 
-    def _get(self, path: str, token: str, params: dict | None = None) -> Any:
+    @staticmethod
+    def _fail(response, quiet: bool = False) -> APIError:
+        """Build the APIError and, unless it's a 404 (a normal "not found") or a
+        background call, surface it through the global exception hook so the user
+        sees why a screen is empty instead of failing silently."""
+        err = APIError(response.status_code, response.text)
+        if not quiet and response.status_code != 404:
+            sys.excepthook(type(err), err, None)
+            err.reported = True
+        return err
+
+    def _get(
+        self, path: str, token: str, params: dict | None = None, quiet: bool = False
+    ) -> Any:
         response = requests.get(
             f"{self._base_url}{path}",
             headers=self._headers(token),
@@ -59,11 +79,16 @@ class APIClient:
                 403, "Access Denied: You don't have permission for this action."
             )
         if response.status_code != 200:
-            raise APIError(response.status_code, response.text)
+            raise self._fail(response, quiet)
         return response.json()
 
     def _post(
-        self, path: str, token: str, json: dict | None = None, data: dict | None = None
+        self,
+        path: str,
+        token: str,
+        json: dict | None = None,
+        data: dict | None = None,
+        quiet: bool = False,
     ) -> Any:
         response = requests.post(
             f"{self._base_url}{path}",
@@ -76,7 +101,7 @@ class APIClient:
                 403, "Access Denied: You don't have permission for this action."
             )
         if response.status_code not in (200, 201, 204):
-            raise APIError(response.status_code, response.text)
+            raise self._fail(response, quiet)
         return response.json() if response.status_code != 204 else {}
 
     def _put(self, path: str, token: str, json: dict) -> Any:
@@ -90,7 +115,7 @@ class APIClient:
                 403, "Access Denied: You don't have permission for this action."
             )
         if response.status_code != 200:
-            raise APIError(response.status_code, response.text)
+            raise self._fail(response)
         return response.json()
 
     def _delete(self, path: str, token: str) -> bool:
@@ -344,14 +369,18 @@ class APIClient:
     def push_sync(self, token: str, operations: list[dict]) -> dict | None:
         """POST /sync/push — upload outbox operations."""
         try:
-            return self._post("/sync/push", token, json={"operations": operations})
+            return self._post(
+                "/sync/push", token, json={"operations": operations}, quiet=True
+            )
         except APIError:
             return None
 
     def pull_sync(self, token: str, last_sync: str) -> dict | None:
         """GET /sync/pull — download incremental updates."""
         try:
-            return self._get("/sync/pull", token, params={"last_sync": last_sync})
+            return self._get(
+                "/sync/pull", token, params={"last_sync": last_sync}, quiet=True
+            )
         except APIError:
             return None
 

@@ -21,6 +21,12 @@ from database.outbox_repository import OutboxRepository
 
 logger = logging.getLogger(__name__)
 
+# Sentinel for "never synced": the Unix epoch, so a first pull returns everything.
+FULL_SYNC_SINCE = "1970-01-01T00:00:00+00:00"
+
+# Must stay <= the backend's MAX_SYNC_PUSH_OPERATIONS (500).
+PUSH_BATCH_SIZE = 200
+
 
 class SyncService:
     """Push/Pull sync orchestrator for the desktop client."""
@@ -66,20 +72,33 @@ class SyncService:
                 }
             )
 
-        result = self._api.push_sync(token, operations)
-
         pushed = 0
         failed = 0
 
-        if result:
-            # Mark successful entries
+        # Send in bounded batches: the backend rejects a push over its cap
+        # with a 422, which would otherwise leave a large outbox retrying the
+        # same oversized request forever.
+        for start in range(0, len(operations), PUSH_BATCH_SIZE):
+            batch = operations[start : start + PUSH_BATCH_SIZE]
+            result = self._api.push_sync(token, batch)
+
+            if not result:
+                # Whole request failed (offline / server error): leave this and
+                # all later entries 'pending' so the next cycle retries them.
+                failed += len(operations) - start
+                logger.warning(
+                    "Sync push failed — backend unreachable or returned error; "
+                    "%d entries stay queued for retry",
+                    len(operations) - start,
+                )
+                break
+
             for op_result in result.get("success", []):
                 client_id = op_result.get("client_id")
                 if client_id:
                     self._outbox.mark_synced(client_id)
                     pushed += 1
 
-            # Mark failed entries
             for op_result in result.get("failed", []):
                 client_id = op_result.get("client_id")
                 error = op_result.get("error", "Unknown error")
@@ -87,11 +106,7 @@ class SyncService:
                     self._outbox.mark_failed(client_id, error)
                     failed += 1
 
-            logger.info(f"Sync push complete: {pushed} synced, {failed} failed")
-        else:
-            failed = len(pending)
-            logger.warning("Sync push failed — backend unreachable or returned error")
-
+        logger.info(f"Sync push complete: {pushed} synced, {failed} failed")
         return {"pushed": pushed, "failed": failed}
 
     # ------------------------------------------------------------------
@@ -109,7 +124,7 @@ class SyncService:
         last_sync = self._outbox.get_last_sync()
         if not last_sync:
             # First sync ever — pull everything from epoch
-            last_sync = "2000-01-01T00:00:00+00:00"
+            last_sync = FULL_SYNC_SINCE
 
         result = self._api.pull_sync(token, last_sync)
         if result is None:
