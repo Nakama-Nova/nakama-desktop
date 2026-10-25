@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import (
     QComboBox,
     QMessageBox,
 )
+import requests
 from PyQt6.QtCore import Qt
 from datetime import datetime
 
@@ -79,7 +80,12 @@ class AttendanceScreen(QWidget):
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         layout.addWidget(self.table)
 
-        self.refresh_data()
+        try:
+            self.refresh_data()
+        except requests.RequestException:
+            # No connection at startup: the main window must still open (the
+            # counter can bill offline). The screen reloads when it is visited.
+            pass
 
     @handle_permissions
     def refresh_data(self):

@@ -8,6 +8,7 @@ Billing POS screen — simplified for non-technical users.
 - Remove item button per row
 """
 
+import requests
 from PyQt6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -245,7 +246,7 @@ class SalesScreen(QWidget):
     # ------------------------------------------------------------------
     @handle_permissions
     def _load_items(self):
-        items = self._inventory_service.get_items()
+        items = self._inventory_service.get_items(allow_cached=True)
         if not items:
             return
         self._all_items = items
@@ -265,7 +266,17 @@ class SalesScreen(QWidget):
             QMessageBox.warning(self, "Missing Info", "Please enter a phone number.")
             return
 
-        customer = self._customer_service.search_by_phone(phone)
+        try:
+            customer = self._customer_service.search_by_phone(phone)
+        except requests.RequestException:
+            QMessageBox.information(
+                self,
+                "No internet",
+                "Can't look up buyers right now. Type the buyer's name — it is "
+                "saved with the bill.",
+            )
+            self.customer_input.setFocus()
+            return
         if customer:
             self.customer_input.setText(customer.get("name", ""))
             QMessageBox.information(
@@ -414,6 +425,27 @@ class SalesScreen(QWidget):
         self.grandtotal_lbl.setText(f"Total: ₹{grand_total:,.2f}")
 
     # ------------------------------------------------------------------
+    # Offline billing
+    # ------------------------------------------------------------------
+    def _save_offline(self, customer_name: str, phone: str):
+        lines = [
+            {"item_id": c.item_id, "quantity": c.quantity, "price": c.price}
+            for c in self._cart
+        ]
+        ref = self._sales_service.queue_offline_sale(lines, customer_name, phone)
+        QMessageBox.information(
+            self,
+            "Saved offline 📴",
+            f"No internet, so this bill is saved on this computer (ref {ref}).\n\n"
+            "It is sent automatically when the connection is back, and the "
+            "official bill number is given then. A printed bill is not "
+            "available until then.",
+        )
+        self._clear_cart()
+        self.customer_input.clear()
+        self.phone_input.clear()
+
+    # ------------------------------------------------------------------
     # Invoice generation
     # ------------------------------------------------------------------
     @handle_permissions
@@ -433,19 +465,29 @@ class SalesScreen(QWidget):
             QMessageBox.warning(self, "Empty Bill", "Please add at least one item.")
             return
 
-        customer_id = self._customer_service.ensure_customer(customer_name, phone)
-        if customer_id is None:
-            QMessageBox.critical(
-                self, "Error", "Could not create buyer record. Check connection."
-            )
+        # No connection: keep the sale on this computer and sync it later.
+        if not self._sales_service.is_online():
+            self._save_offline(customer_name, phone)
             return
 
-        payload_items = [
-            {"item_id": c.item_id, "quantity": c.quantity} for c in self._cart
-        ]
-        sale_data = self._sales_service.create_sale(
-            items=payload_items, customer_id=customer_id
-        )
+        try:
+            customer_id = self._customer_service.ensure_customer(customer_name, phone)
+            if customer_id is None:
+                QMessageBox.critical(
+                    self, "Error", "Could not create buyer record. Check connection."
+                )
+                return
+
+            payload_items = [
+                {"item_id": c.item_id, "quantity": c.quantity} for c in self._cart
+            ]
+            sale_data = self._sales_service.create_sale(
+                items=payload_items, customer_id=customer_id
+            )
+        except requests.RequestException:
+            # The connection dropped after the online check.
+            self._save_offline(customer_name, phone)
+            return
         if sale_data is None:
             QMessageBox.critical(
                 self, "Error", "Failed to create bill. Check backend connection."
