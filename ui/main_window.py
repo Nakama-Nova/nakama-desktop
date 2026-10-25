@@ -7,6 +7,8 @@ auto-refresh on page switch, and themed layout.
 
 import logging
 
+import requests
+
 from PyQt6.QtWidgets import (
     QMainWindow,
     QWidget,
@@ -30,6 +32,7 @@ from ui.attendance_screen import AttendanceScreen
 from services.session import Session
 from services.enums import UserRole
 from services.sync_service import SyncService
+from services.event_bus import EventBus, SALE_CREATED
 
 logger = logging.getLogger(__name__)
 
@@ -195,6 +198,9 @@ class MainWindow(QMainWindow):
             if not self._sync_service.is_online():
                 return
             push_result = self._sync_service.push_sync()
+            if push_result.get("pushed"):
+                # Offline sales just got official bill numbers and moved stock.
+                EventBus.emit(SALE_CREATED)
             if push_result.get("failed"):
                 logger.warning("Background sync push had failures: %s", push_result)
             self._sync_service.pull_sync()
@@ -283,7 +289,17 @@ class MainWindow(QMainWindow):
         # Auto-refresh data for the visible screen
         widget = self.content_stack.currentWidget()
         if hasattr(widget, "refresh_data"):
-            widget.refresh_data()
+            try:
+                widget.refresh_data()
+            except requests.RequestException:
+                # Server unreachable: keep the window usable (New Bill can
+                # still save sales offline) instead of crashing.
+                logger.warning(
+                    "Could not refresh %s: backend unreachable", type(widget).__name__
+                )
+                self.statusBar().showMessage(
+                    "No connection to the server. This screen shows older data.", 8000
+                )
 
     # ------------------------------------------------------------------
     # Public method for dashboard quick-action navigation

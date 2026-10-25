@@ -391,5 +391,5 @@ class APIClient:
         try:
             response = requests.get(f"{self._base_url}/health", timeout=3)
             return response.status_code == 200
-        except requests.ConnectionError:
+        except requests.RequestException:  # refused, DNS, timeout...
             return False
