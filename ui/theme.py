@@ -10,51 +10,56 @@ Import from any screen:  from ui.theme import Theme
 class Colors:
     """Application color palette."""
 
+    # Brand tokens: docs/brand/design-tokens.json in nakamadesk-backend
+    BRAND_BROWN = "#5A2A06"
+    BRAND_GOLD = "#BF830B"
+
     # Sidebar
-    SIDEBAR_BG = "#1a1f36"
-    SIDEBAR_HOVER = "#252b48"
-    SIDEBAR_ACTIVE = "#2d3555"
-    SIDEBAR_TEXT = "#a0a8c4"
+    SIDEBAR_BG = "#5A2A06"  # brand brown
+    SIDEBAR_HOVER = "#6E3A12"
+    SIDEBAR_ACTIVE = "#7A4620"
+    SIDEBAR_TEXT = "#E8DCC8"
     SIDEBAR_ACTIVE_TEXT = "#ffffff"
-    SIDEBAR_ACCENT = "#4a90d9"
+    SIDEBAR_ACCENT = "#BF830B"  # brand gold
 
     # Content area
-    BG = "#f0f2f5"
+    BG = "#FBF6EC"  # warm surface
     CARD_BG = "#ffffff"
-    CARD_BORDER = "#e4e7ec"
+    CARD_BORDER = "#E8DCC8"
 
     # Text
-    TEXT_PRIMARY = "#1a1f36"
-    TEXT_SECONDARY = "#6b7280"
-    TEXT_MUTED = "#9ca3af"
+    TEXT_PRIMARY = "#3A1B04"
+    TEXT_SECONDARY = "#7A5A3C"
+    TEXT_MUTED = "#A38A6D"
 
     # Accent colors
-    GREEN = "#10b981"
-    GREEN_DARK = "#059669"
-    ORANGE = "#f59e0b"
-    RED = "#ef4444"
-    PURPLE = "#8b5cf6"
-    BLUE = "#3b82f6"
-    TEAL = "#14b8a6"
+    GREEN = "#2F7D4F"
+    GREEN_DARK = "#256640"
+    ORANGE = "#BF830B"
+    RED = "#B3261E"
+    PURPLE = "#7A4620"
+    BLUE = "#8C5A2B"
+    TEAL = "#2F7D4F"
 
     # Borders & misc
-    BORDER = "#e5e7eb"
-    INPUT_BORDER = "#d1d5db"
-    INPUT_FOCUS = "#4a90d9"
-    TABLE_HEADER_BG = "#f8fafc"
-    TABLE_ALT_ROW = "#f9fafb"
-    LOW_STOCK_BG = "#fef3c7"
+    BORDER = "#E8DCC8"
+    INPUT_BORDER = "#D9C9AD"
+    INPUT_FOCUS = "#BF830B"
+    TABLE_HEADER_BG = "#F5EEDF"
+    TABLE_ALT_ROW = "#FBF6EC"
+    LOW_STOCK_BG = "#F7E7C2"
 
     # Status
-    SUCCESS_BG = "#d1fae5"
-    WARNING_BG = "#fef3c7"
-    ERROR_BG = "#fee2e2"
+    SUCCESS_BG = "#DDEFE4"
+    WARNING_BG = "#F7E7C2"
+    ERROR_BG = "#F6DAD7"
 
 
 class Fonts:
     """Font sizes used across the app."""
 
-    FAMILY = "Segoe UI"
+    FAMILY = "Inter"  # falls back to the system UI font when not installed
+    HEADING_FAMILY = "Cormorant Garamond"  # falls back to Georgia
     HEADING_XL = 24
     HEADING_LG = 20
     HEADING_MD = 16
@@ -77,7 +82,7 @@ class Theme:
     def global_stylesheet() -> str:
         return f"""
             * {{
-                font-family: '{Fonts.FAMILY}';
+                font-family: '{Fonts.FAMILY}', 'Segoe UI';
             }}
             QWidget {{
                 font-size: {Fonts.BODY}px;
@@ -121,13 +126,13 @@ class Theme:
         """
 
     # ------------------------------------------------------------------
-    # Primary action button (green)
+    # Primary action button (brand brown)
     # ------------------------------------------------------------------
     @staticmethod
     def btn_primary() -> str:
         return f"""
             QPushButton {{
-                background-color: {Colors.GREEN};
+                background-color: {Colors.BRAND_BROWN};
                 color: white;
                 border: none;
                 border-radius: 8px;
@@ -136,10 +141,10 @@ class Theme:
                 font-weight: bold;
             }}
             QPushButton:hover {{
-                background-color: {Colors.GREEN_DARK};
+                background-color: #6E3A12;
             }}
             QPushButton:pressed {{
-                background-color: #047857;
+                background-color: #4A2005;
             }}
         """
 
@@ -199,7 +204,7 @@ class Theme:
                 font-weight: bold;
             }}
             QPushButton:hover {{
-                background-color: #dc2626;
+                background-color: #8F1D17;
             }}
         """
 
@@ -242,7 +247,7 @@ class Theme:
                 border-bottom: 1px solid {Colors.BORDER};
             }}
             QTableWidget::item:selected {{
-                background-color: #dbeafe;
+                background-color: #F1E3C6;
                 color: {Colors.TEXT_PRIMARY};
             }}
             QHeaderView::section {{
@@ -266,7 +271,8 @@ class Theme:
     @staticmethod
     def heading(size: int = Fonts.HEADING_LG) -> str:
         return f"""
-            font-size: {size}px;
+            font-family: '{Fonts.HEADING_FAMILY}', Georgia, serif;
+            font-size: {size + 4}px;
             font-weight: bold;
             color: {Colors.TEXT_PRIMARY};
         """

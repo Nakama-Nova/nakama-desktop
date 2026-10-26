@@ -13,7 +13,7 @@ class MetricCard(QFrame):
     """A styled card displaying an icon+title and a large value."""
 
     def __init__(
-        self, title: str, value: str = "0", color: str = "#3b82f6", icon: str = ""
+        self, title: str, value: str = "0", color: str = "#8C5A2B", icon: str = ""
     ):
         super().__init__()
         self.setFrameShape(QFrame.Shape.NoFrame)

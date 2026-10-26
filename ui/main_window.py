@@ -56,7 +56,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("FurniBiz — Furniture Business Manager")
+        self.setWindowTitle("Vriksha Studio — Staff desk")
         self.resize(1200, 750)
         self.setStyleSheet(Theme.global_stylesheet())
 
@@ -83,20 +83,21 @@ class MainWindow(QMainWindow):
         # Brand header
         brand_container = QWidget()
         brand_container.setStyleSheet(
-            f"background-color: {Colors.SIDEBAR_BG}; border-bottom: 1px solid #252b48;"
+            f"background-color: {Colors.SIDEBAR_BG}; border-bottom: 1px solid {Colors.SIDEBAR_HOVER};"
         )
         brand_layout = QVBoxLayout(brand_container)
         brand_layout.setContentsMargins(20, 24, 20, 20)
 
-        brand_lbl = QLabel("🪑 FurniBiz")
-        brand_lbl.setStyleSheet("""
-            font-size: 22px;
+        brand_lbl = QLabel("Vriksha Studio")
+        brand_lbl.setStyleSheet(f"""
+            font-family: '{Fonts.HEADING_FAMILY}', Georgia, serif;
+            font-size: 26px;
             font-weight: bold;
-            color: white;
+            color: {Colors.BG};
         """)
         brand_layout.addWidget(brand_lbl)
 
-        brand_sub = QLabel("Business Manager")
+        brand_sub = QLabel("Staff desk")
         brand_sub.setStyleSheet(f"""
             font-size: {Fonts.CAPTION}px;
             color: {Colors.SIDEBAR_TEXT};
@@ -128,14 +129,14 @@ class MainWindow(QMainWindow):
                 background-color: transparent;
                 color: {Colors.SIDEBAR_TEXT};
                 border: none;
-                border-top: 1px solid #252b48;
+                border-top: 1px solid {Colors.SIDEBAR_HOVER};
                 padding: 16px 20px;
                 font-size: {Fonts.BODY}px;
                 text-align: left;
             }}
             QPushButton:hover {{
                 color: {Colors.RED};
-                background-color: #252b48;
+                background-color: {Colors.SIDEBAR_HOVER};
             }}
         """)
         logout_btn.clicked.connect(self._handle_logout)

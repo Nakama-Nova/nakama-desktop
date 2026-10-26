@@ -48,7 +48,7 @@ class DashboardWindow(QWidget):
         self.subtitle_lbl.setStyleSheet(f"""
             font-size: {Fonts.BODY}px;
             color: {Colors.TEXT_SECONDARY};
-            margin-top: -8px;
+            margin-top: 0px;
         """)
         layout.addWidget(self.subtitle_lbl)
 
