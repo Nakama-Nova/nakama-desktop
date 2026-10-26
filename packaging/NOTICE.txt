@@ -13,6 +13,8 @@ The full licence texts follow in the next section. The important ones:
     corresponding source code is at the address above.
   * Qt 6 (The Qt Company) is licensed under the GNU LGPL version 3 and is included
     as ordinary replaceable libraries (DLL files) in the program folder.
+  * The fonts Cormorant Garamond and Inter are under the SIL Open Font License 1.1
+    (their texts are included below); they may be used and bundled freely.
   * Python is under the Python Software Foundation License.
   * PyInstaller, which packaged this program, is under the GPL version 2 with a
     special exception that allows its output to be distributed under any licence.

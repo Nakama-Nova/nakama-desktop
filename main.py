@@ -12,6 +12,7 @@ if getattr(sys, "frozen", False):
 
 from PyQt6.QtWidgets import QApplication, QMessageBox
 from ui.login_window import LoginWindow
+from ui.fonts import load_brand_fonts
 from ui.theme import Theme
 from services.api_client import ForbiddenError, APIError
 from services.session import Session
@@ -32,6 +33,7 @@ def main():
     sys.excepthook = exception_hook
 
     app = QApplication(sys.argv)
+    load_brand_fonts()
     app.setStyleSheet(Theme.global_stylesheet())
 
     if Session.restore():
