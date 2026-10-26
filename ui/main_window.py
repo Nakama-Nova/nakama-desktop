@@ -54,7 +54,7 @@ class MainWindow(QMainWindow):
         ("📊", "Reports", 5),
         ("👷", "Workforce", 6),
         ("🧊", "3D Lab", 7),
-        ("🪵", "Materials", 8),
+        ("🌳", "Materials", 8),
         ("🛒", "Purchases", 9),
     ]
 

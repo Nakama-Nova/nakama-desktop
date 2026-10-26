@@ -109,7 +109,7 @@ class MaterialsScreen(QWidget):
         layout.setContentsMargins(32, 28, 32, 28)
         layout.setSpacing(16)
         head = QHBoxLayout()
-        title = QLabel("🪵  Materials")
+        title = QLabel("🌳  Materials")
         title.setStyleSheet(Theme.heading(Fonts.HEADING_LG))
         head.addWidget(title)
         head.addStretch()
@@ -162,7 +162,7 @@ class MaterialsScreen(QWidget):
                     cell.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
                 self.table.setItem(r, c, cell)
             self.table.setCellWidget(r, self.COL_ACTIONS, self._actions(m))
-            self.table.setRowHeight(r, 46)
+            self.table.setRowHeight(r, 52)
 
     def _actions(self, m: dict) -> QWidget:
         box = QWidget()

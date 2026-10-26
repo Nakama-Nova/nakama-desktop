@@ -96,9 +96,10 @@ class InventoryWindow(QWidget):
             cols.append("")
         self.table.setColumnCount(len(cols))
         self.table.setHorizontalHeaderLabels(cols)
-        self.table.horizontalHeader().setSectionResizeMode(
-            QHeaderView.ResizeMode.Stretch
-        )
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(self.COL_NAME, QHeaderView.ResizeMode.Stretch)
+        header.setMinimumSectionSize(90)
         if self.can_edit:
             self.table.horizontalHeader().setSectionResizeMode(
                 self.COL_ACTIONS, QHeaderView.ResizeMode.Fixed
@@ -153,7 +154,7 @@ class InventoryWindow(QWidget):
 
             if self.can_edit:
                 self.table.setCellWidget(row, self.COL_ACTIONS, self._actions(item))
-            self.table.setRowHeight(row, 46)
+            self.table.setRowHeight(row, 52)
 
     def _actions(self, item: dict) -> QWidget:
         box = QWidget()

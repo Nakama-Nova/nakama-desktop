@@ -234,7 +234,7 @@ class PurchasesScreen(QWidget):
         )
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)
-        self.table.setColumnWidth(6, 190)
+        self.table.setColumnWidth(6, 250)
         self.table.verticalHeader().setVisible(False)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
@@ -262,7 +262,7 @@ class PurchasesScreen(QWidget):
                     cell.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
                 self.table.setItem(r, c, cell)
             self.table.setCellWidget(r, 6, self._actions(p))
-            self.table.setRowHeight(r, 46)
+            self.table.setRowHeight(r, 52)
 
     def _actions(self, p: dict) -> QWidget:
         box = QWidget()
