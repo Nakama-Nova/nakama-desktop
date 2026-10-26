@@ -32,6 +32,7 @@ from ui.attendance_screen import AttendanceScreen
 from ui.lab_screen import LabScreen
 from ui.materials_screen import MaterialsScreen
 from ui.purchases_screen import PurchasesScreen
+from ui.staff_screen import StaffScreen, change_my_password
 from services.session import Session
 from services.enums import UserRole
 from services.sync_service import SyncService
@@ -56,6 +57,7 @@ class MainWindow(QMainWindow):
         ("🧊", "3D Lab", 7),
         ("🌳", "Materials", 8),
         ("🛒", "Purchases", 9),
+        ("👥", "Staff", 10),
     ]
 
     def __init__(self):
@@ -125,6 +127,27 @@ class MainWindow(QMainWindow):
 
         sidebar_layout.addStretch()
 
+        # Everyone can change their own password
+        pw_btn = QPushButton("🔑  My password")
+        pw_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        pw_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: transparent;
+                color: {Colors.SIDEBAR_TEXT};
+                border: none;
+                border-top: 1px solid {Colors.SIDEBAR_HOVER};
+                padding: 14px 20px;
+                font-size: {Fonts.BODY}px;
+                text-align: left;
+            }}
+            QPushButton:hover {{
+                color: white;
+                background-color: {Colors.SIDEBAR_HOVER};
+            }}
+        """)
+        pw_btn.clicked.connect(lambda: change_my_password(self))
+        sidebar_layout.addWidget(pw_btn)
+
         # Logout at bottom
         logout_btn = QPushButton("🚪  Sign Out")
         logout_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -169,6 +192,7 @@ class MainWindow(QMainWindow):
         self.lab_view = LabScreen()
         self.materials_view = MaterialsScreen()
         self.purchases_view = PurchasesScreen()
+        self.staff_view = StaffScreen()
 
         self.content_stack.addWidget(self.dashboard_view)  # 0
         self.content_stack.addWidget(self.sales_view)  # 1
@@ -180,6 +204,7 @@ class MainWindow(QMainWindow):
         self.content_stack.addWidget(self.lab_view)  # 7
         self.content_stack.addWidget(self.materials_view)  # 8
         self.content_stack.addWidget(self.purchases_view)  # 9
+        self.content_stack.addWidget(self.staff_view)  # 10
 
         # Set default (Home)
         self._switch_page(0)
@@ -223,16 +248,18 @@ class MainWindow(QMainWindow):
     def _get_allowed_nav_items(self):
         role = Session.get_role()
 
-        # OWNER and MANAGER see everything
-        if role in [UserRole.OWNER, UserRole.MANAGER]:
+        # OWNER sees everything; a manager sees everything except staff accounts
+        if role == UserRole.OWNER:
             return self.NAV_ITEMS
+        if role == UserRole.MANAGER:
+            return [item for item in self.NAV_ITEMS if item[1] != "Staff"]
 
         allowed = []
         for icon, label, index in self.NAV_ITEMS:
             if role == UserRole.SALES:
                 # Sales can sell and manage buyers, but not see reports, the Lab,
                 # or the buying side (materials and purchases)
-                if label not in ["Reports", "3D Lab", "Materials", "Purchases"]:
+                if label not in ["Reports", "3D Lab", "Materials", "Purchases", "Staff"]:
                     allowed.append((icon, label, index))
             elif role == UserRole.ACHARI:
                 # Achari focuses on stock/manufacturing and the 3D Lab, no billing/reports
