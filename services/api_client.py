@@ -165,6 +165,26 @@ class APIClient:
             return None
 
     # ------------------------------------------------------------------
+    # 3D Lab  (furniture parts; the viewer/editor are web pages on the backend)
+    # ------------------------------------------------------------------
+    def get_lab_items(self, token: str) -> list | None:
+        try:
+            return self._get("/lab/items", token)
+        except ForbiddenError:
+            raise
+        except APIError:
+            return None
+
+    def create_lab_link(self, token: str, item_id: str, mode: str = "view") -> dict | None:
+        """POST /lab/links -> {url, path, expires_in}: a 10-minute link that opens the Lab."""
+        try:
+            return self._post("/lab/links", token, json={"item_id": item_id, "mode": mode})
+        except ForbiddenError:
+            raise
+        except APIError:
+            return None
+
+    # ------------------------------------------------------------------
     # Customers  (CustomerResponse fields: id, name, phone, email,
     #             address, pincode, gstin, customer_type, created_at)
     # ------------------------------------------------------------------
