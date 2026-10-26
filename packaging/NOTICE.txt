@@ -1,0 +1,20 @@
+Vriksha Studios Desk
+Copyright (c) 2026 Nakama Nova
+Source code: https://github.com/Nakama-Nova/nakama-desktop
+
+The program's own source code is released under the MIT License (file LICENSE).
+
+This installer also contains third-party software, each under its own licence.
+The full licence texts follow in the next section. The important ones:
+
+  * PyQt6 (Riverbank Computing) is licensed under the GNU GPL version 3. Because
+    this program is distributed together with PyQt6, the distributed program as a
+    whole is provided under the terms of the GPL version 3. The complete
+    corresponding source code is at the address above.
+  * Qt 6 (The Qt Company) is licensed under the GNU LGPL version 3 and is included
+    as ordinary replaceable libraries (DLL files) in the program folder.
+  * Python is under the Python Software Foundation License.
+  * PyInstaller, which packaged this program, is under the GPL version 2 with a
+    special exception that allows its output to be distributed under any licence.
+
+NO WARRANTY: the software is provided "as is", without warranty of any kind.

@@ -1,4 +1,15 @@
+import os
 import sys
+from pathlib import Path
+
+# Installed build: the program folder may be read-only, so keep the local database,
+# invoices and the .env (server address) in the user's own folder. Must run before
+# the imports below, which read ./.env and ./data when they load.
+if getattr(sys, "frozen", False):
+    _home = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "VrikshaStudios"
+    _home.mkdir(parents=True, exist_ok=True)
+    os.chdir(_home)
+
 from PyQt6.QtWidgets import QApplication, QMessageBox
 from ui.login_window import LoginWindow
 from ui.theme import Theme

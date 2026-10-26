@@ -1,0 +1,73 @@
+name: Windows installer
+
+# Every PR and branch push builds the installer (download it from the run's
+# "Artifacts"). Pushing a tag like v1.0.0 also publishes it as a GitHub Release.
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  installer:
+    runs-on: windows-latest
+    permissions:
+      contents: write   # only used to attach the installer to a tag's release
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-build.txt
+
+      - name: Version
+        id: ver
+        run: |
+          if ($env:GITHUB_REF -like "refs/tags/v*") { $v = $env:GITHUB_REF_NAME.Substring(1) }
+          else { $v = "0.0.0-dev." + $env:GITHUB_SHA.Substring(0, 7) }
+          "version=$v" >> $env:GITHUB_OUTPUT
+
+      - name: Build the program and collect licences
+        run: ./packaging/build.ps1
+
+      # The packaged program must start (headless) and make its own data folder.
+      - name: Smoke test
+        run: |
+          $env:LOCALAPPDATA = Join-Path $env:RUNNER_TEMP "smoke"
+          New-Item -ItemType Directory $env:LOCALAPPDATA | Out-Null
+          $env:QT_QPA_PLATFORM = "offscreen"
+          $p = Start-Process dist\VrikshaDesk\VrikshaDesk.exe -PassThru
+          Start-Sleep 10
+          if ($p.HasExited) { throw "the program exited with code $($p.ExitCode)" }
+          Stop-Process $p -Force
+          if (-not (Test-Path (Join-Path $env:LOCALAPPDATA "VrikshaStudios"))) { throw "data folder was not created" }
+
+      - name: Build the installer
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
+          & $iscc "/DAppVersion=${{ steps.ver.outputs.version }}" packaging\installer.iss
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed" }
+          Get-ChildItem dist-installer\*.exe | ForEach-Object {
+            "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())  $($_.Name)" | Set-Content "$($_.FullName).sha256"
+          }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VrikshaStudiosDesk-Setup-${{ steps.ver.outputs.version }}
+          path: dist-installer/*
+          if-no-files-found: error
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$env:GITHUB_REF_NAME" (Get-ChildItem dist-installer\*).FullName --title "$env:GITHUB_REF_NAME" --generate-notes

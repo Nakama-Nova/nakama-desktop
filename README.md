@@ -88,6 +88,17 @@ nakama-desktop/
 
 ---
 
+## 🪟 Windows installer
+
+CI builds `VrikshaStudiosDesk-Setup-<version>.exe` for every pull request (Actions run → *Artifacts*), and attaches it to a GitHub Release when a tag like `v1.0.0` is pushed. A `.sha256` file sits next to it.
+
+- Installs for the current user only (no administrator password) and asks once for the server address.
+- Shop data (local database, invoices, server address) is kept in `%LOCALAPPDATA%\VrikshaStudios`, and survives upgrades and uninstalling. To change the server later, edit `API_BASE_URL` in the `.env` file there.
+- The installer is **not code-signed**, so Windows SmartScreen shows "Unknown publisher" the first time: choose *More info → Run anyway*. A signing certificate is the only fix and is a paid extra.
+- Build it locally: `pip install -r requirements.txt -r requirements-build.txt`, then `./packaging/build.ps1`, then `ISCC /DAppVersion=1.0.0 packaging\installer.iss` (needs Inno Setup 6).
+
+---
+
 ## 📜 License
 
-Distributed under the **MIT License**. See `LICENSE` for more information.
+The source code is under the **MIT License** (see `LICENSE`). The Windows installer also bundles PyQt6 (GPL v3) and Qt (LGPL v3), so the installer as a whole is provided under the GPL v3; the full texts are installed with it (`THIRD_PARTY_LICENSES.txt`).
