@@ -1,0 +1,237 @@
+"""
+ui/item_form.py
+
+The full product form: basics, pricing, and what the website shows. Used to add
+and to edit a product. Stock is set only when adding; afterwards it changes
+through "Adjust stock" so every change is in the stock ledger.
+"""
+
+from PyQt6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QDoubleSpinBox,
+    QFormLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPlainTextEdit,
+    QPushButton,
+    QSpinBox,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
+)
+
+from ui.theme import Colors, Theme
+
+GST_CHOICES = [0, 5, 12, 18, 28]  # what the server accepts
+
+
+def _label(text: str) -> QLabel:
+    return QLabel(text, styleSheet=Theme.label())
+
+
+class ItemDialog(QDialog):
+    def __init__(self, parent=None, item=None, categories=None, brands=None):
+        super().__init__(parent)
+        self._editing = item is not None
+        self.setWindowTitle("Edit product" if item else "Add product")
+        self.setMinimumWidth(520)
+        self.setStyleSheet(f"background-color: {Colors.BG};")
+        item = item or {}
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(20, 16, 20, 16)
+        tabs = QTabWidget()
+        root.addWidget(tabs)
+
+        # ---- Basics
+        basics = QWidget()
+        f = QFormLayout(basics)
+        f.setSpacing(10)
+        self.name = self._line(item.get("name"), "e.g. Carved Teak Armchair")
+        self.sku = self._line(item.get("sku"), "e.g. CH-TEAK-01")
+        self.description = QPlainTextEdit(item.get("description") or "")
+        self.description.setFixedHeight(70)
+        self.description.setStyleSheet(Theme.input_style())
+        self.category = self._combo(categories, item.get("category_id"))
+        self.brand = self._combo(brands, item.get("brand_id"))
+        self.unit = self._line(item.get("unit") or "pcs", "pcs")
+        self.min_stock = QSpinBox()
+        self.min_stock.setRange(0, 100000)
+        self.min_stock.setValue(int(item.get("min_stock", 5) or 0))
+        self.min_stock.setStyleSheet(Theme.input_style())
+        for label, w in [
+            ("Name *", self.name),
+            ("SKU *", self.sku),
+            ("Description", self.description),
+            ("Category", self.category),
+            ("Brand", self.brand),
+            ("Unit", self.unit),
+            ("Warn me below", self.min_stock),
+        ]:
+            f.addRow(_label(label), w)
+        self.stock = QSpinBox()
+        self.stock.setRange(0, 1000000)
+        self.stock.setStyleSheet(Theme.input_style())
+        if self._editing:
+            self.stock.setValue(int(item.get("current_stock", 0) or 0))
+            self.stock.setEnabled(False)
+            self.stock.setToolTip("Use Adjust stock to change it, so it is recorded")
+            f.addRow(_label("In stock"), self.stock)
+        else:
+            f.addRow(_label("Starting stock"), self.stock)
+        tabs.addTab(basics, "Basics")
+
+        # ---- Pricing
+        pricing = QWidget()
+        p = QFormLayout(pricing)
+        p.setSpacing(10)
+        self.selling = self._money(item.get("selling_price"))
+        self.purchase = self._money(item.get("purchase_price"))
+        self.production = self._money(item.get("production_cost"))
+        self.gst = QComboBox()
+        for g in GST_CHOICES:
+            self.gst.addItem(f"{g}%", g)
+        gst_now = int(float(item.get("gst_percent") or 0))
+        self.gst.setCurrentIndex(
+            GST_CHOICES.index(gst_now) if gst_now in GST_CHOICES else 0
+        )
+        self.gst.setStyleSheet(Theme.input_style())
+        self.hsn = self._line(item.get("hsn_code"), "optional")
+        note = QLabel(
+            "GST is kept at 0% until the shop is registered; bills show no tax."
+        )
+        note.setStyleSheet(f"color: {Colors.TEXT_SECONDARY};")
+        note.setWordWrap(True)
+        for label, w in [
+            ("Selling price", self.selling),
+            ("Buying price", self.purchase),
+            ("Making cost", self.production),
+            ("GST", self.gst),
+            ("HSN code", self.hsn),
+        ]:
+            p.addRow(_label(label), w)
+        p.addRow(note)
+        tabs.addTab(pricing, "Pricing")
+
+        # ---- Website
+        web = QWidget()
+        w = QFormLayout(web)
+        w.setSpacing(10)
+        self.published = QCheckBox("Show this product on the website")
+        self.published.setChecked(bool(item.get("is_published")))
+        self.slug = self._line(item.get("slug"), "web address, made from the name if empty")
+        self.wood = self._line(item.get("wood_type"), "e.g. Teak")
+        self.short_desc = self._line(item.get("short_desc"), "one line for the shop page")
+        self.made_to_order = QCheckBox("Made to order")
+        self.made_to_order.setChecked(bool(item.get("made_to_order")))
+        self.lead_days = QSpinBox()
+        self.lead_days.setRange(0, 365)
+        self.lead_days.setSpecialValueText("not set")
+        self.lead_days.setSuffix(" days")
+        self.lead_days.setValue(int(item.get("lead_time_days") or 0))
+        self.lead_days.setStyleSheet(Theme.input_style())
+        dims = item.get("dimensions_mm") or {}
+        self.dim = {}
+        dim_row = QHBoxLayout()
+        for key, name in (("l", "L"), ("w", "W"), ("h", "H")):
+            s = QSpinBox()
+            s.setRange(0, 10000)
+            s.setSpecialValueText("-")
+            s.setSuffix(f" {name}")
+            s.setValue(int(dims.get(key) or 0))
+            s.setStyleSheet(Theme.input_style())
+            self.dim[key] = s
+            dim_row.addWidget(s)
+        dim_box = QWidget()
+        dim_box.setLayout(dim_row)
+        dim_row.setContentsMargins(0, 0, 0, 0)
+        self.furniture = QCheckBox("Furniture (shows in the 3D Lab)")
+        self.furniture.setChecked(bool(item.get("is_furniture")))
+        w.addRow(self.published)
+        for label, wid in [
+            ("Web address", self.slug),
+            ("Wood", self.wood),
+            ("Short line", self.short_desc),
+            ("Size (mm)", dim_box),
+            ("Lead time", self.lead_days),
+        ]:
+            w.addRow(_label(label), wid)
+        w.addRow(self.made_to_order)
+        w.addRow(self.furniture)
+        tabs.addTab(web, "Website")
+
+        # ---- Buttons
+        btns = QHBoxLayout()
+        btns.addStretch()
+        cancel = QPushButton("Cancel")
+        cancel.setStyleSheet(Theme.btn_secondary())
+        cancel.clicked.connect(self.reject)
+        save = QPushButton("💾 Save")
+        save.setStyleSheet(Theme.btn_primary())
+        save.clicked.connect(self.accept)
+        btns.addWidget(cancel)
+        btns.addWidget(save)
+        root.addLayout(btns)
+
+    # ---- small builders
+    @staticmethod
+    def _line(value, placeholder=""):
+        e = QLineEdit(value or "")
+        e.setPlaceholderText(placeholder)
+        e.setStyleSheet(Theme.input_style())
+        return e
+
+    @staticmethod
+    def _money(value):
+        s = QDoubleSpinBox()
+        s.setRange(0, 10_000_000)
+        s.setDecimals(2)
+        s.setPrefix("₹")
+        s.setValue(float(value or 0))
+        s.setStyleSheet(Theme.input_style())
+        return s
+
+    @staticmethod
+    def _combo(rows, current):
+        c = QComboBox()
+        c.addItem("(none)", None)
+        for r in rows or []:
+            c.addItem(r["name"], r["id"])
+        if current:
+            i = c.findData(str(current))
+            if i >= 0:
+                c.setCurrentIndex(i)
+        c.setStyleSheet(Theme.input_style())
+        return c
+
+    # ---- result
+    def get_data(self) -> dict:
+        dims = {k: s.value() for k, s in self.dim.items() if s.value() > 0}
+        data = {
+            "name": self.name.text().strip(),
+            "sku": self.sku.text().strip(),
+            "description": self.description.toPlainText().strip() or None,
+            "category_id": self.category.currentData(),
+            "brand_id": self.brand.currentData(),
+            "unit": self.unit.text().strip() or "pcs",
+            "min_stock": self.min_stock.value(),
+            "selling_price": self.selling.value(),
+            "purchase_price": self.purchase.value(),
+            "production_cost": self.production.value(),
+            "gst_percent": self.gst.currentData(),
+            "hsn_code": self.hsn.text().strip() or None,
+            "is_published": self.published.isChecked(),
+            "slug": self.slug.text().strip() or None,
+            "wood_type": self.wood.text().strip() or None,
+            "short_desc": self.short_desc.text().strip() or None,
+            "made_to_order": self.made_to_order.isChecked(),
+            "lead_time_days": self.lead_days.value() or None,
+            "dimensions_mm": dims or None,
+            "is_furniture": self.furniture.isChecked(),
+        }
+        if not self._editing:
+            data["current_stock"] = self.stock.value()
+        return data

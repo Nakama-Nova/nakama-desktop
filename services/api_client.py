@@ -15,6 +15,7 @@ Routes aligned with actual backend API endpoints:
   - /sync/push, /sync/pull
 """
 
+import json
 import os
 import sys
 from typing import Any
@@ -34,7 +35,23 @@ class APIError(Exception):
         self.status_code = status_code
         self.detail = detail
         self.reported = False  # already shown to the user via the global hook
-        super().__init__(f"API Error {status_code}: {detail}")
+        super().__init__(f"{self._plain(detail) or 'API Error'} ({status_code})")
+
+    @staticmethod
+    def _plain(detail: str) -> str:
+        """The server's own reason ("Supplier is on past purchases...") instead of raw JSON."""
+        try:
+            d = json.loads(detail)["detail"]
+        except (ValueError, KeyError, TypeError):
+            return str(detail)
+        if isinstance(d, str):
+            return d
+        if isinstance(d, dict) and isinstance(d.get("message"), str):
+            return d["message"]
+        if isinstance(d, list) and d and isinstance(d[0], dict):
+            loc = ".".join(str(x) for x in d[0].get("loc", [])[1:])
+            return f"{loc}: {d[0].get('msg', 'invalid')}" if loc else d[0].get("msg", "invalid")
+        return str(detail)
 
 
 class ForbiddenError(APIError):
@@ -129,7 +146,48 @@ class APIClient:
             raise ForbiddenError(
                 403, "Access Denied: You don't have permission for this action."
             )
+        if response.status_code == 409:  # "in use": tell the user why
+            raise self._fail(response)
         return response.status_code in (200, 204)
+
+    def _patch(self, path: str, token: str, json: dict | None = None) -> Any:
+        response = requests.patch(
+            f"{self._base_url}{path}",
+            headers=self._headers(token),
+            json=json,
+        )
+        if response.status_code == 403:
+            raise ForbiddenError(
+                403, "Access Denied: You don't have permission for this action."
+            )
+        if response.status_code != 200:
+            raise self._fail(response)
+        return response.json()
+
+    def _upload(self, path: str, token: str, file_path: str, alt: str = "") -> Any:
+        """Send one file as multipart (product photos and models)."""
+        ext = os.path.splitext(file_path)[1].lower()
+        content_type = {
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".png": "image/png",
+            ".webp": "image/webp",
+            ".glb": "model/gltf-binary",
+        }.get(ext, "application/octet-stream")  # the server checks the type
+        with open(file_path, "rb") as f:
+            response = requests.post(
+                f"{self._base_url}{path}",
+                headers=self._headers(token),
+                files={"file": (os.path.basename(file_path), f, content_type)},
+                data={"alt": alt} if alt else None,
+            )
+        if response.status_code == 403:
+            raise ForbiddenError(
+                403, "Access Denied: You don't have permission for this action."
+            )
+        if response.status_code not in (200, 201):
+            raise self._fail(response)
+        return response.json()
 
     def _get_bytes(self, path: str, token: str) -> bytes | None:
         response = requests.get(
@@ -157,8 +215,16 @@ class APIClient:
     #         purchase_price, gst_percent, current_stock, min_stock, ...)
     # ------------------------------------------------------------------
     def get_items(self, token: str) -> list | None:
+        """Every item: the API returns at most 100 per call, so read page by page."""
+        items: list = []
         try:
-            return self._get("/items", token)
+            while True:
+                page = self._get(
+                    "/items/", token, params={"limit": 100, "offset": len(items)}
+                )
+                items.extend(page)
+                if len(page) < 100:
+                    return items
         except ForbiddenError:
             raise
         except APIError:
