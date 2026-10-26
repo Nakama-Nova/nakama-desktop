@@ -109,7 +109,7 @@ class Theme:
     @staticmethod
     def input_style() -> str:
         return f"""
-            QLineEdit, QSpinBox, QDateEdit {{
+            QLineEdit, QSpinBox, QDoubleSpinBox, QDateEdit, QComboBox, QPlainTextEdit {{
                 border: 1.5px solid {Colors.INPUT_BORDER};
                 border-radius: 8px;
                 padding: 10px 14px;
@@ -117,7 +117,8 @@ class Theme:
                 background: {Colors.CARD_BG};
                 color: {Colors.TEXT_PRIMARY};
             }}
-            QLineEdit:focus, QSpinBox:focus, QDateEdit:focus {{
+            QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QDateEdit:focus,
+            QComboBox:focus, QPlainTextEdit:focus {{
                 border-color: {Colors.INPUT_FOCUS};
             }}
             QLineEdit::placeholder {{

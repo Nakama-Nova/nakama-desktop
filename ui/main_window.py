@@ -30,6 +30,8 @@ from ui.reports_screen import ReportsScreen
 from ui.sales_history_screen import SalesHistoryScreen
 from ui.attendance_screen import AttendanceScreen
 from ui.lab_screen import LabScreen
+from ui.materials_screen import MaterialsScreen
+from ui.purchases_screen import PurchasesScreen
 from services.session import Session
 from services.enums import UserRole
 from services.sync_service import SyncService
@@ -52,6 +54,8 @@ class MainWindow(QMainWindow):
         ("📊", "Reports", 5),
         ("👷", "Workforce", 6),
         ("🧊", "3D Lab", 7),
+        ("🌳", "Materials", 8),
+        ("🛒", "Purchases", 9),
     ]
 
     def __init__(self):
@@ -163,6 +167,8 @@ class MainWindow(QMainWindow):
         self.reports_view = ReportsScreen()
         self.attendance_view = AttendanceScreen()
         self.lab_view = LabScreen()
+        self.materials_view = MaterialsScreen()
+        self.purchases_view = PurchasesScreen()
 
         self.content_stack.addWidget(self.dashboard_view)  # 0
         self.content_stack.addWidget(self.sales_view)  # 1
@@ -172,6 +178,8 @@ class MainWindow(QMainWindow):
         self.content_stack.addWidget(self.reports_view)  # 5
         self.content_stack.addWidget(self.attendance_view)  # 6
         self.content_stack.addWidget(self.lab_view)  # 7
+        self.content_stack.addWidget(self.materials_view)  # 8
+        self.content_stack.addWidget(self.purchases_view)  # 9
 
         # Set default (Home)
         self._switch_page(0)
@@ -222,8 +230,9 @@ class MainWindow(QMainWindow):
         allowed = []
         for icon, label, index in self.NAV_ITEMS:
             if role == UserRole.SALES:
-                # Sales can sell and manage buyers, but not see reports or the Lab
-                if label not in ["Reports", "3D Lab"]:
+                # Sales can sell and manage buyers, but not see reports, the Lab,
+                # or the buying side (materials and purchases)
+                if label not in ["Reports", "3D Lab", "Materials", "Purchases"]:
                     allowed.append((icon, label, index))
             elif role == UserRole.ACHARI:
                 # Achari focuses on stock/manufacturing and the 3D Lab, no billing/reports
