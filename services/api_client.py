@@ -24,7 +24,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000")
+BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
 
 
 class APIError(Exception):
@@ -159,6 +159,26 @@ class APIClient:
     def get_items(self, token: str) -> list | None:
         try:
             return self._get("/items", token)
+        except ForbiddenError:
+            raise
+        except APIError:
+            return None
+
+    # ------------------------------------------------------------------
+    # 3D Lab  (furniture parts; the viewer/editor are web pages on the backend)
+    # ------------------------------------------------------------------
+    def get_lab_items(self, token: str) -> list | None:
+        try:
+            return self._get("/lab/items", token)
+        except ForbiddenError:
+            raise
+        except APIError:
+            return None
+
+    def create_lab_link(self, token: str, item_id: str, mode: str = "view") -> dict | None:
+        """POST /lab/links -> {url, path, expires_in}: a 10-minute link that opens the Lab."""
+        try:
+            return self._post("/lab/links", token, json={"item_id": item_id, "mode": mode})
         except ForbiddenError:
             raise
         except APIError:
