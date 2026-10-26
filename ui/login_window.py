@@ -26,7 +26,7 @@ class LoginWindow(QWidget):
         super().__init__()
         self._auth = AuthService()
 
-        self.setWindowTitle("FurniBiz — Sign In")
+        self.setWindowTitle("Vriksha Studio — Staff sign in")
         self.setFixedSize(420, 520)
         self.setStyleSheet(f"""
             QWidget {{
@@ -53,17 +53,18 @@ class LoginWindow(QWidget):
             QSpacerItem(0, 20, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
         )
 
-        brand = QLabel("🪑 FurniBiz")
+        brand = QLabel("Vriksha Studio")
         brand.setAlignment(Qt.AlignmentFlag.AlignCenter)
         brand.setStyleSheet(f"""
-            font-size: 32px;
+            font-family: '{Fonts.HEADING_FAMILY}', Georgia, serif;
+            font-size: 40px;
             font-weight: bold;
-            color: {Colors.TEXT_PRIMARY};
+            color: {Colors.BRAND_BROWN};
             margin-bottom: 8px;
         """)
         root.addWidget(brand)
 
-        tagline = QLabel("Furniture Business Manager")
+        tagline = QLabel("Staff sign in")
         tagline.setAlignment(Qt.AlignmentFlag.AlignCenter)
         tagline.setStyleSheet(f"""
             font-size: {Fonts.BODY}px;
@@ -79,6 +80,10 @@ class LoginWindow(QWidget):
                 background-color: {Colors.CARD_BG};
                 border-radius: 12px;
                 border: 1px solid {Colors.CARD_BORDER};
+            }}
+            QLabel {{
+                border: none;
+                background: transparent;
             }}
         """)
         card_layout = QVBoxLayout(card)
@@ -117,16 +122,16 @@ class LoginWindow(QWidget):
         self.button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.button.setStyleSheet(f"""
             QPushButton {{
-                background-color: {Colors.GREEN};
+                background-color: {Colors.BRAND_BROWN};
                 color: white;
                 border: none;
-                border-radius: 8px;
+                border-radius: 10px;
                 padding: 14px;
                 font-size: 15px;
                 font-weight: bold;
             }}
             QPushButton:hover {{
-                background-color: {Colors.GREEN_DARK};
+                background-color: #6E3A12;
             }}
             QPushButton:disabled {{
                 background-color: {Colors.TEXT_MUTED};

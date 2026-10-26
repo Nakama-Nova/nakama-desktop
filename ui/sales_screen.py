@@ -391,7 +391,7 @@ class SalesScreen(QWidget):
                 }}
                 QPushButton:hover {{
                     background: {Colors.ERROR_BG};
-                    color: #dc2626;
+                    color: #B3261E;
                 }}
             """)
             rm_btn.clicked.connect(lambda _, r=row: self._remove_item(r))
