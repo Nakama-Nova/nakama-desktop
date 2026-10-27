@@ -1,16 +1,16 @@
 Vriksha Studios Desk
-Copyright (c) 2026 Nakama Nova
-Source code: https://github.com/Nakama-Nova/nakama-desktop
+Copyright (c) 2026 Nakama Nova. All rights reserved.
 
-The program's own source code is released under the MIT License (file LICENSE).
+This program is proprietary software, licensed (not sold) under the terms in the
+file LICENSE, which is shown during installation. It may not be copied, modified
+or shared except as that licence allows.
 
-This installer also contains third-party software, each under its own licence.
-The full licence texts follow in the next section. The important ones:
+This installer also contains third-party software that belongs to other people,
+each under its own licence. The full licence texts follow in the next section.
+The licence of this program does not change theirs. The important ones:
 
-  * PyQt6 (Riverbank Computing) is licensed under the GNU GPL version 3. Because
-    this program is distributed together with PyQt6, the distributed program as a
-    whole is provided under the terms of the GPL version 3. The complete
-    corresponding source code is at the address above.
+  * PyQt6 (Riverbank Computing) is available under the GNU GPL version 3 or under
+    a commercial licence from Riverbank Computing.
   * Qt 6 (The Qt Company) is licensed under the GNU LGPL version 3 and is included
     as ordinary replaceable libraries (DLL files) in the program folder.
   * The fonts Cormorant Garamond and Inter are under the SIL Open Font License 1.1
