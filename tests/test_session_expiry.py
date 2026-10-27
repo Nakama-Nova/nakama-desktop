@@ -39,7 +39,7 @@ class Resp:
 def _answer(monkeypatch, status, body='{"detail": "Could not validate credentials"}'):
     resp = Resp(status, body)
     for verb in ("get", "post", "put", "patch", "delete"):
-        monkeypatch.setattr(requests, verb, lambda *a, **k: resp)
+        monkeypatch.setattr(api_client._http, verb, lambda *a, **k: resp)
 
 
 @pytest.fixture(autouse=True)
@@ -172,7 +172,7 @@ def test_login_timeout_is_handled_too(qapp, monkeypatch):
         assert k["timeout"] == api_client.LOGIN_TIMEOUT  # never waits forever
         raise requests.Timeout()
 
-    monkeypatch.setattr(requests, "post", slow)
+    monkeypatch.setattr(api_client._http, "post", slow)
     w = _try_login(qapp)
     assert w.button.isEnabled() and "Can't reach" in w.error_lbl.text()
 

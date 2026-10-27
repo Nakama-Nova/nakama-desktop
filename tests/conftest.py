@@ -27,6 +27,9 @@ def isolated(tmp_path, monkeypatch):
     monkeypatch.setattr(sess, "_keyring", lambda: None)
     monkeypatch.setattr(sess.Session, "_token", "test-token")
     monkeypatch.setattr(sess.Session, "_role", UserRole.OWNER)
+    import services.api_client as api
+
+    monkeypatch.setattr(api, "_down_until", 0.0)  # no "server is down" carried between tests
     yield
 
 
