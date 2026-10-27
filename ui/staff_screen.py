@@ -34,6 +34,7 @@ ROLES = [
     ("Sales", "sales"),
     ("Achari (carpenter)", "achari"),
     ("Worker", "worker"),
+    ("Artisan (restoration)", "artisan"),
 ]
 ROLE_WORDS = {value: label for label, value in ROLES}
 MIN_PASSWORD = 8
