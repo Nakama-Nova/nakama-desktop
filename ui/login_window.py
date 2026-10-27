@@ -4,6 +4,7 @@ ui/login_window.py
 Branded login screen — centered, styled, with inline error feedback.
 """
 
+import requests
 from PyQt6.QtWidgets import (
     QWidget,
     QLabel,
@@ -17,6 +18,7 @@ from PyQt6.QtCore import Qt
 # No QtGui imports needed here
 
 from ui.theme import Theme, Colors, Fonts
+from services.api_client import APIError
 from services.auth_service import AuthService
 
 
@@ -185,7 +187,18 @@ class LoginWindow(QWidget):
 
         QApplication.processEvents()
 
-        result = self._auth.login(username, password)
+        try:
+            result = self._auth.login(username, password)
+        except requests.RequestException:
+            self._login_failed(
+                "Can't reach the server. Check the internet connection and try again."
+            )
+            return
+        except APIError as e:
+            self._login_failed(
+                f"The server had a problem ({e.status_code}). Please try again in a moment."
+            )
+            return
 
         if result:
             from ui.main_window import MainWindow
@@ -194,9 +207,12 @@ class LoginWindow(QWidget):
             self.main_window.show()
             self.close()
         else:
-            self.button.setText("Sign In")
-            self.button.setEnabled(True)
-            self._show_error("Invalid username or password. Please try again.")
+            self._login_failed("Invalid username or password. Please try again.")
+
+    def _login_failed(self, msg: str):
+        self.button.setText("Sign In")
+        self.button.setEnabled(True)
+        self._show_error(msg)
 
     def _show_error(self, msg: str):
         self.error_lbl.setText(msg)

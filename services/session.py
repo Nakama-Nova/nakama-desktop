@@ -20,6 +20,7 @@ import json
 import logging
 import time
 from datetime import datetime
+from typing import Callable
 
 from services.enums import UserRole
 
@@ -77,6 +78,13 @@ def _persist_role(role: str | None) -> None:
         logger.exception("Failed to persist session role to keyring")
 
 
+def _token_payload(token: str) -> dict:
+    """The JWT's claims, decoded without checking the signature (the server's job)."""
+    payload_segment = token.split(".")[1]
+    padded = payload_segment + "=" * (-len(payload_segment) % 4)
+    return json.loads(base64.urlsafe_b64decode(padded))
+
+
 def _is_token_expired(token: str) -> bool:
     """
     Best-effort local expiry check by decoding the JWT's `exp` claim —
@@ -85,10 +93,7 @@ def _is_token_expired(token: str) -> bool:
     can't parse as expired, so we fail safe back to the login screen.
     """
     try:
-        payload_segment = token.split(".")[1]
-        padded = payload_segment + "=" * (-len(payload_segment) % 4)
-        payload = json.loads(base64.urlsafe_b64decode(padded))
-        exp = payload.get("exp")
+        exp = _token_payload(token).get("exp")
         return exp is None or time.time() >= exp
     except Exception:
         return True
@@ -150,6 +155,17 @@ class Session(metaclass=_SessionMeta):
         _persist_role(None)
 
     @classmethod
+    def get_user_id(cls) -> str | None:
+        """Id of the signed-in user (the token's `sub`), or None if unknown."""
+        if not cls._token:
+            return None
+        try:
+            sub = _token_payload(cls._token).get("sub")
+        except Exception:
+            return None
+        return str(sub) if sub else None
+
+    @classmethod
     def is_authenticated(cls) -> bool:
         return cls._token is not None
 
@@ -171,12 +187,18 @@ class Session(metaclass=_SessionMeta):
         return cls._role in allowed_roles
 
     @classmethod
-    def restore(cls) -> bool:
+    def restore(cls, allow_expired: Callable[[], bool] | None = None) -> bool:
         """
         Attempt to restore a previously persisted session (called once at
         app startup, before deciding whether to show the login screen).
 
-        Returns True if a valid, non-expired session was restored.
+        An expired token is normally discarded. If `allow_expired` is given and
+        returns True (the caller found the server unreachable), it is kept instead:
+        signing in needs the server, but the counter must still open and bill
+        offline. The server rejects the stale token later, which sends the user
+        to sign in again.
+
+        Returns True if a session was restored.
         """
         kr = _keyring()
         if kr is None:
@@ -187,10 +209,12 @@ class Session(metaclass=_SessionMeta):
             logger.exception("Failed to read persisted session token from keyring")
             return False
 
-        if not token or _is_token_expired(token):
-            if token:
-                _persist_token(None)
-                _persist_role(None)
+        if not token:
+            return False
+        expired = _is_token_expired(token)
+        if expired and not (allow_expired and allow_expired()):
+            _persist_token(None)
+            _persist_role(None)
             return False
 
         role = None
@@ -199,10 +223,12 @@ class Session(metaclass=_SessionMeta):
         except Exception:
             logger.exception("Failed to read persisted session role from keyring")
 
-        cls._token = token
         if role:
             try:
                 cls._role = UserRole(role)
             except ValueError:
                 cls._role = None
+        if expired and cls._role is None:
+            return False  # nothing to show offline without knowing what they may use
+        cls._token = token
         return True

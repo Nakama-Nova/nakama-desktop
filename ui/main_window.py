@@ -17,8 +17,9 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QStackedWidget,
     QLabel,
+    QMessageBox,
 )
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 
 from ui.theme import Theme, Colors, Fonts
 
@@ -35,6 +36,7 @@ from ui.purchases_screen import PurchasesScreen
 from ui.staff_screen import StaffScreen, change_my_password
 from ui.updater import UpdateBanner, Updater
 from services.version import APP_VERSION
+from services.api_client import SessionExpiredError, set_session_expired_hook
 from services.session import Session
 from services.enums import UserRole
 from services.sync_service import SyncService
@@ -47,6 +49,9 @@ SYNC_INTERVAL_MS = 60_000
 
 
 class MainWindow(QMainWindow):
+    # Emitted when the server rejects our token. A signal, not a direct call: the
+    # update check runs on a worker thread, and dialogs belong to the GUI thread.
+    session_expired = pyqtSignal()
 
     NAV_ITEMS = [
         ("🏠", "Home", 0),
@@ -64,6 +69,9 @@ class MainWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
+        self._signing_out = False
+        self.session_expired.connect(self._on_session_expired)
+        set_session_expired_hook(self.session_expired.emit)
         self.setWindowTitle("Vriksha Studio — Staff desk")
         self.resize(1200, 750)
         self.setStyleSheet(Theme.global_stylesheet())
@@ -256,7 +264,19 @@ class MainWindow(QMainWindow):
                 EventBus.emit(SALE_CREATED)
             if push_result.get("failed"):
                 logger.warning("Background sync push had failures: %s", push_result)
+            held = push_result.get("held", 0)
+            if held:
+                self.statusBar().showMessage(
+                    (
+                        "1 bill saved by another user is waiting for them to sign in."
+                        if held == 1
+                        else f"{held} bills saved by other users are waiting for them to sign in."
+                    ),
+                    15000,
+                )
             self._sync_service.pull_sync()
+        except SessionExpiredError:
+            return  # the expiry hook has signed the user out; the outbox is kept
         except Exception:
             logger.exception("Background sync cycle failed")
 
@@ -372,8 +392,39 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
     # Logout
     # ------------------------------------------------------------------
-    def _handle_logout(self):
+    def _on_session_expired(self):
+        """The server no longer accepts our login: say so once and go to sign-in.
+        Bills saved offline stay in the outbox and are sent after the next sign-in."""
+        if self._signing_out:
+            return  # a 401 while handing over bills at sign-out: we are leaving anyway
         self._sync_timer.stop()
+        Session.clear_token()
+        QMessageBox.information(
+            self,
+            "Signed out",
+            "Your sign-in has expired, so you have been signed out.\n\n"
+            "Sign in again to continue. Bills saved offline are kept on this "
+            "computer and are sent after you sign in.",
+        )
+        from ui.login_window import LoginWindow
+
+        self._login_window = LoginWindow()
+        self._login_window.show()
+        self.close()
+
+    def _flush_outbox(self):
+        """Best effort: hand queued bills to the server under this user's own login
+        before it is cleared, so they do not wait for this user's next sign-in."""
+        try:
+            if self._sync_service.is_online():
+                self._sync_service.push_sync()
+        except Exception:
+            logger.exception("Could not send queued bills at sign-out")
+
+    def _handle_logout(self):
+        self._signing_out = True
+        self._sync_timer.stop()
+        self._flush_outbox()
 
         from services.auth_service import AuthService
 
