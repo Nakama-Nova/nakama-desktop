@@ -94,6 +94,7 @@ CI builds `VrikshaStudiosDesk-Setup-<version>.exe` for every pull request (Actio
 
 - Installs for the current user only (no administrator password) and asks once for the server address.
 - Shop data (local database, invoices, server address) is kept in `%LOCALAPPDATA%\VrikshaStudios`, and survives upgrades and uninstalling. To change the server later, edit `API_BASE_URL` in the `.env` file there.
+- **Updates:** the installed program checks GitHub Releases a few seconds after it starts and every 6 hours. When a newer version is published it shows a banner (and a Windows notification if the window is behind other programs). **Update now** downloads the installer, checks its SHA-256, runs it silently and the app reopens by itself; nothing installs without that click. The sidebar's *Updates* button checks on demand. Development copies and branch builds never prompt.
 - The installer is **not code-signed**, so Windows SmartScreen shows "Unknown publisher" the first time: choose *More info → Run anyway*. A signing certificate is the only fix and is a paid extra.
 - Build it locally: `pip install -r requirements.txt -r requirements-build.txt`, then `./packaging/build.ps1`, then `ISCC /DAppVersion=1.0.0 packaging\installer.iss` (needs Inno Setup 6).
 
