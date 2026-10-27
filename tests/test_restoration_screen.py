@@ -26,7 +26,7 @@ P2 = {**P1, "id": "r2", "title": "Nandi", "status": "planned", "lead_artisan_nam
 DETAIL = {
     **P1,
     "scans": [
-        {"id": "s1", "status": "done", "source_kind": "photos", "files": 40, "progress": 100, "note": "Finished", "error": None, "created_at": "2026-10-27T10:00:00Z"},
+        {"id": "s1", "status": "done", "source_kind": "photos", "params": {"shape": "relief"}, "files": 40, "progress": 100, "note": "Finished", "error": None, "created_at": "2026-10-27T10:00:00Z"},
         {"id": "s2", "status": "failed", "source_kind": "video", "files": 1, "progress": 20, "note": None, "error": "Too few overlapping photos", "created_at": "2026-10-26T09:00:00Z"},
     ],
     "files": [
@@ -92,6 +92,7 @@ def test_lists_projects_and_shows_the_chosen_ones_scans_and_files(qapp, fake):
     assert "Dwarapalaka left" in s.heading.text() and "Lepakshi" in s.heading.text()
     assert s.notes.text() == "Nose missing"
     assert s.scans.item(0, 3).text() == "Done" and s.scans.item(1, 3).text() == "Failed"
+    assert s.scans.item(0, 1).text() == "Flat carving, photos" and s.scans.item(1, 1).text() == "3D object, video"
     assert s.scans.item(1, 5).text() == "Too few overlapping photos"  # why it failed, so photos can be retaken
     assert [s.files.item(r, 0).text() for r in range(2)] == ["3D model (.glb)", "CNC G-code (.nc)"]
     assert s.files.item(0, s.FCOL_SIZE).text() == "5.0 MB"
@@ -131,9 +132,13 @@ def test_scan_options_gcode_needs_a_width(qapp, dialogs):
     d._check()
     assert d.result() == 0 and "real width" in dialogs[-1][2]
     d.width_mm.setValue(600)
-    assert d.get_data() == {"real_width_mm": 600.0, "quality": "normal", "gcode": True}
+    assert d.get_data() == {"real_width_mm": 600.0, "quality": "normal", "gcode": True, "shape": "relief"}
     plain = ScanOptionsDialog(None, "video", ["a.mp4"])
-    assert plain.get_data() == {"real_width_mm": None, "quality": "normal", "gcode": False}
+    assert plain.get_data() == {"real_width_mm": None, "quality": "normal", "gcode": False, "shape": "relief"}
+    plain.shape.setCurrentIndex(plain.shape.findData("full"))
+    assert plain.get_data()["shape"] == "full" and "NVIDIA" in plain.shape_hint.text()
+    plain.shape.setCurrentIndex(plain.shape.findData("relief"))
+    assert "straight on" in plain.shape_hint.text()
 
 
 # ----------------------------------------------------------------- the rules
@@ -146,6 +151,8 @@ def test_capture_rules_match_the_server(tmp_path):
     ten = [make(f"{i}.jpg") for i in range(10)]
     assert check_capture("photos", ten) is None
     assert "at least 8" in check_capture("photos", ten[:5])
+    assert check_capture("photos", ten[:1], "relief") is None  # one straight-on photo is enough for a flat carving
+    assert "at least 8" in check_capture("photos", ten[:1], "full")
     assert "Choose the files" in check_capture("photos", [])
     assert ".png" in check_capture("photos", ten[:9] + [make("a.gif")])
     assert check_capture("video", [make("v.mp4")]) is None
@@ -266,20 +273,37 @@ def test_uploading_from_the_screen_runs_in_the_background_and_refreshes(qapp, fa
     assert not s.photos_btn.isEnabled()  # busy while it runs
     s._thread.wait()
     qapp.processEvents()
-    assert uploaded == [("r1", "photos", 9, {"real_width_mm": None, "quality": "normal", "gcode": False})]
+    assert uploaded == [("r1", "photos", 9, {"real_width_mm": None, "quality": "normal", "gcode": False, "shape": "relief"})]
     assert s.photos_btn.isEnabled() and not s.bar.isVisibleTo(s)
     assert dialogs[-1][0] == "information" and "workshop PC" in dialogs[-1][2]
 
 
-def test_too_few_photos_are_refused_before_anything_is_sent(qapp, fake, monkeypatch, dialogs, tmp_path):
+def test_too_few_photos_for_a_full_object_are_refused_before_anything_is_sent(qapp, fake, monkeypatch, dialogs, tmp_path):
     only = tmp_path / "a.jpg"
     only.write_bytes(b"j")
     monkeypatch.setattr(QFileDialog, "getOpenFileNames", staticmethod(lambda *a, **k: ([str(only)], "")))
+    monkeypatch.setattr(ScanOptionsDialog, "exec", lambda self: (self.shape.setCurrentIndex(self.shape.findData("full")), 1)[1])
     s = RestorationScreen()
     s.refresh_data()
     select(s, 1)
     s.photos_btn.click()
     assert dialogs[-1][0] == "warning" and "at least 8" in dialogs[-1][2] and s._thread is None
+
+
+def test_one_photo_is_enough_for_a_flat_carving(qapp, fake, monkeypatch, dialogs, tmp_path):
+    only = tmp_path / "a.jpg"
+    only.write_bytes(b"j")
+    monkeypatch.setattr(QFileDialog, "getOpenFileNames", staticmethod(lambda *a, **k: ([str(only)], "")))
+    monkeypatch.setattr(ScanOptionsDialog, "exec", lambda self: 1)  # flat carving is the default
+    sent = []
+    monkeypatch.setattr(RestorationService, "upload_capture", lambda self, rid, kind, paths, params, progress: sent.append((len(paths), params["shape"])) or {})
+    s = RestorationScreen()
+    s.refresh_data()
+    select(s, 1)
+    s.photos_btn.click()
+    s._thread.wait()
+    qapp.processEvents()
+    assert sent == [(1, "relief")]
 
 
 def test_saving_a_result_downloads_it_in_the_background(qapp, fake, monkeypatch, dialogs, tmp_path):

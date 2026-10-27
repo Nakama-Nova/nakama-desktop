@@ -36,6 +36,7 @@ from PyQt6.QtWidgets import (
 from services.restoration_service import (
     KIND_WORDS,
     SCAN_WORDS,
+    SHAPE_WORDS,
     STATUS_WORDS,
     STATUSES,
     RestorationService,
@@ -127,10 +128,20 @@ class ScanOptionsDialog(QDialog):
         form = QFormLayout(self)
         form.setContentsMargins(24, 20, 24, 20)
         form.setSpacing(10)
-        what = f"{len(paths)} photos" if kind == "photos" else "1 video"
+        what = f"{len(paths)} photo{'s' if len(paths) != 1 else ''}" if kind == "photos" else "1 video"
         info = QLabel(f"{what} chosen. They go to the workshop PC, which builds the 3D model.")
         info.setWordWrap(True)
         form.addRow(info)
+        self.shape = QComboBox()
+        self.shape.addItem("Flat carving: a relief or panel, one straight-on photo", "relief")
+        self.shape.addItem("Full 3D object: photos all the way around it", "full")
+        self.shape.setStyleSheet(Theme.input_style())
+        self.shape_hint = QLabel("")
+        self.shape_hint.setWordWrap(True)
+        self.shape_hint.setStyleSheet(f"color: {Colors.TEXT_SECONDARY};")
+        form.addRow(QLabel("This is a", styleSheet=Theme.label()), self.shape)
+        form.addRow(self.shape_hint)
+        self.shape.currentIndexChanged.connect(self._shape_changed)
         self.width_mm = QDoubleSpinBox()
         self.width_mm.setRange(0, 5000)
         self.width_mm.setDecimals(0)
@@ -142,11 +153,26 @@ class ScanOptionsDialog(QDialog):
         for label, value in [("Normal", "normal"), ("Fast (rougher)", "fast"), ("High (slow)", "high")]:
             self.quality.addItem(label, value)
         self.quality.setStyleSheet(Theme.input_style())
-        self.gcode = QCheckBox("Also make CNC G-code for a flat carving (needs the width)")
+        self.gcode = QCheckBox("Also make CNC G-code (needs the width)")
+        self._kind = kind
         form.addRow(QLabel("Real width", styleSheet=Theme.label()), self.width_mm)
         form.addRow(QLabel("Quality", styleSheet=Theme.label()), self.quality)
         form.addRow(self.gcode)
         form.addRow(_buttons(self, "Upload"))
+        self._shape_changed()
+
+    def _shape_changed(self, _i=0):
+        if self.shape.currentData() == "relief":
+            self.shape_hint.setText(
+                "Add just the one photo taken straight on, facing the carving, in even light. If you add "
+                "more, the sharpest is used. Any PC can build this, in a minute or two. The depth is "
+                "estimated (front face only), so enter the real width."
+            )
+        else:
+            self.shape_hint.setText(
+                "Take 8 or more overlapping photos (or one slow video) walking all the way around. "
+                "Needs a PC with an NVIDIA graphics card; the scan waits until one is running."
+            )
 
     def _check(self):
         if self.gcode.isChecked() and self.width_mm.value() <= 0:
@@ -159,6 +185,7 @@ class ScanOptionsDialog(QDialog):
             "real_width_mm": self.width_mm.value() or None,
             "quality": self.quality.currentData(),
             "gcode": self.gcode.isChecked(),
+            "shape": self.shape.currentData(),
         }
 
 
@@ -354,7 +381,7 @@ class RestorationScreen(QWidget):
         self.scans.setRowCount(len(d["scans"]))
         for r, s in enumerate(d["scans"]):
             note = s.get("error") or s.get("note") or ""
-            values = [str(s["created_at"])[:16].replace("T", " "), "Video" if s["source_kind"] == "video" else "Photos", str(s["files"]), SCAN_WORDS.get(s["status"], s["status"]), f"{s['progress']}%", note]
+            values = [str(s["created_at"])[:16].replace("T", " "), f"{SHAPE_WORDS.get((s.get('params') or {}).get('shape', 'full'), '3D object')}, {'video' if s['source_kind'] == 'video' else 'photos'}", str(s["files"]), SCAN_WORDS.get(s["status"], s["status"]), f"{s['progress']}%", note]
             for c, text in enumerate(values):
                 cell = QTableWidgetItem(text)
                 if s["status"] == "failed":
@@ -403,12 +430,12 @@ class RestorationScreen(QWidget):
             paths = [path] if path else []
         if not paths:
             return
-        problem = check_capture(kind, paths)
-        if problem:
-            QMessageBox.warning(self, "Cannot upload", problem)
-            return
         opts = ScanOptionsDialog(self, kind, paths)
         if opts.exec() != QDialog.DialogCode.Accepted:
+            return
+        problem = check_capture(kind, paths, opts.get_data()["shape"])
+        if problem:
+            QMessageBox.warning(self, "Cannot upload", problem)
             return
         rid, params = self._current["id"], opts.get_data()
         self._run(lambda progress: self._svc.upload_capture(rid, kind, paths, params, progress), self._uploaded)
