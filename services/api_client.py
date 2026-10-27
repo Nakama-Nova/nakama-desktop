@@ -18,10 +18,12 @@ Routes aligned with actual backend API endpoints:
 import json
 import os
 import sys
+import time
 from typing import Any
 
 import requests
 from dotenv import load_dotenv
+from urllib3.exceptions import ConnectTimeoutError, NewConnectionError
 
 load_dotenv()
 
@@ -31,6 +33,42 @@ BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
 # for ever, because every call runs on the screen's own thread.
 REQUEST_TIMEOUT = (5, 30)
 UPLOAD_TIMEOUT = (5, 120)  # photos and models are bigger
+
+
+# One shared session keeps connections open, so each call does not pay for a new
+# TCP + TLS handshake to the server.
+_http = requests.Session()
+# After the server could not be reached, further calls fail at once for this many
+# seconds instead of each click waiting out the connect timeout.
+OFFLINE_PAUSE = 10
+_down_until = 0.0
+
+
+def _could_not_connect(exc: requests.ConnectionError) -> bool:
+    """True when no connection was made at all (not a slow reply or a dropped one)."""
+    reason = exc.args[0].reason if exc.args and hasattr(exc.args[0], "reason") else None
+    return isinstance(exc, requests.ConnectTimeout) or isinstance(
+        reason, (NewConnectionError, ConnectTimeoutError)
+    )
+
+
+def _send(method: str, url: str, fast_fail: bool = True, **kwargs):
+    """Every request goes through here: shared connection, and fail-fast while offline.
+
+    fast_fail=False (sign-in, health check) always tries, so a restored connection is
+    noticed at once.
+    """
+    global _down_until
+    if fast_fail and time.monotonic() < _down_until:
+        raise requests.ConnectionError("The server could not be reached a moment ago")
+    try:
+        response = getattr(_http, method)(url, **kwargs)
+    except requests.ConnectionError as exc:
+        if _could_not_connect(exc):
+            _down_until = time.monotonic() + OFFLINE_PAUSE
+        raise
+    _down_until = 0.0
+    return response
 
 
 def insecure_remote(url: str) -> bool:
@@ -109,7 +147,8 @@ class APIClient:
     def _get(
         self, path: str, token: str, params: dict | None = None, quiet: bool = False
     ) -> Any:
-        response = requests.get(
+        response = _send(
+            "get",
             f"{self._base_url}{path}",
             headers=self._headers(token),
             params=params,
@@ -132,7 +171,8 @@ class APIClient:
         params: dict | None = None,
         quiet: bool = False,
     ) -> Any:
-        response = requests.post(
+        response = _send(
+            "post",
             f"{self._base_url}{path}",
             headers=self._headers(token),
             json=json,
@@ -149,7 +189,8 @@ class APIClient:
         return response.json() if response.status_code != 204 else {}
 
     def _put(self, path: str, token: str, json: dict) -> Any:
-        response = requests.put(
+        response = _send(
+            "put",
             f"{self._base_url}{path}",
             headers=self._headers(token),
             json=json,
@@ -164,7 +205,8 @@ class APIClient:
         return response.json()
 
     def _delete(self, path: str, token: str) -> bool:
-        response = requests.delete(
+        response = _send(
+            "delete",
             f"{self._base_url}{path}",
             headers=self._headers(token),
             timeout=REQUEST_TIMEOUT,
@@ -178,7 +220,8 @@ class APIClient:
         return response.status_code in (200, 204)
 
     def _patch(self, path: str, token: str, json: dict | None = None) -> Any:
-        response = requests.patch(
+        response = _send(
+            "patch",
             f"{self._base_url}{path}",
             headers=self._headers(token),
             json=json,
@@ -203,7 +246,8 @@ class APIClient:
             ".glb": "model/gltf-binary",
         }.get(ext, "application/octet-stream")  # the server checks the type
         with open(file_path, "rb") as f:
-            response = requests.post(
+            response = _send(
+                "post",
                 f"{self._base_url}{path}",
                 headers=self._headers(token),
                 files={"file": (os.path.basename(file_path), f, content_type)},
@@ -219,7 +263,8 @@ class APIClient:
         return response.json()
 
     def _get_bytes(self, path: str, token: str) -> bytes | None:
-        response = requests.get(
+        response = _send(
+            "get",
             f"{self._base_url}{path}",
             headers=self._headers(token),
             timeout=UPLOAD_TIMEOUT,
@@ -234,8 +279,10 @@ class APIClient:
     # Auth
     # ------------------------------------------------------------------
     def login(self, username: str, password: str) -> dict | None:
-        response = requests.post(
+        response = _send(
+            "post",
             f"{self._base_url}/auth/login",
+            fast_fail=False,
             data={"username": username, "password": password},
             timeout=REQUEST_TIMEOUT,
         )
@@ -509,7 +556,9 @@ class APIClient:
     def health_check(self) -> bool:
         """Check if the backend is reachable."""
         try:
-            response = requests.get(f"{self._base_url}/health", timeout=3)
+            response = _send(
+                "get", f"{self._base_url}/health", fast_fail=False, timeout=3
+            )
             return response.status_code == 200
         except requests.RequestException:  # refused, DNS, timeout...
             return False

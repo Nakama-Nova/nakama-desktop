@@ -71,7 +71,8 @@ class SalesScreen(QWidget):
 
         self.setStyleSheet(Theme.content_bg())
         self._build_ui()
-        self._load_items()
+        # items load when the screen is first opened (refresh_data), not while the
+        # window is still being built, so starting the app never waits on the server
 
     def _build_ui(self):
         root = QVBoxLayout(self)

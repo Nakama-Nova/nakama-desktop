@@ -203,7 +203,7 @@ def test_photo_upload_sends_the_content_type_the_server_checks(monkeypatch, tmp_
         sent["file"] = files["file"]
         return Resp()
 
-    monkeypatch.setattr("services.api_client.requests.post", fake_post)
+    monkeypatch.setattr("services.api_client._http.post", fake_post)
     photo = tmp_path / "front.PNG"
     photo.write_bytes(b"x")
     APIClient("http://x")._upload("/items/i1/assets", "t", str(photo))

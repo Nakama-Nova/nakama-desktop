@@ -229,8 +229,9 @@ class MainWindow(QMainWindow):
         self.content_stack.addWidget(self.expenses_view)  # 12
         self.content_stack.addWidget(self.profit_view)  # 13
 
-        # Set default (Home)
-        self._switch_page(0)
+        # Show Home at once; its numbers load right after the window is on screen
+        self._switch_page(0, refresh=False)
+        QTimer.singleShot(0, self._refresh_current)
 
         # ── Background sync ───────────────────────────
         # Runs the offline sync engine (push queued outbox operations, then
@@ -347,13 +348,17 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
     # Page switching with active state + auto-refresh
     # ------------------------------------------------------------------
-    def _switch_page(self, index: int):
+    def _switch_page(self, index: int, refresh: bool = True):
         self.content_stack.setCurrentIndex(index)
 
         # Update active state on nav buttons
         for i, btn in self._nav_mapping.items():
             btn.setStyleSheet(self._nav_button_css(active=(i == index)))
 
+        if refresh:
+            self._refresh_current()
+
+    def _refresh_current(self):
         # Auto-refresh data for the visible screen
         widget = self.content_stack.currentWidget()
         if hasattr(widget, "refresh_data"):

@@ -29,7 +29,7 @@ def seen(monkeypatch):
         return fake
 
     for m in ("get", "post", "put", "patch", "delete"):
-        monkeypatch.setattr(api_client.requests, m, make(m))
+        monkeypatch.setattr(api_client._http, m, make(m))
     return calls
 
 
@@ -66,13 +66,19 @@ def test_there_is_no_bare_request_left_in_the_client():
         and n.func.value.id == "requests"
         and n.func.attr in ("get", "post", "put", "patch", "delete")
     ]
+    assert not calls, "go through _send so the shared connection and fail-fast apply"
+    calls = [
+        n
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "_send"
+    ]
     assert len(calls) >= 9
     assert all("timeout" in [k.arg for k in c.keywords] for c in calls), "a request has no timeout"
 
 
 def test_too_many_wrong_passwords_is_explained_not_called_a_wrong_password(monkeypatch):
     monkeypatch.setattr(
-        api_client.requests,
+        api_client._http,
         "post",
         lambda url, **kw: Resp(429, text='{"detail": "Too many failed sign-in attempts. Try again in 15 minutes."}'),
     )
@@ -81,7 +87,7 @@ def test_too_many_wrong_passwords_is_explained_not_called_a_wrong_password(monke
 
 
 def test_a_wrong_password_is_still_just_none(monkeypatch):
-    monkeypatch.setattr(api_client.requests, "post", lambda url, **kw: Resp(401, text="{}"))
+    monkeypatch.setattr(api_client._http, "post", lambda url, **kw: Resp(401, text="{}"))
     assert APIClient("http://x").login("asha", "guess") is None
 
 
