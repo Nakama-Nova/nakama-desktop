@@ -35,6 +35,14 @@ jobs:
           else { $v = "0.0.0-dev." + $env:GITHUB_SHA.Substring(0, 7) }
           "version=$v" >> $env:GITHUB_OUTPUT
 
+      # The program learns its own version from the tag, so it can tell when a newer
+      # release exists. Branch and PR builds keep the 0.0.0 development marker.
+      - name: Stamp the version
+        run: |
+          $v = "${{ steps.ver.outputs.version }}"
+          (Get-Content services/version.py -Raw) -replace 'APP_VERSION = "[^"]*"', "APP_VERSION = `"$v`"" | Set-Content services/version.py -NoNewline
+          Select-String -Path services/version.py -Pattern '^APP_VERSION'
+
       - name: Build the program and collect licences
         run: ./packaging/build.ps1
 

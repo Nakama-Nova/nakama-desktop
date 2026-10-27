@@ -40,6 +40,8 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\VrikshaDesk.exe"; Tasks: desk
 
 [Run]
 Filename: "{app}\VrikshaDesk.exe"; Description: "Start {#AppName}"; Flags: nowait postinstall skipifsilent
+; An update started from inside the app runs silently: open the app again when it is done.
+Filename: "{app}\VrikshaDesk.exe"; Flags: nowait runasoriginaluser; Check: WizardSilent
 
 ; Shop data (local database, invoices, settings) lives in %LOCALAPPDATA%\VrikshaStudios and is
 ; deliberately NOT removed on uninstall.

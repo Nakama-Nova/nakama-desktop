@@ -33,6 +33,8 @@ from ui.lab_screen import LabScreen
 from ui.materials_screen import MaterialsScreen
 from ui.purchases_screen import PurchasesScreen
 from ui.staff_screen import StaffScreen, change_my_password
+from ui.updater import UpdateBanner, Updater
+from services.version import APP_VERSION
 from services.session import Session
 from services.enums import UserRole
 from services.sync_service import SyncService
@@ -148,6 +150,13 @@ class MainWindow(QMainWindow):
         pw_btn.clicked.connect(lambda: change_my_password(self))
         sidebar_layout.addWidget(pw_btn)
 
+        # Version, and a manual "check for updates"
+        self.update_btn = QPushButton(f"⬆  Updates  ·  v{APP_VERSION}")
+        self.update_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.update_btn.setStyleSheet(pw_btn.styleSheet())
+        self.update_btn.clicked.connect(lambda: self.updater.check(manual=True))
+        sidebar_layout.addWidget(self.update_btn)
+
         # Logout at bottom
         logout_btn = QPushButton("🚪  Sign Out")
         logout_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -178,6 +187,8 @@ class MainWindow(QMainWindow):
         content_layout.setContentsMargins(0, 0, 0, 0)
 
         self.content_stack = QStackedWidget()
+        self.update_banner = UpdateBanner()
+        content_layout.addWidget(self.update_banner)
         content_layout.addWidget(self.content_stack)
         main_layout.addWidget(content_wrapper)
 
@@ -217,6 +228,10 @@ class MainWindow(QMainWindow):
         self._sync_timer = QTimer(self)
         self._sync_timer.timeout.connect(self._run_sync_cycle)
         self._sync_timer.start(SYNC_INTERVAL_MS)
+
+        # Tell the user when a newer version is published (installed builds only)
+        self.updater = Updater(self, self.update_banner)
+        self.updater.start()
         # Run one cycle shortly after startup too, rather than waiting a
         # full interval for the first sync.
         QTimer.singleShot(2000, self._run_sync_cycle)
