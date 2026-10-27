@@ -102,4 +102,8 @@ CI builds `VrikshaStudiosDesk-Setup-<version>.exe` for every pull request (Actio
 
 ## 📜 License
 
-The source code is under the **MIT License** (see `LICENSE`). The Windows installer also bundles PyQt6 (GPL v3) and Qt (LGPL v3), so the installer as a whole is provided under the GPL v3; the full texts are installed with it (`THIRD_PARTY_LICENSES.txt`).
+This is **proprietary software**. Copyright (c) 2026 Nakama Nova, all rights reserved. It may not be copied, modified or shared; see `LICENSE` (it is also shown when the installer runs).
+
+Third-party components keep their own licences, which are installed with the program (`THIRD_PARTY_LICENSES.txt`).
+
+**Distribution note:** the program uses PyQt6, which is available under the GPL v3 or a commercial licence from Riverbank Computing. Keep it inside the owner's own business until one of those is settled (a commercial PyQt licence, or moving the app to PySide6, which is LGPL).
