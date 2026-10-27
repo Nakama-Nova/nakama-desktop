@@ -34,6 +34,9 @@ from ui.lab_screen import LabScreen
 from ui.materials_screen import MaterialsScreen
 from ui.purchases_screen import PurchasesScreen
 from ui.staff_screen import StaffScreen, change_my_password
+from ui.expenses_screen import ExpensesScreen
+from ui.payroll_screen import PayrollScreen
+from ui.profit_screen import ProfitScreen
 from ui.updater import UpdateBanner, Updater
 from services.version import APP_VERSION
 from services.api_client import SessionExpiredError, set_session_expired_hook
@@ -65,6 +68,9 @@ class MainWindow(QMainWindow):
         ("🌳", "Materials", 8),
         ("🛒", "Purchases", 9),
         ("👥", "Staff", 10),
+        ("💰", "Wages", 11),
+        ("💸", "Expenses", 12),
+        ("💹", "Profit", 13),
     ]
 
     def __init__(self):
@@ -212,6 +218,9 @@ class MainWindow(QMainWindow):
         self.materials_view = MaterialsScreen()
         self.purchases_view = PurchasesScreen()
         self.staff_view = StaffScreen()
+        self.payroll_view = PayrollScreen()
+        self.expenses_view = ExpensesScreen()
+        self.profit_view = ProfitScreen()
 
         self.content_stack.addWidget(self.dashboard_view)  # 0
         self.content_stack.addWidget(self.sales_view)  # 1
@@ -224,6 +233,9 @@ class MainWindow(QMainWindow):
         self.content_stack.addWidget(self.materials_view)  # 8
         self.content_stack.addWidget(self.purchases_view)  # 9
         self.content_stack.addWidget(self.staff_view)  # 10
+        self.content_stack.addWidget(self.payroll_view)  # 11
+        self.content_stack.addWidget(self.expenses_view)  # 12
+        self.content_stack.addWidget(self.profit_view)  # 13
 
         # Set default (Home)
         self._switch_page(0)
@@ -294,15 +306,15 @@ class MainWindow(QMainWindow):
             if role == UserRole.SALES:
                 # Sales can sell and manage buyers, but not see reports, the Lab,
                 # or the buying side (materials and purchases)
-                if label not in ["Reports", "3D Lab", "Materials", "Purchases", "Staff"]:
+                if label not in ["Reports", "3D Lab", "Materials", "Purchases", "Staff", "Wages", "Expenses", "Profit"]:
                     allowed.append((icon, label, index))
             elif role == UserRole.ACHARI:
                 # Achari focuses on stock/manufacturing and the 3D Lab, no billing/reports
-                if label in ["Home", "Stock", "Workforce", "3D Lab"]:
+                if label in ["Home", "Stock", "Workforce", "Wages", "3D Lab"]:
                     allowed.append((icon, label, index))
             elif role == UserRole.WORKER:
                 # Worker sees home, stock, workforce and the 3D Lab (view only)
-                if label in ["Home", "Stock", "Workforce", "3D Lab"]:
+                if label in ["Home", "Stock", "Workforce", "Wages", "3D Lab"]:
                     allowed.append((icon, label, index))
             else:
                 # Default safety
