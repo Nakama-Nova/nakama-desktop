@@ -22,6 +22,9 @@ class OutboxEntry:
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
     error_message: str | None = None
+    # Who queued it (the signed-in user's id). None for rows queued before this was
+    # recorded.
+    user_id: str | None = None
 
 
 @dataclass

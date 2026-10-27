@@ -22,7 +22,14 @@ class OutboxRepository:
     def _conn(self):
         return self._db.get_connection()
 
-    def add_entry(self, entity: str, action: str, payload: dict) -> str:
+    def add_entry(
+        self,
+        entity: str,
+        action: str,
+        payload: dict,
+        entry_id: str | None = None,
+        user_id: str | None = None,
+    ) -> str:
         """
         Queue a new outbox operation. Returns the entry's id.
 
@@ -30,13 +37,20 @@ class OutboxRepository:
         doubles as the sync engine's idempotency key (client_id) once
         pushed — a per-install autoincrement integer would collide across
         multiple desktop installs pushing to the same backend.
+
+        entry_id lets a caller reuse the id it already sent to the server (a sale
+        whose online attempt may have gone through), so the server recognises
+        the replay instead of recording it twice.
+
+        user_id is who made the change. The server records a pushed change under
+        whoever's token pushes it, so the row must only be pushed by that user.
         """
-        entry_id = str(uuid.uuid4())
+        entry_id = entry_id or str(uuid.uuid4())
         now = datetime.now(timezone.utc).isoformat()
         self._conn().execute(
-            "INSERT INTO outbox (id, entity, action, payload, status, created_at) "
-            "VALUES (?, ?, ?, ?, 'pending', ?)",
-            (entry_id, entity, action, json.dumps(payload), now),
+            "INSERT INTO outbox (id, entity, action, payload, status, created_at, user_id) "
+            "VALUES (?, ?, ?, ?, 'pending', ?, ?)",
+            (entry_id, entity, action, json.dumps(payload), now, user_id),
         )
         self._conn().commit()
         return entry_id
@@ -60,9 +74,18 @@ class OutboxRepository:
                 status=row["status"],
                 created_at=row["created_at"],
                 error_message=row["error_message"],
+                user_id=row["user_id"],
             )
             for row in rows
         ]
+
+    def claim(self, entry_id: str, user_id: str) -> None:
+        """Give a row queued before attribution existed to a user (once)."""
+        self._conn().execute(
+            "UPDATE outbox SET user_id = ? WHERE id = ? AND user_id IS NULL",
+            (user_id, entry_id),
+        )
+        self._conn().commit()
 
     def mark_synced(self, entry_id: str) -> None:
         self._conn().execute(

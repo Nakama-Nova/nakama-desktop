@@ -8,6 +8,8 @@ Billing POS screen — simplified for non-technical users.
 - Remove item button per row
 """
 
+import uuid
+
 import requests
 from PyQt6.QtWidgets import (
     QWidget,
@@ -52,6 +54,9 @@ class CartItem:
 
 
 class SalesScreen(QWidget):
+    # The id of the bill being rung up (see _client_id_for_cart).
+    _bill_key = None
+    _bill_client_id = None
     """Billing / POS screen."""
 
     COL_NAME = 0
@@ -333,6 +338,7 @@ class SalesScreen(QWidget):
             self._refresh_table()
 
     def _clear_cart(self):
+        self._bill_key = None
         self._cart.clear()
         self._refresh_table()
 
@@ -428,12 +434,23 @@ class SalesScreen(QWidget):
     # ------------------------------------------------------------------
     # Offline billing
     # ------------------------------------------------------------------
-    def _save_offline(self, customer_name: str, phone: str):
+    def _client_id_for_cart(self, phone: str) -> str:
+        """One id per distinct bill. If the connection drops after the server
+        recorded it, the offline copy carries the same id and the server skips
+        it instead of billing the buyer twice. Changing the cart makes a new bill."""
+        key = (phone, tuple((c.item_id, c.quantity) for c in self._cart))
+        if key != self._bill_key:
+            self._bill_key, self._bill_client_id = key, str(uuid.uuid4())
+        return self._bill_client_id
+
+    def _save_offline(self, customer_name: str, phone: str, client_id: str):
         lines = [
             {"item_id": c.item_id, "quantity": c.quantity, "price": c.price}
             for c in self._cart
         ]
-        ref = self._sales_service.queue_offline_sale(lines, customer_name, phone)
+        ref = self._sales_service.queue_offline_sale(
+            lines, customer_name, phone, client_id
+        )
         QMessageBox.information(
             self,
             "Saved offline 📴",
@@ -466,9 +483,11 @@ class SalesScreen(QWidget):
             QMessageBox.warning(self, "Empty Bill", "Please add at least one item.")
             return
 
+        client_id = self._client_id_for_cart(phone)
+
         # No connection: keep the sale on this computer and sync it later.
         if not self._sales_service.is_online():
-            self._save_offline(customer_name, phone)
+            self._save_offline(customer_name, phone, client_id)
             return
 
         try:
@@ -483,11 +502,12 @@ class SalesScreen(QWidget):
                 {"item_id": c.item_id, "quantity": c.quantity} for c in self._cart
             ]
             sale_data = self._sales_service.create_sale(
-                items=payload_items, customer_id=customer_id
+                items=payload_items, customer_id=customer_id, client_id=client_id
             )
         except requests.RequestException:
-            # The connection dropped after the online check.
-            self._save_offline(customer_name, phone)
+            # The connection dropped after the online check. The server may or
+            # may not have recorded the bill; the shared client_id covers both.
+            self._save_offline(customer_name, phone, client_id)
             return
         if sale_data is None:
             QMessageBox.critical(

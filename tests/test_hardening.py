@@ -42,7 +42,7 @@ def test_every_kind_of_call_has_a_timeout(seen, tmp_path):
     api._delete("/a", "t")
     api.login("u", "p")
     assert seen["get"] == api_client.REQUEST_TIMEOUT
-    assert seen["post"] == api_client.REQUEST_TIMEOUT  # the last post is the login
+    assert seen["post"] == api_client.LOGIN_TIMEOUT  # the last post is the login
     for kind in ("put", "patch", "delete"):
         assert seen[kind] == api_client.REQUEST_TIMEOUT
     photo = tmp_path / "a.png"
@@ -104,7 +104,7 @@ def test_the_login_window_shows_the_lockout_and_offline_messages(qapp, monkeypat
 
     monkeypatch.setattr(w._auth, "login", lambda u, p: (_ for _ in ()).throw(requests.ConnectionError()))
     w.handle_login()
-    assert "Cannot reach the server" in w.error_lbl.text() and w.button.isEnabled()
+    assert "Can't reach the server" in w.error_lbl.text() and w.button.isEnabled()
 
 
 @pytest.mark.parametrize(
