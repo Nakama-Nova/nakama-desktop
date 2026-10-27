@@ -17,6 +17,7 @@ from services.session import Session
 
 MB = 1024 * 1024
 MIN_PHOTOS, MAX_PHOTOS = 8, 300
+MIN_RELIEF_PHOTOS = 1  # a flat carving is read from one straight-on photo
 PHOTO_MAX, VIDEO_MAX = 100 * MB, 1024 * MB
 PHOTO_EXT, VIDEO_EXT = {".jpg", ".jpeg", ".png"}, {".mp4", ".mov"}
 CONTENT_TYPES = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".mp4": "video/mp4", ".mov": "video/quicktime"}
@@ -33,18 +34,19 @@ STATUSES = [
 ]
 STATUS_WORDS = {value: label for label, value in STATUSES}
 KIND_WORDS = {"glb": "3D model (.glb)", "stl": "3D print/CNC mesh (.stl)", "obj": "3D model (.obj)", "ply": "3D scan (.ply)", "nc": "CNC G-code (.nc)", "render": "Preview picture"}
+SHAPE_WORDS = {"relief": "Flat carving", "full": "3D object"}
 SCAN_WORDS = {"created": "Uploading", "uploaded": "Waiting for the workshop PC", "processing": "Building 3D model", "done": "Done", "failed": "Failed", "cancelled": "Cancelled"}
 
 
-def check_capture(kind: str, paths: list[str]) -> str | None:
+def check_capture(kind: str, paths: list[str], shape: str = "full") -> str | None:
     """A plain-words problem with the chosen files, or None. Mirrors the server's rules."""
     if not paths:
         return "Choose the files first."
     exts, biggest = (PHOTO_EXT, PHOTO_MAX) if kind == "photos" else (VIDEO_EXT, VIDEO_MAX)
     if kind == "video" and len(paths) != 1:
         return "Choose one video."
-    if kind == "photos" and len(paths) < MIN_PHOTOS:
-        return f"Take at least {MIN_PHOTOS} photos, walking all the way around the piece."
+    if kind == "photos" and shape != "relief" and len(paths) < MIN_PHOTOS:
+        return f"A full 3D object needs at least {MIN_PHOTOS} photos, walking all the way around it. For a flat carving, choose Flat carving."
     if len(paths) > MAX_PHOTOS:
         return f"At most {MAX_PHOTOS} photos in one scan."
     for p in paths:
@@ -101,7 +103,7 @@ class RestorationService:
     # -- capture: photos or one video -> the workshop PC ------------------
     def upload_capture(self, restoration_id: str, kind: str, paths: list[str], params: dict, progress: Callable[[int, int, str], None]) -> dict:
         """Create the scan, send every file straight to the store, then queue it."""
-        problem = check_capture(kind, paths)
+        problem = check_capture(kind, paths, params.get("shape", "full"))
         if problem:
             raise ValueError(problem)
         t = self._t()
