@@ -199,7 +199,7 @@ def test_photo_upload_sends_the_content_type_the_server_checks(monkeypatch, tmp_
         def json():
             return {"id": "a1"}
 
-    def fake_post(url, headers=None, files=None, data=None):
+    def fake_post(url, headers=None, files=None, data=None, timeout=None):
         sent["file"] = files["file"]
         return Resp()
 
