@@ -7,3 +7,4 @@ class UserRole(str, Enum):
     SALES = "sales"
     ACHARI = "achari"
     WORKER = "worker"
+    ARTISAN = "artisan"
