@@ -29,16 +29,23 @@ class SalesService:
     # Sale creation
     # ------------------------------------------------------------------
     def create_sale(
-        self, items: list[dict], customer_id: str | None = None
+        self,
+        items: list[dict],
+        customer_id: str | None = None,
+        client_id: str | None = None,
     ) -> dict | None:
         """POST /sales and return the SaleResponse dict."""
-        return self._api.create_sale(self._token(), items, customer_id)
+        return self._api.create_sale(self._token(), items, customer_id, client_id)
 
     def is_online(self) -> bool:
         return self._api.health_check()
 
     def queue_offline_sale(
-        self, lines: list[dict], customer_name: str, customer_phone: str
+        self,
+        lines: list[dict],
+        customer_name: str,
+        customer_phone: str,
+        client_id: str | None = None,
     ) -> str:
         """
         Save a counter sale in the local outbox; the background sync pushes it
@@ -46,6 +53,9 @@ class SalesService:
         consecutive bill number then.
 
         lines: [{"item_id": str, "quantity": int, "price": float}, ...]
+        client_id: the id already sent with an online attempt of this same bill,
+        if there was one. It becomes the outbox id, which the server uses to
+        spot a bill it already recorded.
         Returns a short reference to show the user while the sale is queued.
         """
         sale_id = str(uuid.uuid4())
@@ -65,7 +75,9 @@ class SalesService:
             "total_amount": sum(ln["price"] * ln["quantity"] for ln in lines),
             "payment_method": "cash",
         }
-        OutboxRepository().add_entry("sale", "create", payload)
+        OutboxRepository().add_entry(
+            "sale", "create", payload, entry_id=client_id, user_id=Session.get_user_id()
+        )
         return sale_id[:8].upper()
 
     # ------------------------------------------------------------------
