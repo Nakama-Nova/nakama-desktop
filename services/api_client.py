@@ -18,7 +18,7 @@ Routes aligned with actual backend API endpoints:
 import json
 import os
 import sys
-from typing import Any
+from typing import Any, Callable
 
 import requests
 from dotenv import load_dotenv
@@ -26,6 +26,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
+LOGIN_TIMEOUT = 10  # seconds; a dead link must not leave "Signing in..." forever
 
 # (connect, read) seconds. Without these a stalled server freezes the whole window
 # for ever, because every call runs on the screen's own thread.
@@ -83,6 +84,49 @@ class ForbiddenError(APIError):
     pass
 
 
+class SessionExpiredError(Exception):
+    """Raised when the server no longer accepts our token (401).
+
+    Deliberately not an APIError: the many `except APIError: return None` fallbacks
+    would turn it into an empty screen plus a second, misleading "failed" dialog
+    on top of the sign-in prompt. It travels up instead, and the global exception
+    hook ignores it because the expiry hook has already told the user.
+    """
+
+    status_code = 401
+    reported = True
+
+    def __init__(self, detail: str = ""):
+        super().__init__("Your sign-in has expired. Please sign in again.")
+        self.detail = detail
+
+
+# What to do when the token is rejected: the main window registers a function that
+# says so once and returns to the sign-in screen. It runs once per sign-in, however
+# many calls (screens, background sync, update check) hit the 401 together.
+_expired_hook: Callable[[], None] | None = None
+_expired_fired = False
+
+
+def set_session_expired_hook(hook: Callable[[], None] | None) -> None:
+    global _expired_hook, _expired_fired
+    _expired_hook, _expired_fired = hook, False
+
+
+def reset_session_expired() -> None:
+    """Call after a successful sign-in so the next expiry is reported again."""
+    global _expired_fired
+    _expired_fired = False
+
+
+def _session_expired(response) -> SessionExpiredError:
+    global _expired_fired
+    if _expired_hook is not None and not _expired_fired:
+        _expired_fired = True
+        _expired_hook()
+    return SessionExpiredError(response.text)
+
+
 class APIClient:
     """Low-level HTTP client for the Nakama backend."""
 
@@ -100,6 +144,8 @@ class APIClient:
         """Build the APIError and, unless it's a 404 (a normal "not found") or a
         background call, surface it through the global exception hook so the user
         sees why a screen is empty instead of failing silently."""
+        if response.status_code == 401:
+            return _session_expired(response)
         err = APIError(response.status_code, response.text)
         if not quiet and response.status_code != 404:
             sys.excepthook(type(err), err, None)
@@ -173,7 +219,7 @@ class APIClient:
             raise ForbiddenError(
                 403, "Access Denied: You don't have permission for this action."
             )
-        if response.status_code == 409:  # "in use": tell the user why
+        if response.status_code in (401, 409):  # expired, or "in use": tell the user why
             raise self._fail(response)
         return response.status_code in (200, 204)
 
@@ -228,21 +274,29 @@ class APIClient:
             raise ForbiddenError(
                 403, "Access Denied: You don't have permission for this action."
             )
+        if response.status_code == 401:
+            raise self._fail(response)
         return response.content if response.status_code == 200 else None
 
     # ------------------------------------------------------------------
     # Auth
     # ------------------------------------------------------------------
     def login(self, username: str, password: str) -> dict | None:
+        """The login response, or None for a wrong username/password.
+
+        Raises requests.RequestException when the server can't be reached and
+        APIError when it answers with anything else (it is down or broken).
+        """
         response = requests.post(
             f"{self._base_url}/auth/login",
             data={"username": username, "password": password},
-            timeout=REQUEST_TIMEOUT,
+            timeout=LOGIN_TIMEOUT,
         )
-        if response.status_code == 429:
-            # too many wrong passwords: say so instead of "wrong password"
-            raise APIError(429, response.text)
-        return response.json() if response.status_code == 200 else None
+        if response.status_code == 200:
+            return response.json()
+        if response.status_code == 401:
+            return None
+        raise APIError(response.status_code, response.text)
 
     # ------------------------------------------------------------------
     # Items  (ItemResponse fields: id, sku, name, selling_price,
@@ -347,15 +401,23 @@ class APIClient:
     #         total_amount, created_at, items: [SaleItemResponse])
     # ------------------------------------------------------------------
     def create_sale(
-        self, token: str, items: list, customer_id: str | None = None
+        self,
+        token: str,
+        items: list,
+        customer_id: str | None = None,
+        client_id: str | None = None,
     ) -> dict | None:
         """
         POST /sales
         items: [{"item_id": "<uuid>", "quantity": int}, ...]
+        client_id: idempotency key; the server returns the existing sale when it
+        has already recorded this id.
         """
         payload: dict[str, Any] = {"items": items}
         if customer_id is not None:
             payload["customer_id"] = customer_id
+        if client_id is not None:
+            payload["client_id"] = client_id
         try:
             return self._post("/sales", token, json=payload)
         except ForbiddenError:

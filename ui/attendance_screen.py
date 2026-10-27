@@ -31,6 +31,8 @@ class AttendanceScreen(QWidget):
     def __init__(self):
         super().__init__()
         self._service = AttendanceService()
+        # user id -> id of that person's attendance record with no check-out yet
+        self._open_by_user: dict[str, str] = {}
         self._build_ui()
 
     def _build_ui(self):
@@ -56,18 +58,22 @@ class AttendanceScreen(QWidget):
             action_layout.addWidget(QLabel("Select Worker:"))
             self.user_combo = QComboBox()
             self.user_combo.setFixedWidth(200)
+            self.user_combo.currentIndexChanged.connect(self._update_check_out_button)
             action_layout.addWidget(self.user_combo)
             
             self.btn_check_in = QPushButton("✅ Check In")
             self.btn_check_in.clicked.connect(self._handle_check_in)
             action_layout.addWidget(self.btn_check_in)
         else:
-            action_layout.addWidget(QLabel("Your daily attendance tracking area."))
+            action_layout.addWidget(
+                QLabel("Your attendance history. The owner, a manager or the counter records check-in and check-out.")
+            )
             action_layout.addStretch()
 
         self.btn_check_out = QPushButton("🚪 Check Out")
         self.btn_check_out.clicked.connect(self._handle_check_out)
-        self.btn_check_out.setEnabled(False) # Enabled if an open record exists
+        self.btn_check_out.setEnabled(False)  # Enabled if the selected worker is checked in
+        self.btn_check_out.setVisible(is_admin)  # the server refuses it for other roles
         action_layout.addWidget(self.btn_check_out)
 
         layout.addWidget(self.action_card)
@@ -92,12 +98,19 @@ class AttendanceScreen(QWidget):
         role = Session.get_role()
         is_admin = role in [UserRole.OWNER, UserRole.MANAGER, UserRole.SALES]
 
-        # 1. Load users if admin
+        # 1. Load users if admin (keeping whoever was selected)
         if is_admin:
             users = self._service.get_users()
+            selected = self.user_combo.currentData()
+            self.user_combo.blockSignals(True)
             self.user_combo.clear()
             for u in users:
                 self.user_combo.addItem(u.get("full_name") or u.get("username"), u.get("id"))
+            if selected is not None:
+                idx = self.user_combo.findData(selected)
+                if idx >= 0:
+                    self.user_combo.setCurrentIndex(idx)
+            self.user_combo.blockSignals(False)
 
         # 2. Load attendance history
         if is_admin:
@@ -106,7 +119,7 @@ class AttendanceScreen(QWidget):
             records = self._service.get_my_attendance()
 
         self.table.setRowCount(len(records))
-        open_record_id = None
+        open_records: dict[str, dict] = {}
 
         for i, r in enumerate(records):
             status = r.get("status")
@@ -131,17 +144,25 @@ class AttendanceScreen(QWidget):
             self.table.setItem(i, 4, QTableWidgetItem(hours))
             self.table.setItem(i, 5, QTableWidgetItem(f"₹{wage}"))
 
-            # Check for today's open record for the logged in user or selected user
-            if not check_out:
-                 # In a real app, logic would be more complex to match current selection
-                 # For now, let's enable check-out if ANY open record exists (simple)
-                 open_record_id = r.get("id")
+            # An open record belongs to one person: remember it per user, newest wins
+            uid = str(r.get("user_id") or "")
+            if not check_out and uid:
+                best = open_records.get(uid)
+                if best is None or (check_in or "") >= (best.get("check_in") or ""):
+                    open_records[uid] = r
 
-        if open_record_id:
-            self.btn_check_out.setEnabled(True)
-            self._current_attendance_id = open_record_id
-        else:
-            self.btn_check_out.setEnabled(False)
+        self._open_by_user = {uid: r["id"] for uid, r in open_records.items()}
+        self._update_check_out_button()
+
+    def _selected_user_id(self) -> str | None:
+        combo = getattr(self, "user_combo", None)
+        data = combo.currentData() if combo is not None else None
+        return str(data) if data else None
+
+    def _update_check_out_button(self, *_):
+        """Check Out is for the worker chosen in the box, and only if they are in."""
+        uid = self._selected_user_id()
+        self.btn_check_out.setEnabled(uid is not None and uid in self._open_by_user)
 
     @handle_permissions
     def _handle_check_in(self):
@@ -156,10 +177,11 @@ class AttendanceScreen(QWidget):
 
     @handle_permissions
     def _handle_check_out(self):
-        if not hasattr(self, "_current_attendance_id"):
-            return
-        
-        result = self._service.check_out(self._current_attendance_id)
+        attendance_id = self._open_by_user.get(self._selected_user_id() or "")
+        if not attendance_id:
+            return  # the selected worker has nobody to check out
+
+        result = self._service.check_out(attendance_id)
         if result:
             QMessageBox.information(self, "Success", f"Checked out. Hours: {result.get('total_hours')}")
             self.refresh_data()

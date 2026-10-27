@@ -48,29 +48,40 @@ class SyncService:
     # ------------------------------------------------------------------
     def push_sync(self) -> dict:
         """
-        Push all pending outbox entries to the backend.
-        Returns { "pushed": int, "failed": int } stats.
+        Push this user's pending outbox entries to the backend.
+
+        The server records a pushed change under whoever's token pushes it, so an
+        entry queued by another user is held (left pending) until that user signs in.
+        Returns { "pushed": int, "failed": int, "held": int } stats.
         """
         token = Session.get_token()
         if not token:
             return {"pushed": 0, "failed": 0, "error": "Not authenticated"}
 
+        me = Session.get_user_id()
         pending = self._outbox.get_pending()
-        if not pending:
-            return {"pushed": 0, "failed": 0}
+        # Rows with no recorded user predate attribution: the first user to sync after
+        # the upgrade takes them over (a one-off). Rows of anyone else are held.
+        mine = [e for e in pending if e.user_id in (None, me)]
+        held = len(pending) - len(mine)
+        if not mine:
+            return {"pushed": 0, "failed": 0, "held": held}
 
         # Build operations matching the backend's SyncOperation schema
         operations = []
-        for entry in pending:
-            operations.append(
-                {
-                    "id": entry.id,
-                    "entity": entry.entity,
-                    "action": entry.action,
-                    "payload": json.loads(entry.payload),
-                    "updated_at": entry.created_at,
-                }
-            )
+        for entry in mine:
+            if entry.user_id is None and me:
+                self._outbox.claim(entry.id, me)
+            op = {
+                "id": entry.id,
+                "entity": entry.entity,
+                "action": entry.action,
+                "payload": json.loads(entry.payload),
+                "updated_at": entry.created_at,
+            }
+            if entry.user_id or me:
+                op["user_id"] = entry.user_id or me  # the server double-checks it
+            operations.append(op)
 
         pushed = 0
         failed = 0
@@ -102,12 +113,15 @@ class SyncService:
             for op_result in result.get("failed", []):
                 client_id = op_result.get("client_id")
                 error = op_result.get("error", "Unknown error")
+                if op_result.get("status") == "wrong_user":
+                    held += 1  # the server says it is someone else's: keep it queued
+                    continue
                 if client_id:
                     self._outbox.mark_failed(client_id, error)
                     failed += 1
 
-        logger.info(f"Sync push complete: {pushed} synced, {failed} failed")
-        return {"pushed": pushed, "failed": failed}
+        logger.info(f"Sync push complete: {pushed} synced, {failed} failed, {held} held")
+        return {"pushed": pushed, "failed": failed, "held": held}
 
     # ------------------------------------------------------------------
     # Pull: backend → local

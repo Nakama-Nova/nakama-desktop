@@ -24,7 +24,7 @@ from typing import Callable
 
 import requests
 
-from services.api_client import APIClient, APIError, ForbiddenError
+from services.api_client import APIClient, APIError, ForbiddenError, SessionExpiredError
 from services.session import Session
 from services.version import APP_VERSION, parse_version
 
@@ -59,6 +59,8 @@ def check_for_update(current: str = APP_VERSION, api: APIClient | None = None) -
         data = api._get("/app/updates/latest", Session.get_token(), quiet=True)
     except ForbiddenError:
         raise UpdateError("You are not allowed to check for updates.") from None
+    except SessionExpiredError:
+        raise UpdateError("Sign in again to check for updates.") from None
     except APIError as e:
         if e.status_code == 404:
             return None  # nothing published yet
