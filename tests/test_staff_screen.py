@@ -71,7 +71,7 @@ def test_add_staff_collects_login_details_and_wage(qapp):
     data = d.get_data()
     assert data == {
         "username": "kavya", "password": "Strong1234", "full_name": "Kavya R", "email": "k@x.com",
-        "phone": None, "base_daily_wage": 700.0, "role": "sales",
+        "phone": None, "base_daily_wage": 700.0, "overtime_rate_per_hour": None, "role": "sales",
     }
 
 

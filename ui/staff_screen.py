@@ -105,6 +105,13 @@ class StaffDialog(QDialog):
         self.wage.setSuffix(" / day")
         self.wage.setValue(float(user.get("base_daily_wage") or 0))
         self.wage.setStyleSheet(Theme.input_style())
+        self.overtime = QDoubleSpinBox()
+        self.overtime.setRange(0, 10000)
+        self.overtime.setPrefix("₹")
+        self.overtime.setSuffix(" / hour")
+        self.overtime.setSpecialValueText("not set")
+        self.overtime.setValue(float(user.get("overtime_rate_per_hour") or 0))
+        self.overtime.setStyleSheet(Theme.input_style())
 
         for label, w in [
             ("Username *", self.username),
@@ -113,6 +120,7 @@ class StaffDialog(QDialog):
             ("Phone", self.phone),
             ("Role", self.role),
             ("Daily wage", self.wage),
+            ("Overtime rate", self.overtime),
         ]:
             form.addRow(QLabel(label, styleSheet=Theme.label()), w)
         if self._adding:
@@ -141,6 +149,7 @@ class StaffDialog(QDialog):
             "email": self.email.text().strip(),
             "phone": self.phone.text().strip() or None,
             "base_daily_wage": self.wage.value(),
+            "overtime_rate_per_hour": self.overtime.value() or None,
         }
         if self.role.isEnabled():
             data["role"] = self.role.currentData()
