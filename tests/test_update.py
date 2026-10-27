@@ -1,4 +1,4 @@
-"""Update notifications: finding a newer release, checking the download, the banner."""
+"""Update notifications: asking the server for a newer release, checking the download, the banner."""
 
 import hashlib
 
@@ -6,30 +6,38 @@ import pytest
 import requests
 
 from services import update_service as svc
+from services.api_client import APIError, ForbiddenError
 from services.update_service import UpdateError, UpdateInfo
 from services.version import is_release_build, parse_version
 from ui.updater import UpdateBanner, Updater
 
-BASE = "https://github.com/Nakama-Nova/nakama-desktop/releases/download/v1.2.0/"
 NAME = "VrikshaStudiosDesk-Setup-1.2.0.exe"
+BODY = b"installer-bytes"
+SUM = hashlib.sha256(BODY).hexdigest()
 
 
-def release(tag="v1.2.0", assets=None, body="Faster stock screen"):
-    if assets is None:
-        assets = [
-            {"name": NAME, "browser_download_url": BASE + NAME, "size": 10},
-            {"name": NAME + ".sha256", "browser_download_url": BASE + NAME + ".sha256", "size": 100},
-        ]
-    return {"tag_name": tag, "body": body, "assets": assets}
+def latest(version="1.2.0", **over):
+    return {"version": version, "notes": "Faster stock screen", "installer_name": NAME, "size": 10, "sha256": SUM, **over}
+
+
+class FakeApi:
+    """Stands in for APIClient: returns data or raises what the server would."""
+
+    _base_url = "https://shop.test"
+
+    def __init__(self, data=None, error=None):
+        self.data, self.error, self.asked = data, error, []
+
+    def _get(self, path, token, params=None, quiet=False):
+        self.asked.append((path, token, quiet))
+        if self.error:
+            raise self.error
+        return self.data
 
 
 class Resp:
-    def __init__(self, status=200, data=None, text="", chunks=(), headers=None):
-        self.status_code, self._data, self.text = status, data, text
-        self._chunks, self.headers = chunks, headers or {}
-
-    def json(self):
-        return self._data
+    def __init__(self, status=200, chunks=(), headers=None):
+        self.status_code, self._chunks, self.headers = status, chunks, headers or {}
 
     def iter_content(self, chunk_size=0):
         yield from self._chunks
@@ -41,12 +49,8 @@ class Resp:
         return False
 
 
-def getter(resp):
-    return lambda url, **kw: resp
-
-
 def info():
-    return UpdateInfo("1.2.0", "notes", BASE + NAME, NAME, BASE + NAME + ".sha256", 10)
+    return UpdateInfo("1.2.0", "notes", NAME, SUM, 10)
 
 
 # ---------------------------------------------------------------- versions
@@ -61,86 +65,98 @@ def test_running_from_source_is_never_a_release_build():
 
 
 # ---------------------------------------------------------------- the check
-def test_a_newer_release_is_reported_with_its_installer():
-    got = svc.check_for_update("1.0.0", get=getter(Resp(data=release())))
-    assert got.version == "1.2.0" and got.installer_name == NAME and got.notes == "Faster stock screen"
-    assert got.sha256_url.endswith(".sha256")
+def test_a_newer_version_is_reported_and_the_signed_in_token_is_used(monkeypatch):
+    monkeypatch.setattr(svc.Session, "_token", "staff-token")
+    api = FakeApi(latest())
+    got = svc.check_for_update("1.0.0", api=api)
+    assert got.version == "1.2.0" and got.installer_name == NAME and got.sha256 == SUM
+    assert got.notes == "Faster stock screen"
+    assert api.asked == [("/app/updates/latest", "staff-token", True)]
 
 
 @pytest.mark.parametrize("current", ["1.2.0", "1.3.0", "2.0.0"])
 def test_same_or_newer_is_not_an_update(current):
-    assert svc.check_for_update(current, get=getter(Resp(data=release()))) is None
+    assert svc.check_for_update(current, api=FakeApi(latest())) is None
 
 
-def test_a_development_build_is_never_prompted():
-    assert svc.check_for_update("0.0.0-dev", get=getter(Resp(data=release()))) is None
+def test_a_development_build_never_asks_or_prompts():
+    api = FakeApi(latest())
+    assert svc.check_for_update("0.0.0-dev", api=api) is None
+    assert api.asked == []
 
 
-def test_a_release_without_the_installer_files_is_ignored():
-    assert svc.check_for_update("1.0.0", get=getter(Resp(data=release(assets=[])))) is None
-    only_exe = [{"name": NAME, "browser_download_url": BASE + NAME, "size": 1}]
-    assert svc.check_for_update("1.0.0", get=getter(Resp(data=release(assets=only_exe)))) is None
+def test_nothing_published_yet_is_not_an_error():
+    assert svc.check_for_update("1.0.0", api=FakeApi(error=APIError(404, "{}"))) is None
 
 
-def test_downloads_from_anywhere_but_the_projects_releases_are_refused():
-    evil = "https://evil.example.com/" + NAME
-    assets = [
-        {"name": NAME, "browser_download_url": evil, "size": 1},
-        {"name": NAME + ".sha256", "browser_download_url": BASE + NAME + ".sha256", "size": 1},
-    ]
-    with pytest.raises(UpdateError, match="unexpected"):
-        svc.check_for_update("1.0.0", get=getter(Resp(data=release(assets=assets))))
+@pytest.mark.parametrize(
+    "error,words",
+    [
+        (APIError(401, "{}"), "Sign in again"),
+        (ForbiddenError(403, "no"), "not allowed"),
+        (APIError(503, '{"detail": "Updates are not set up on this server yet"}'), "not set up"),
+        (APIError(502, '{"detail": "The update token was refused (it may have expired)"}'), "token was refused"),
+        (requests.ConnectionError(), "Could not reach"),
+    ],
+)
+def test_check_failures_are_plain_messages(error, words):
+    with pytest.raises(UpdateError, match=words):
+        svc.check_for_update("1.0.0", api=FakeApi(error=error))
 
 
-def test_check_failures_are_plain_errors_not_crashes():
-    def offline(url, **kw):
-        raise requests.ConnectionError()
-
-    with pytest.raises(UpdateError, match="Could not reach"):
-        svc.check_for_update("1.0.0", get=offline)
-    with pytest.raises(UpdateError, match="403"):
-        svc.check_for_update("1.0.0", get=getter(Resp(status=403)))
-    assert svc.check_for_update("1.0.0", get=getter(Resp(status=404))) is None  # nothing published yet
+@pytest.mark.parametrize(
+    "bad",
+    [{"installer_name": "evil.exe"}, {"installer_name": "../../x.exe"}, {"sha256": "nothex"}, {"sha256": ""}],
+)
+def test_a_strange_answer_from_the_server_is_not_trusted(bad):
+    with pytest.raises(UpdateError, match="does not look right"):
+        svc.check_for_update("1.0.0", api=FakeApi(latest(**bad)))
 
 
 # ---------------------------------------------------------------- the download
-def download(tmp_path, body=b"installer-bytes", digest=None, **over):
-    digest = digest or hashlib.sha256(body).hexdigest()
-    sums = f"{digest}  {NAME}\n"
-
-    def get(url, **kw):
-        if url.endswith(".sha256"):
-            return Resp(text=sums)
-        return Resp(chunks=[body[:5], body[5:]], headers={"Content-Length": str(len(body))}, **over)
+def getter(seen, status=200, body=BODY):
+    def get(url, headers=None, stream=False, timeout=None):
+        seen.update(url=url, headers=headers)
+        return Resp(status, [body[:5], body[5:]], {"Content-Length": str(len(body))})
 
     return get
 
 
-def test_a_good_download_is_saved_and_reports_progress(tmp_path):
-    seen = []
-    path = svc.download_installer(info(), progress=lambda d, t: seen.append((d, t)), get=download(tmp_path), folder=str(tmp_path))
-    assert open(path, "rb").read() == b"installer-bytes"
-    assert seen[-1] == (15, 15)
+def test_a_good_download_goes_to_the_server_with_the_login_and_is_verified(tmp_path):
+    seen, progress = {}, []
+    path = svc.download_installer(
+        info(), progress=lambda d, t: progress.append((d, t)), get=getter(seen),
+        folder=str(tmp_path), base_url="https://shop.test/", token="staff-token",
+    )
+    assert open(path, "rb").read() == BODY and progress[-1] == (15, 15)
+    assert seen["url"] == "https://shop.test/app/updates/download/1.2.0"
+    assert seen["headers"] == {"Authorization": "Bearer staff-token"}
 
 
 def test_a_download_that_does_not_match_its_checksum_is_deleted(tmp_path):
     with pytest.raises(UpdateError, match="damaged"):
-        svc.download_installer(info(), get=download(tmp_path, digest="0" * 64), folder=str(tmp_path))
+        svc.download_installer(info(), get=getter({}, body=b"tampered-bytes!"), folder=str(tmp_path), base_url="https://s", token="t")
     assert list(tmp_path.iterdir()) == []  # nothing left to run by accident
 
 
 def test_cancelling_stops_and_cleans_up(tmp_path):
     with pytest.raises(UpdateError, match="cancelled"):
-        svc.download_installer(info(), cancelled=lambda: True, get=download(tmp_path), folder=str(tmp_path))
+        svc.download_installer(info(), cancelled=lambda: True, get=getter({}), folder=str(tmp_path), base_url="https://s", token="t")
     assert list(tmp_path.iterdir()) == []
 
 
-def test_an_unreadable_checksum_means_nothing_is_installed(tmp_path):
-    def get(url, **kw):
-        return Resp(text="not a checksum")
+@pytest.mark.parametrize("status,words", [(401, "Sign in again"), (404, "404"), (502, "502")])
+def test_download_refusals_are_plain_messages(tmp_path, status, words):
+    with pytest.raises(UpdateError, match=words):
+        svc.download_installer(info(), get=getter({}, status=status), folder=str(tmp_path), base_url="https://s", token="t")
 
-    with pytest.raises(UpdateError, match="checksum"):
-        svc.download_installer(info(), get=get, folder=str(tmp_path))
+
+def test_an_interrupted_download_is_cleaned_up(tmp_path):
+    def get(*a, **k):
+        raise requests.ConnectionError()
+
+    with pytest.raises(UpdateError, match="interrupted"):
+        svc.download_installer(info(), get=get, folder=str(tmp_path), base_url="https://s", token="t")
 
 
 def test_the_installer_is_started_silently_and_per_user():
@@ -162,9 +178,8 @@ def test_banner_shows_the_new_version_and_hides_on_later(qapp):
 def test_updater_shows_the_banner_when_a_newer_version_is_found(qapp):
     from PyQt6.QtWidgets import QWidget
 
-    window = QWidget()
     banner = UpdateBanner()
-    up = Updater(window, banner, quit_app=lambda: None)
+    up = Updater(QWidget(), banner, quit_app=lambda: None)
     up._checked(info(), "", manual=False)
     assert not banner.isHidden()
     banner.hide()
@@ -172,7 +187,7 @@ def test_updater_shows_the_banner_when_a_newer_version_is_found(qapp):
     assert banner.isHidden()
 
 
-def test_updater_does_not_start_checks_when_running_from_source(qapp, monkeypatch):
+def test_updater_does_not_start_checks_when_running_from_source(qapp):
     from PyQt6.QtWidgets import QWidget
 
     up = Updater(QWidget(), UpdateBanner(), quit_app=lambda: None)
