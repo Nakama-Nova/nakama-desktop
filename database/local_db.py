@@ -39,7 +39,8 @@ class LocalDB:
                 payload     TEXT    NOT NULL,
                 status      TEXT    NOT NULL DEFAULT 'pending',
                 error_message TEXT,
-                created_at  TEXT    NOT NULL
+                created_at  TEXT    NOT NULL,
+                user_id     TEXT
             );
 
             CREATE TABLE IF NOT EXISTS sync_metadata (
@@ -50,6 +51,9 @@ class LocalDB:
             -- Ensure exactly one metadata row exists
             INSERT OR IGNORE INTO sync_metadata (id, last_sync_at) VALUES (1, '');
         """)
+        # Databases created before rows were attributed to a user lack the column.
+        if "user_id" not in {r[1] for r in conn.execute("PRAGMA table_info(outbox)")}:
+            conn.execute("ALTER TABLE outbox ADD COLUMN user_id TEXT")
         conn.commit()
 
     def close(self) -> None:

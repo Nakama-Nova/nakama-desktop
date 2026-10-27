@@ -4,7 +4,7 @@ services/auth_service.py
 Handles authentication. Delegates HTTP to APIClient, manages Session state.
 """
 
-from services.api_client import APIClient
+from services.api_client import APIClient, reset_session_expired
 from services.session import Session
 
 
@@ -20,6 +20,7 @@ class AuthService:
         if result:
             Session.set_token(result["access_token"])
             Session.set_role(result.get("role"))
+            reset_session_expired()
         return result
 
     def logout(self) -> None:
