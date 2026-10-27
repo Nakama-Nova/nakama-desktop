@@ -1,5 +1,7 @@
 import os
 import sys
+
+import requests
 from pathlib import Path
 
 # Installed build: the program folder may be read-only, so keep the local database,
@@ -22,7 +24,17 @@ def exception_hook(exctype, value, traceback):
     """Global handler for unhandled exceptions."""
     if issubclass(exctype, SessionExpiredError):
         return  # already reported: the user was signed out with an explanation
-    if issubclass(exctype, ForbiddenError):
+    if issubclass(exctype, requests.Timeout):
+        QMessageBox.warning(
+            None,
+            "Server not answering",
+            "The server is taking too long to answer. Check the connection and try again.",
+        )
+    elif issubclass(exctype, requests.RequestException):
+        QMessageBox.warning(
+            None, "No connection", "Cannot reach the server. Check the connection and try again."
+        )
+    elif issubclass(exctype, ForbiddenError):
         QMessageBox.warning(None, "Permission Denied 🛡️", str(value))
     elif issubclass(exctype, APIError):
         if not value.reported:

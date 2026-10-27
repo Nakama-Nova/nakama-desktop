@@ -28,6 +28,29 @@ load_dotenv()
 BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
 LOGIN_TIMEOUT = 10  # seconds; a dead link must not leave "Signing in..." forever
 
+# (connect, read) seconds. Without these a stalled server freezes the whole window
+# for ever, because every call runs on the screen's own thread.
+REQUEST_TIMEOUT = (5, 30)
+UPLOAD_TIMEOUT = (5, 120)  # photos and models are bigger
+
+
+def insecure_remote(url: str) -> bool:
+    """True for plain http:// to a server outside this PC and the shop's own network."""
+    from urllib.parse import urlparse
+
+    parsed = urlparse(url)
+    if parsed.scheme != "http":
+        return False
+    host = (parsed.hostname or "").lower()
+    if host in ("localhost", "127.0.0.1", "::1") or host.endswith(".local"):
+        return False
+    parts = host.split(".")
+    if len(parts) == 4 and all(p.isdigit() for p in parts):
+        a, b = int(parts[0]), int(parts[1])
+        if a == 10 or (a == 192 and b == 168) or (a == 172 and 16 <= b <= 31) or a == 127:
+            return False
+    return True
+
 
 class APIError(Exception):
     """Raised when an API call fails."""
@@ -136,6 +159,7 @@ class APIClient:
             f"{self._base_url}{path}",
             headers=self._headers(token),
             params=params,
+            timeout=REQUEST_TIMEOUT,
         )
         if response.status_code == 403:
             raise ForbiddenError(
@@ -160,6 +184,7 @@ class APIClient:
             json=json,
             data=data,
             params=params,
+            timeout=REQUEST_TIMEOUT,
         )
         if response.status_code == 403:
             raise ForbiddenError(
@@ -174,6 +199,7 @@ class APIClient:
             f"{self._base_url}{path}",
             headers=self._headers(token),
             json=json,
+            timeout=REQUEST_TIMEOUT,
         )
         if response.status_code == 403:
             raise ForbiddenError(
@@ -187,6 +213,7 @@ class APIClient:
         response = requests.delete(
             f"{self._base_url}{path}",
             headers=self._headers(token),
+            timeout=REQUEST_TIMEOUT,
         )
         if response.status_code == 403:
             raise ForbiddenError(
@@ -201,6 +228,7 @@ class APIClient:
             f"{self._base_url}{path}",
             headers=self._headers(token),
             json=json,
+            timeout=REQUEST_TIMEOUT,
         )
         if response.status_code == 403:
             raise ForbiddenError(
@@ -226,6 +254,7 @@ class APIClient:
                 headers=self._headers(token),
                 files={"file": (os.path.basename(file_path), f, content_type)},
                 data={"alt": alt} if alt else None,
+                timeout=UPLOAD_TIMEOUT,
             )
         if response.status_code == 403:
             raise ForbiddenError(
@@ -239,6 +268,7 @@ class APIClient:
         response = requests.get(
             f"{self._base_url}{path}",
             headers=self._headers(token),
+            timeout=UPLOAD_TIMEOUT,
         )
         if response.status_code == 403:
             raise ForbiddenError(

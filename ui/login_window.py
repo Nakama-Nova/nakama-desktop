@@ -18,7 +18,9 @@ from PyQt6.QtCore import Qt
 # No QtGui imports needed here
 
 from ui.theme import Theme, Colors, Fonts
-from services.api_client import APIError
+import requests
+
+from services.api_client import BASE_URL, APIError, insecure_remote
 from services.auth_service import AuthService
 
 
@@ -74,6 +76,22 @@ class LoginWindow(QWidget):
             margin-bottom: 32px;
         """)
         root.addWidget(tagline)
+
+        if insecure_remote(BASE_URL):
+            warn = QLabel(
+                "⚠ This server address is not encrypted (http://). Passwords and bills could be seen on "
+                "the network. Ask for an https:// address."
+            )
+            warn.setWordWrap(True)
+            warn.setStyleSheet(f"""
+                color: {Colors.RED};
+                background-color: {Colors.ERROR_BG};
+                border-radius: 6px;
+                padding: 8px;
+                font-size: {Fonts.BODY_SM}px;
+            """)
+            root.addWidget(warn)
+            root.addSpacing(12)
 
         # ── Form Card ─────────────────────────────────
         card = QWidget()
@@ -195,9 +213,12 @@ class LoginWindow(QWidget):
             )
             return
         except APIError as e:
-            self._login_failed(
-                f"The server had a problem ({e.status_code}). Please try again in a moment."
-            )
+            if e.status_code == 429:  # too many wrong passwords: say so
+                self._login_failed(str(e))
+            else:
+                self._login_failed(
+                    f"The server had a problem ({e.status_code}). Please try again in a moment."
+                )
             return
 
         if result:
