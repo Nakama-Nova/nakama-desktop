@@ -156,7 +156,7 @@ class SalesScreen(QWidget):
         self.table = QTableWidget()
         self.table.setColumnCount(6)
         self.table.setHorizontalHeaderLabels(
-            ["Item Name", "Price (₹)", "Qty", "GST %", "Total (₹)", ""]
+            ["Item Name", "Price before GST (₹)", "Qty", "GST %", "Total with GST (₹)", ""]
         )
         header_view = self.table.horizontalHeader()
         header_view.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)

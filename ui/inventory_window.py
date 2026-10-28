@@ -23,6 +23,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from services import pricing
 from services.enums import UserRole
 from services.inventory_service import InventoryService
 from services.session import Session
@@ -41,7 +42,7 @@ from ui.theme import Colors, Fonts, Theme
 
 
 class InventoryWindow(QWidget):
-    COL_NAME, COL_TYPE, COL_SKU, COL_PRICE, COL_STOCK, COL_STATUS, COL_ACTIONS = range(7)
+    COL_NAME, COL_TYPE, COL_SKU, COL_PRICE, COL_GST, COL_STOCK, COL_STATUS, COL_ACTIONS = range(8)
     TYPE_WORDS = {"furniture": "Furniture", "sculpture": "Sculpture"}
 
     def __init__(self):
@@ -106,7 +107,7 @@ class InventoryWindow(QWidget):
         layout.addLayout(find_row)
 
         self.table = QTableWidget()
-        cols = ["Product", "Type", "Code", "Price (₹)", "In stock", "Status"]
+        cols = ["Product", "Type", "Code", "Price with GST", "GST", "In stock", "Status"]
         if self.has_actions:
             cols.append("")
         self.table.setColumnCount(len(cols))
@@ -150,7 +151,8 @@ class InventoryWindow(QWidget):
                 item["name"],
                 self.TYPE_WORDS.get(item.get("item_type") or "furniture", "Furniture"),
                 item.get("sku") or "",
-                f"₹{float(item.get('selling_price') or 0):,.2f}",
+                f"₹{pricing.price_with_gst(item):,.2f}",
+                f"{float(item.get('gst_percent') or 0):g}%" if float(item.get("gst_percent") or 0) else "-",
                 str(stock_val),
                 "⚠️ Low" if low else "✅ OK",
             ]
@@ -160,7 +162,7 @@ class InventoryWindow(QWidget):
                     cell.setTextAlignment(
                         Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
                     )
-                elif col in (self.COL_STOCK, self.COL_STATUS):
+                elif col in (self.COL_GST, self.COL_STOCK, self.COL_STATUS):
                     cell.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                 if col == self.COL_STATUS:
                     cell.setBackground(

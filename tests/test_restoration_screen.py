@@ -69,7 +69,7 @@ def test_an_artisan_gets_a_focused_menu(qapp, monkeypatch):
     w = MainWindow()
     w._sync_timer.stop()
     labels = [label for _, label, _ in w._get_allowed_nav_items()]
-    assert labels == ["Home", "Stock", "Workforce", "3D Lab", "Wages", "Restoration", "Designs"]
+    assert labels == ["Home", "Stock", "3D Lab", "Restoration", "Designs", "Attendance", "Wages"]
 
 
 def test_artisan_is_a_role_the_owner_can_pick(qapp):

@@ -58,7 +58,7 @@ def test_other_staff_get_no_actions_at_all(qapp, stock, monkeypatch, role):
     monkeypatch.setattr(Session, "_role", role)
     w = InventoryWindow()
     w.refresh_data()
-    assert w.table.columnCount() == 6 and not w.has_actions  # just the list
+    assert w.table.columnCount() == 7 and not w.has_actions  # just the list
 
 
 def test_a_manager_manages_stock_but_does_not_scan_carvings(qapp, stock, monkeypatch):
