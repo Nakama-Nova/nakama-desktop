@@ -38,6 +38,7 @@ from ui.expenses_screen import ExpensesScreen
 from ui.payroll_screen import PayrollScreen
 from ui.profit_screen import ProfitScreen
 from ui.restoration_screen import RestorationScreen
+from ui.orders_screen import OrdersScreen
 from ui.updater import UpdateBanner, Updater
 from services.version import APP_VERSION
 from services.api_client import SessionExpiredError, set_session_expired_hook
@@ -73,6 +74,7 @@ class MainWindow(QMainWindow):
         ("💸", "Expenses", 12),
         ("💹", "Profit", 13),
         ("🏛️", "Restoration", 14),
+        ("📋", "Orders", 15),
     ]
 
     def __init__(self):
@@ -224,6 +226,7 @@ class MainWindow(QMainWindow):
         self.expenses_view = ExpensesScreen()
         self.profit_view = ProfitScreen()
         self.restoration_view = RestorationScreen()
+        self.orders_view = OrdersScreen()
 
         self.content_stack.addWidget(self.dashboard_view)  # 0
         self.content_stack.addWidget(self.sales_view)  # 1
@@ -240,6 +243,7 @@ class MainWindow(QMainWindow):
         self.content_stack.addWidget(self.expenses_view)  # 12
         self.content_stack.addWidget(self.profit_view)  # 13
         self.content_stack.addWidget(self.restoration_view)  # 14
+        self.content_stack.addWidget(self.orders_view)  # 15
 
         # Show Home at once; its numbers load right after the window is on screen
         self._switch_page(0, refresh=False)
