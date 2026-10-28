@@ -18,6 +18,8 @@ from PyQt6.QtWidgets import (
     QStackedWidget,
     QLabel,
     QMessageBox,
+    QFrame,
+    QScrollArea,
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 
@@ -60,26 +62,35 @@ class MainWindow(QMainWindow):
     # update check runs on a worker thread, and dialogs belong to the GUI thread.
     session_expired = pyqtSignal()
 
+    # (icon, label, page index in content_stack). Listed in the order they appear in the side
+    # panel, grouped under the headings in NAV_SECTIONS; Home stands alone at the top.
     NAV_ITEMS = [
         ("🏠", "Home", 0),
         ("🧾", "New Bill", 1),
-        ("📦", "Stock", 2),
-        ("👤", "Buyers", 3),
         ("📜", "Bill History", 4),
-        ("📊", "Reports", 5),
-        ("👷", "Workforce", 6),
-        ("🧊", "3D Lab", 7),
+        ("📋", "Orders", 15),
+        ("👤", "Buyers", 3),
+        ("✉️", "Letters", 17),
+        ("📦", "Stock", 2),
         ("🌳", "Materials", 8),
         ("🛒", "Purchases", 9),
-        ("👥", "Staff", 10),
+        ("🧊", "3D Lab", 7),
+        ("🏛️", "Restoration", 14),
+        ("🎨", "Designs", 16),
+        ("👷", "Attendance", 6),
         ("💰", "Wages", 11),
+        ("👥", "Staff", 10),
         ("💸", "Expenses", 12),
         ("💹", "Profit", 13),
-        ("🏛️", "Restoration", 14),
-        ("📋", "Orders", 15),
-        ("🎨", "Designs", 16),
-        ("✉️", "Letters", 17),
+        ("📊", "Reports", 5),
     ]
+    NAV_SECTIONS = {
+        "Selling": ["New Bill", "Bill History", "Orders", "Buyers", "Letters"],
+        "Stock and buying": ["Stock", "Materials", "Purchases"],
+        "Workshop": ["3D Lab", "Restoration", "Designs"],
+        "People and pay": ["Attendance", "Wages", "Staff"],
+        "Money": ["Expenses", "Profit", "Reports"],
+    }
 
     def __init__(self):
         super().__init__()
@@ -142,14 +153,36 @@ class MainWindow(QMainWindow):
         self._nav_buttons: list[QPushButton] = []
         self._nav_mapping: dict[int, QPushButton] = {}
 
-        allowed_items = self._get_allowed_nav_items()
-        for icon, label, index in allowed_items:
+        nav_box = QWidget()
+        nav_box.setStyleSheet(f"background-color: {Colors.SIDEBAR_BG};")
+        nav_layout = QVBoxLayout(nav_box)
+        nav_layout.setContentsMargins(0, 0, 0, 0)
+        nav_layout.setSpacing(0)
+        section_of = {label: name for name, labels in self.NAV_SECTIONS.items() for label in labels}
+        current_section = None
+        for icon, label, index in self._get_allowed_nav_items():
+            section = section_of.get(label)
+            if section and section != current_section:
+                nav_layout.addWidget(self._section_heading(section))
+            current_section = section
             btn = self._create_nav_button(icon, label, index)
             self._nav_buttons.append(btn)
             self._nav_mapping[index] = btn
-            sidebar_layout.addWidget(btn)
-
-        sidebar_layout.addStretch()
+            nav_layout.addWidget(btn)
+        nav_layout.addStretch()
+        nav_scroll = QScrollArea()
+        nav_scroll.setWidgetResizable(True)
+        nav_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        nav_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        nav_scroll.setStyleSheet(
+            f"QScrollArea {{ background-color: {Colors.SIDEBAR_BG}; border: none; }}"
+            f"QScrollBar:vertical {{ width: 6px; background: transparent; }}"
+            f"QScrollBar::handle:vertical {{ background: {Colors.SIDEBAR_HOVER}; border-radius: 3px; min-height: 24px; }}"
+            "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }"
+        )
+        nav_scroll.setWidget(nav_box)
+        self.nav_scroll = nav_scroll
+        sidebar_layout.addWidget(nav_scroll, 1)
 
         # Everyone can change their own password
         pw_btn = QPushButton("🔑  My password")
@@ -328,15 +361,15 @@ class MainWindow(QMainWindow):
                     allowed.append((icon, label, index))
             elif role == UserRole.ACHARI:
                 # Achari focuses on stock/manufacturing and the 3D Lab, no billing/reports
-                if label in ["Home", "Stock", "Workforce", "Wages", "3D Lab"]:
+                if label in ["Home", "Stock", "Attendance", "Wages", "3D Lab"]:
                     allowed.append((icon, label, index))
             elif role == UserRole.ARTISAN:
                 # Artisans: stock and the 3D Lab to look things up, their pay, and Restoration
-                if label in ["Home", "Stock", "Workforce", "Wages", "3D Lab", "Restoration", "Designs"]:
+                if label in ["Home", "Stock", "Attendance", "Wages", "3D Lab", "Restoration", "Designs"]:
                     allowed.append((icon, label, index))
             elif role == UserRole.WORKER:
                 # Worker sees home, stock, workforce and the 3D Lab (view only)
-                if label in ["Home", "Stock", "Workforce", "Wages", "3D Lab"]:
+                if label in ["Home", "Stock", "Attendance", "Wages", "3D Lab"]:
                     allowed.append((icon, label, index))
             else:
                 # Default safety
@@ -347,10 +380,18 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
     # Nav button factory
     # ------------------------------------------------------------------
+    def _section_heading(self, text: str) -> QLabel:
+        heading = QLabel(text.upper())
+        heading.setStyleSheet(
+            f"color: {Colors.SIDEBAR_TEXT}; font-size: 11px; font-weight: 600; letter-spacing: 1px;"
+            " padding: 14px 20px 4px 20px; background: transparent; opacity: 0.7;"
+        )
+        return heading
+
     def _create_nav_button(self, icon: str, label: str, index: int) -> QPushButton:
         btn = QPushButton(f"  {icon}   {label}")
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn.setFixedHeight(48)
+        btn.setFixedHeight(44)
         btn.setStyleSheet(self._nav_button_css(active=False))
         btn.clicked.connect(lambda _, idx=index: self._switch_page(idx))
         return btn

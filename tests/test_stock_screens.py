@@ -58,7 +58,7 @@ def test_other_staff_only_read_stock(qapp, fake, monkeypatch, role):
     w = InventoryWindow()
     w.refresh_data()
     assert w.table.rowCount() == 2
-    assert w.table.columnCount() == 6  # no actions column
+    assert w.table.columnCount() == 7  # no actions column
     assert w.add_btn.isHidden() and w.categories_btn.isHidden() and w.brands_btn.isHidden()
 
 
@@ -69,6 +69,7 @@ def test_product_form_collects_everything_the_website_needs(qapp):
     d.sku.setText("CH-9")
     d.category.setCurrentIndex(1)
     d.stock.setValue(4)
+    d.by_profit.setChecked(False)
     d.selling.setValue(9500)
     d.gst.setCurrentIndex(0)
     d.published.setChecked(True)
@@ -78,6 +79,7 @@ def test_product_form_collects_everything_the_website_needs(qapp):
     d.lead_days.setValue(14)
     data = d.get_data()
     assert data["category_id"] == "c1" and data["current_stock"] == 4 and data["gst_percent"] == 0
+    assert data["selling_price"] == 9500 and data["profit_percent"] is None  # a typed price has no profit %
     assert data["is_published"] and data["slug"] == "carved-chair" and data["lead_time_days"] == 14
     assert data["dimensions_mm"] == {"l": 450, "h": 900}  # only the sizes that were entered
     assert data["description"] is None and data["hsn_code"] is None

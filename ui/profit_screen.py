@@ -56,7 +56,7 @@ class ProfitScreen(QWidget):
         grid = QGridLayout()
         grid.setSpacing(14)
         self.cards = {
-            "sales": MetricCard("Sales billed", "₹0.00", Colors.GREEN, icon="🧾"),
+            "sales": MetricCard("Sales billed (before GST)", "₹0.00", Colors.GREEN, icon="🧾"),
             "purchases": MetricCard("Timber & materials bought", "₹0.00", Colors.BLUE, icon="🌳"),
             "wages": MetricCard("Wages paid", "₹0.00", Colors.PURPLE, icon="👷"),
             "expenses": MetricCard("Other expenses", "₹0.00", Colors.ORANGE, icon="💸"),
