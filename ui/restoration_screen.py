@@ -21,6 +21,7 @@ from PyQt6.QtWidgets import (
     QFormLayout,
     QHBoxLayout,
     QHeaderView,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QMessageBox,
@@ -33,15 +34,23 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from services.designs_service import DesignsService
+from services.enums import UserRole
+from services.inventory_service import InventoryService
+from services.money_service import rupees
 from services.restoration_service import (
     KIND_WORDS,
+    PROJECT_KINDS,
     SCAN_WORDS,
     SHAPE_WORDS,
-    STATUS_WORDS,
     STATUSES,
     RestorationService,
     check_capture,
+    stages,
+    status_word,
 )
+from services.session import Session
+from services.stock_service import StockService
 from ui.errors import handle_permissions
 from ui.theme import Colors, Fonts, Theme
 
@@ -73,21 +82,41 @@ def _line(text="", placeholder="") -> QLineEdit:
 
 
 class ProjectDialog(QDialog):
-    def __init__(self, parent, team: list[dict], project: dict | None = None):
+    """A temple restoration, or a piece bought from another artisan that is to be finished and painted."""
+
+    def __init__(self, parent, team: list[dict], project: dict | None = None, items: list[dict] | None = None, suppliers: list[dict] | None = None):
         super().__init__(parent)
         p = project or {}
-        self.setWindowTitle("Edit restoration" if project else "New restoration")
-        self.setMinimumWidth(480)
+        self._editing = project is not None
+        self.setWindowTitle("Edit project" if project else "New project")
+        self.setMinimumWidth(500)
         self.setStyleSheet(f"background-color: {Colors.BG};")
         form = QFormLayout(self)
         form.setContentsMargins(24, 20, 24, 20)
         form.setSpacing(10)
+        self.kind = QComboBox()
+        for label, value in PROJECT_KINDS:
+            self.kind.addItem(label, value)
+        self.kind.setCurrentIndex(max(0, self.kind.findData(p.get("kind") or "temple")))
+        self.kind.setEnabled(not self._editing)  # a project never changes what kind it is
+        self.kind.setStyleSheet(Theme.input_style())
         self.title = _line(p.get("title"), "e.g. Dwarapalaka, left door")
         self.temple = _line(p.get("temple_name"), "e.g. Veerabhadra Temple")
         self.location = _line(p.get("location"), "town or village")
+        self.item = QComboBox()
+        self.item.addItem("Choose the piece…", None)
+        for i in items or []:
+            self.item.addItem(f"{i['name']}  ({i.get('sku', '')})", i["id"])
+        self.item.setCurrentIndex(max(0, self.item.findData(p.get("item_id"))))
+        self.item.setStyleSheet(Theme.input_style())
+        self.supplier = QComboBox()
+        self.supplier.addItem("Not recorded", None)
+        for s in suppliers or []:
+            self.supplier.addItem(s["name"], s["id"])
+        self.supplier.setCurrentIndex(max(0, self.supplier.findData(p.get("supplier_id"))))
+        self.supplier.setStyleSheet(Theme.input_style())
         self.piece = _line(p.get("piece"), "what the piece is")
         self.notes = QPlainTextEdit(p.get("condition_notes") or "")
-        self.notes.setPlaceholderText("Condition: what is missing or damaged, what the temple wants")
         self.notes.setFixedHeight(90)
         self.notes.setStyleSheet(Theme.input_style())
         self.lead = QComboBox()
@@ -96,25 +125,66 @@ class ProjectDialog(QDialog):
             self.lead.addItem(t["name"], t["id"])
         self.lead.setCurrentIndex(max(0, self.lead.findData(p.get("lead_artisan_id"))))
         self.lead.setStyleSheet(Theme.input_style())
-        for label, w in [("Title *", self.title), ("Temple *", self.temple), ("Place", self.location), ("Piece", self.piece), ("Condition", self.notes), ("Lead artisan", self.lead)]:
-            form.addRow(QLabel(label, styleSheet=Theme.label()), w)
+
+        self._temple_rows, self._finish_rows = [], []
+
+        def row(label, widget, group=None):
+            lab = QLabel(label, styleSheet=Theme.label())
+            form.addRow(lab, widget)
+            if group is not None:
+                group.extend([lab, widget])
+
+        row("Kind", self.kind)
+        row("Title *", self.title)
+        row("Temple *", self.temple, self._temple_rows)
+        row("Place", self.location, self._temple_rows)
+        row("The piece *", self.item, self._finish_rows)
+        row("Bought from", self.supplier, self._finish_rows)
+        row("Piece", self.piece)
+        self.notes_label = QLabel("Condition", styleSheet=Theme.label())
+        form.addRow(self.notes_label, self.notes)
+        row("Lead artisan", self.lead)
         form.addRow(_buttons(self))
+        self.kind.currentIndexChanged.connect(self._kind_changed)
+        self._kind_changed()
+
+    def _kind_changed(self, _i=0):
+        finishing = self.kind.currentData() == "finishing"
+        for w in self._temple_rows:
+            w.setVisible(not finishing)
+        for w in self._finish_rows:
+            w.setVisible(finishing)
+        self.notes.setPlaceholderText(
+            "What needs doing: finish the surface, paint colours, anything to fix" if finishing
+            else "Condition: what is missing or damaged, what the temple wants"
+        )
 
     def _check(self):
-        if not self.title.text().strip() or not self.temple.text().strip():
+        if self.kind.currentData() == "finishing":
+            if not self.title.text().strip() or not self.item.currentData():
+                QMessageBox.warning(self, "Check the form", "Enter a title and choose the piece being finished.")
+                return
+        elif not self.title.text().strip() or not self.temple.text().strip():
             QMessageBox.warning(self, "Check the form", "Enter a title and the temple's name.")
-        else:
-            self.accept()
+            return
+        self.accept()
 
     def get_data(self) -> dict:
-        return {
+        finishing = self.kind.currentData() == "finishing"
+        data = {
+            "kind": self.kind.currentData(),
             "title": self.title.text().strip(),
-            "temple_name": self.temple.text().strip(),
-            "location": self.location.text().strip() or None,
             "piece": self.piece.text().strip() or None,
             "condition_notes": self.notes.toPlainText().strip() or None,
             "lead_artisan_id": self.lead.currentData(),
         }
+        if finishing:
+            data["item_id"] = self.item.currentData()
+            data["supplier_id"] = self.supplier.currentData()
+        else:
+            data["temple_name"] = self.temple.text().strip()
+            data["location"] = self.location.text().strip() or None
+        return data
 
 
 class ScanOptionsDialog(QDialog):
@@ -278,7 +348,7 @@ class RestorationScreen(QWidget):
         hint.setStyleSheet(f"color: {Colors.TEXT_SECONDARY};")
         root.addWidget(hint)
 
-        self.table = _table(["Title", "Temple", "Piece", "Status", "Lead", "Scans", "Files"], self.COL_TITLE)
+        self.table = _table(["Title", "Temple / piece", "Piece", "Status", "Lead", "Scans", "Files"], self.COL_TITLE)
         self.table.setMaximumHeight(230)
         self.table.itemSelectionChanged.connect(self._selected)
         root.addWidget(self.table)
@@ -295,12 +365,19 @@ class RestorationScreen(QWidget):
         self.notes.setWordWrap(True)
         self.notes.setStyleSheet(f"color: {Colors.TEXT_SECONDARY};")
         d.addWidget(self.notes)
+        self.designs_label = QLabel("")
+        self.designs_label.setWordWrap(True)
+        self.designs_label.setStyleSheet(f"color: {Colors.TEXT_PRIMARY};")
+        d.addWidget(self.designs_label)
 
         actions = QHBoxLayout()
         self.edit_btn = QPushButton("✏️  Edit")
         self.photos_btn = QPushButton("📷  Add photos…")
         self.video_btn = QPushButton("🎥  Add video…")
-        for b, slot in ((self.edit_btn, self._edit), (self.photos_btn, lambda: self._capture("photos")), (self.video_btn, lambda: self._capture("video"))):
+        self.design_btn = QPushButton("🎨  Make a design")
+        self.cost_btn = QPushButton("💰  Cost")
+        self.cost_btn.setVisible(Session.is_authorized([UserRole.OWNER]))  # money: the owner only
+        for b, slot in ((self.edit_btn, self._edit), (self.photos_btn, lambda: self._capture("photos")), (self.video_btn, lambda: self._capture("video")), (self.design_btn, self._make_design), (self.cost_btn, self._cost)):
             b.setStyleSheet(Theme.btn_secondary())
             b.clicked.connect(lambda _c=False, s=slot: s())
             actions.addWidget(b)
@@ -353,7 +430,8 @@ class RestorationScreen(QWidget):
         self.table.blockSignals(True)
         self.table.setRowCount(len(self._rows))
         for r, p in enumerate(self._rows):
-            values = [p["title"], p["temple_name"], p.get("piece") or "", STATUS_WORDS.get(p["status"], p["status"]), p.get("lead_artisan_name") or "", str(p["scan_count"]), str(p["file_count"])]
+            where = p.get("temple_name") or (f"{p.get('item_sku') or ''}  {p.get('item_name') or ''}".strip() if p.get("item_id") else "")
+            values = [p["title"], where, p.get("piece") or "", status_word(p["status"], p.get("kind", "temple")), p.get("lead_artisan_name") or "", str(p["scan_count"]), str(p["file_count"])]
             for c, text in enumerate(values):
                 self.table.setItem(r, c, QTableWidgetItem(text))
             if p["id"] == keep:
@@ -375,9 +453,23 @@ class RestorationScreen(QWidget):
         d = self._svc.project(restoration_id)
         self._current = d
         self.detail.setVisible(True)
-        self.heading.setText(f"{d['title']}  ·  {d['temple_name']}" + (f", {d['location']}" if d.get("location") else ""))
-        self.notes.setText(d.get("condition_notes") or "No condition notes yet.")
+        kind = d.get("kind", "temple")
+        if kind == "finishing":
+            head = f"{d['title']}  ·  {d.get('item_name') or ''} ({d.get('item_sku') or ''})"
+            if d.get("supplier_name"):
+                head += f"  ·  bought from {d['supplier_name']}"
+        else:
+            head = f"{d['title']}  ·  {d.get('temple_name') or ''}" + (f", {d['location']}" if d.get("location") else "")
+        self.heading.setText(head)
+        self.notes.setText(d.get("condition_notes") or ("No notes yet." if kind == "finishing" else "No condition notes yet."))
+        made = d.get("designs") or []
+        self.designs_label.setText("Designs: " + ",  ".join(f"{x['sku']} {x['name']}" for x in made) if made else "No design made from this yet.")
+        self.status.blockSignals(True)  # the stages depend on the kind of project
+        self.status.clear()
+        for label, value in stages(kind):
+            self.status.addItem(label, value)
         self.status.setCurrentIndex(max(0, self.status.findData(d["status"])))
+        self.status.blockSignals(False)
         self.scans.setRowCount(len(d["scans"]))
         for r, s in enumerate(d["scans"]):
             note = s.get("error") or s.get("note") or ""
@@ -400,7 +492,12 @@ class RestorationScreen(QWidget):
     # ---------------------------------------------------------- actions
     @handle_permissions
     def _new(self, _checked=False):
-        d = ProjectDialog(self, self._svc.team())
+        try:
+            items = [i for i in (InventoryService().get_items(allow_cached=True) or []) if i.get("item_type") == "sculpture"]
+            suppliers = StockService().rows("suppliers")
+        except requests.RequestException:
+            items, suppliers = [], []
+        d = ProjectDialog(self, self._svc.team(), None, items, suppliers)
         if d.exec() == QDialog.DialogCode.Accepted:
             self._svc.create(d.get_data())
             self.refresh_data()
@@ -409,10 +506,46 @@ class RestorationScreen(QWidget):
     def _edit(self):
         if not self._current:
             return
-        d = ProjectDialog(self, self._svc.team(), self._current)
+        items = suppliers = []
+        if self._current.get("kind") == "finishing":
+            items = [i for i in (InventoryService().get_items(allow_cached=True) or []) if i.get("item_type") == "sculpture"]
+            suppliers = StockService().rows("suppliers")
+        d = ProjectDialog(self, self._svc.team(), self._current, items, suppliers)
         if d.exec() == QDialog.DialogCode.Accepted:
-            self._svc.update(self._current["id"], d.get_data())
+            data = d.get_data()
+            data.pop("kind", None)  # a project never changes kind
+            self._svc.update(self._current["id"], data)
             self.refresh_data()
+
+    @handle_permissions
+    def _make_design(self):
+        d = self._current
+        if not d:
+            return
+        name, ok = QInputDialog.getText(self, "Make a design", "Name of the design:", text=d["title"])
+        if not ok or not name.strip():
+            return
+        made = DesignsService().create({"name": name.strip(), "restoration_id": d["id"], "description": d.get("piece")})
+        QMessageBox.information(self, "Design saved", f"{made['name']} was saved as {made['sku']}. Find it under Designs, where you can build products from it.")
+        self._load_detail(d["id"])
+
+    @handle_permissions
+    def _cost(self):
+        d = self._current
+        if not d:
+            return
+        c = self._svc.cost(d["id"])
+        lines = [
+            f"Bought for        {rupees(c['purchase_price'])}",
+            f"Labour paid       {rupees(c['labour'])}",
+            f"Paint and others  {rupees(c['expenses'])}",
+            f"Total so far      {rupees(c['total'])}",
+        ]
+        if c.get("selling_price") is not None:
+            lines.append(f"\nPriced at {rupees(c['selling_price'])}: {'profit' if float(c['profit_if_sold']) >= 0 else 'loss'} {rupees(abs(float(c['profit_if_sold'])))} if sold")
+        elif not c.get("item_id"):
+            lines.append("\nThis project is not tied to a piece, so only linked expenses are counted.")
+        QMessageBox.information(self, f"What {c.get('item_name') or d['title']} has cost", "\n".join(lines))
 
     @handle_permissions
     def _status_chosen(self, _index=0):

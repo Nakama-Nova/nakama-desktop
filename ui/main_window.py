@@ -39,6 +39,7 @@ from ui.payroll_screen import PayrollScreen
 from ui.profit_screen import ProfitScreen
 from ui.restoration_screen import RestorationScreen
 from ui.orders_screen import OrdersScreen
+from ui.designs_screen import DesignsScreen
 from ui.updater import UpdateBanner, Updater
 from services.version import APP_VERSION
 from services.api_client import SessionExpiredError, set_session_expired_hook
@@ -75,6 +76,7 @@ class MainWindow(QMainWindow):
         ("💹", "Profit", 13),
         ("🏛️", "Restoration", 14),
         ("📋", "Orders", 15),
+        ("🎨", "Designs", 16),
     ]
 
     def __init__(self):
@@ -227,6 +229,7 @@ class MainWindow(QMainWindow):
         self.profit_view = ProfitScreen()
         self.restoration_view = RestorationScreen()
         self.orders_view = OrdersScreen()
+        self.designs_view = DesignsScreen()
 
         self.content_stack.addWidget(self.dashboard_view)  # 0
         self.content_stack.addWidget(self.sales_view)  # 1
@@ -244,6 +247,7 @@ class MainWindow(QMainWindow):
         self.content_stack.addWidget(self.profit_view)  # 13
         self.content_stack.addWidget(self.restoration_view)  # 14
         self.content_stack.addWidget(self.orders_view)  # 15
+        self.content_stack.addWidget(self.designs_view)  # 16
 
         # Show Home at once; its numbers load right after the window is on screen
         self._switch_page(0, refresh=False)
@@ -309,14 +313,14 @@ class MainWindow(QMainWindow):
             return self.NAV_ITEMS
         if role == UserRole.MANAGER:
             # restoration is for the owner and artisans only
-            return [i for i in self.NAV_ITEMS if i[1] not in ("Staff", "Restoration")]
+            return [i for i in self.NAV_ITEMS if i[1] not in ("Staff", "Restoration", "Designs")]
 
         allowed = []
         for icon, label, index in self.NAV_ITEMS:
             if role == UserRole.SALES:
                 # Sales can sell and manage buyers, but not see reports, the Lab,
                 # or the buying side (materials and purchases)
-                if label not in ["Reports", "3D Lab", "Materials", "Purchases", "Staff", "Wages", "Expenses", "Profit", "Restoration"]:
+                if label not in ["Reports", "3D Lab", "Materials", "Purchases", "Staff", "Wages", "Expenses", "Profit", "Restoration", "Designs"]:
                     allowed.append((icon, label, index))
             elif role == UserRole.ACHARI:
                 # Achari focuses on stock/manufacturing and the 3D Lab, no billing/reports
@@ -324,7 +328,7 @@ class MainWindow(QMainWindow):
                     allowed.append((icon, label, index))
             elif role == UserRole.ARTISAN:
                 # Artisans: stock and the 3D Lab to look things up, their pay, and Restoration
-                if label in ["Home", "Stock", "Workforce", "Wages", "3D Lab", "Restoration"]:
+                if label in ["Home", "Stock", "Workforce", "Wages", "3D Lab", "Restoration", "Designs"]:
                     allowed.append((icon, label, index))
             elif role == UserRole.WORKER:
                 # Worker sees home, stock, workforce and the 3D Lab (view only)

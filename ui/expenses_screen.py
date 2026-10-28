@@ -6,6 +6,7 @@ repairs. Owner and manager add and fix entries; only the owner can cancel one
 (it stays on record with the reason, so the books keep their history).
 """
 
+import requests
 from PyQt6.QtCore import QDate, Qt
 from PyQt6.QtWidgets import (
     QComboBox,
@@ -28,6 +29,7 @@ from PyQt6.QtWidgets import (
 
 from services.enums import UserRole
 from services.money_service import PERIODS, MoneyService, period_range, rupees
+from services.restoration_service import RestorationService
 from services.session import Session
 from ui.errors import handle_permissions
 from ui.theme import Colors, Fonts, Theme
@@ -83,7 +85,7 @@ def dialog_buttons(dialog, ok_text="Save"):
 
 
 class ExpenseDialog(QDialog):
-    def __init__(self, parent, expense: dict | None = None, extra_categories=()):
+    def __init__(self, parent, expense: dict | None = None, extra_categories=(), projects: list[dict] | None = None):
         super().__init__(parent)
         e = expense or {}
         self.setWindowTitle("Edit expense" if expense else "Add expense")
@@ -112,6 +114,14 @@ class ExpenseDialog(QDialog):
         self.notes = QLineEdit(e.get("notes") or "")
         self.notes.setPlaceholderText("optional")
         self.notes.setStyleSheet(Theme.input_style())
+        self.project = None
+        if projects is not None:  # the owner can charge an expense to a restoration or finishing project
+            self.project = QComboBox()
+            self.project.addItem("Not for a project", None)
+            for pr in projects:
+                self.project.addItem(pr["title"], pr["id"])
+            self.project.setCurrentIndex(max(0, self.project.findData(e.get("restoration_id"))))
+            self.project.setStyleSheet(Theme.input_style())
 
         for label, w in [
             ("Date", self.spent_on),
@@ -120,6 +130,7 @@ class ExpenseDialog(QDialog):
             ("Paid to", self.payee),
             ("How paid", self.method),
             ("Note", self.notes),
+            *([("For a project", self.project)] if self.project else []),
         ]:
             form.addRow(QLabel(label, styleSheet=Theme.label()), w)
         form.addRow(dialog_buttons(self))
@@ -140,6 +151,7 @@ class ExpenseDialog(QDialog):
             "payee": self.payee.text().strip() or None,
             "method": self.method.currentData(),
             "notes": self.notes.text().strip() or None,
+            **({"restoration_id": self.project.currentData()} if self.project else {}),
         }
 
 
@@ -245,19 +257,28 @@ class ExpensesScreen(QWidget):
             h.addWidget(b)
         return box
 
+    def _projects(self):
+        """Restoration and finishing projects to charge an expense to: the owner only (None hides it)."""
+        if not Session.is_authorized([UserRole.OWNER]):
+            return None
+        try:
+            return RestorationService().projects()
+        except requests.RequestException:
+            return []
+
     def _headings(self):
         return [e["category"] for e in self._rows]
 
     @handle_permissions
     def _add(self, _checked=False):
-        d = ExpenseDialog(self, extra_categories=self._headings())
+        d = ExpenseDialog(self, extra_categories=self._headings(), projects=self._projects())
         if d.exec() == QDialog.DialogCode.Accepted:
             self._svc.add_expense(d.get_data())
             self.refresh_data()
 
     @handle_permissions
     def _edit(self, e: dict):
-        d = ExpenseDialog(self, e, self._headings())
+        d = ExpenseDialog(self, e, self._headings(), projects=self._projects())
         if d.exec() == QDialog.DialogCode.Accepted:
             self._svc.edit_expense(e["id"], d.get_data())
             self.refresh_data()

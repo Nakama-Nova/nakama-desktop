@@ -28,11 +28,32 @@ STATUSES = [
     ("Building 3D model", "processing"),
     ("Ready to review", "review"),
     ("Carving", "carving"),
+    ("Finishing", "finishing"),
+    ("Painting", "painting"),
     ("Restored", "restored"),
     ("On hold", "on_hold"),
     ("Cancelled", "cancelled"),
 ]
 STATUS_WORDS = {value: label for label, value in STATUSES}
+# a project is either a temple restoration or a bought piece being finished and painted
+PROJECT_KINDS = [("Temple restoration", "temple"), ("Bought piece: finishing and painting", "finishing")]
+KIND_STAGES = {
+    "temple": ["planned", "capturing", "processing", "review", "carving", "restored", "on_hold", "cancelled"],
+    "finishing": ["planned", "finishing", "painting", "restored", "on_hold", "cancelled"],
+}
+
+
+def status_word(status: str, kind: str = "temple") -> str:
+    """The stage in words; the last stage of a bought piece is 'Ready to sell'."""
+    if kind == "finishing" and status == "restored":
+        return "Ready to sell"
+    if kind == "finishing" and status == "planned":
+        return "Bought"
+    return STATUS_WORDS.get(status, status)
+
+
+def stages(kind: str = "temple") -> list[tuple[str, str]]:
+    return [(status_word(s, kind), s) for s in KIND_STAGES.get(kind, KIND_STAGES["temple"])]
 KIND_WORDS = {"glb": "3D model (.glb)", "stl": "3D print/CNC mesh (.stl)", "obj": "3D model (.obj)", "ply": "3D scan (.ply)", "nc": "CNC G-code (.nc)", "render": "Preview picture"}
 SHAPE_WORDS = {"relief": "Flat carving", "full": "3D object"}
 SCAN_WORDS = {"created": "Uploading", "uploaded": "Waiting for the workshop PC", "processing": "Building 3D model", "done": "Done", "failed": "Failed", "cancelled": "Cancelled"}
@@ -97,17 +118,29 @@ class RestorationService:
     def create(self, data: dict) -> dict:
         return self._api._post("/restorations", self._t(), json=data)
 
+    def cost(self, restoration_id: str) -> dict:
+        """What the piece has cost so far (owner only)."""
+        return self._api._get(f"/restorations/{restoration_id}/cost", self._t())
+
     def update(self, restoration_id: str, data: dict) -> dict:
         return self._api._patch(f"/restorations/{restoration_id}", self._t(), json=data)
 
     # -- capture: photos or one video -> the workshop PC ------------------
     def upload_capture(self, restoration_id: str, kind: str, paths: list[str], params: dict, progress: Callable[[int, int, str], None]) -> dict:
+        """Photos or a video of a restoration: create the scan, send the files, queue it."""
+        return self._upload_scan({"restoration_id": restoration_id}, kind, paths, params, progress)
+
+    def upload_item_capture(self, item_id: str, kind: str, paths: list[str], params: dict, progress: Callable[[int, int, str], None]) -> dict:
+        """Photos or a video of a sculpture in Stock: the workshop PC builds its 3D model."""
+        return self._upload_scan({"item_id": item_id}, kind, paths, params, progress)
+
+    def _upload_scan(self, target: dict, kind: str, paths: list[str], params: dict, progress: Callable[[int, int, str], None]) -> dict:
         """Create the scan, send every file straight to the store, then queue it."""
         problem = check_capture(kind, paths, params.get("shape", "full"))
         if problem:
             raise ValueError(problem)
         t = self._t()
-        scan = self._api._post("/scans", t, json={"restoration_id": restoration_id, "source_kind": kind, "params": params}, quiet=True)
+        scan = self._api._post("/scans", t, json={**target, "source_kind": kind, "params": params}, quiet=True)
         specs = [{"filename": Path(p).name, "content_type": CONTENT_TYPES[Path(p).suffix.lower()], "size": os.path.getsize(p)} for p in paths]
         signed = self._api._post(f"/scans/{scan['id']}/presign", t, json={"files": specs}, quiet=True)["files"]
         total, sent = sum(s["size"] for s in specs), [0]
