@@ -69,7 +69,7 @@ def test_an_artisan_gets_a_focused_menu(qapp, monkeypatch):
     w = MainWindow()
     w._sync_timer.stop()
     labels = [label for _, label, _ in w._get_allowed_nav_items()]
-    assert labels == ["Home", "Stock", "Workforce", "3D Lab", "Wages", "Restoration"]
+    assert labels == ["Home", "Stock", "Workforce", "3D Lab", "Wages", "Restoration", "Designs"]
 
 
 def test_artisan_is_a_role_the_owner_can_pick(qapp):
@@ -121,7 +121,7 @@ def test_project_dialog_collects_the_record_and_needs_a_title_and_temple(qapp, d
     d.temple.setText("Veerabhadra Temple")
     d.notes.setPlainText("Horn broken")
     d.lead.setCurrentIndex(d.lead.findData("u9"))
-    assert d.get_data() == {"title": "Nandi", "temple_name": "Veerabhadra Temple", "location": None, "piece": None, "condition_notes": "Horn broken", "lead_artisan_id": "u9"}
+    assert d.get_data() == {"kind": "temple", "title": "Nandi", "temple_name": "Veerabhadra Temple", "location": None, "piece": None, "condition_notes": "Horn broken", "lead_artisan_id": "u9"}
     editing = ProjectDialog(None, team, P1)
     assert editing.get_data()["lead_artisan_id"] == "u9" and editing.title.text() == "Dwarapalaka left"
 
