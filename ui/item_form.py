@@ -33,7 +33,7 @@ def _label(text: str) -> QLabel:
 
 
 class ItemDialog(QDialog):
-    def __init__(self, parent=None, item=None, categories=None, brands=None):
+    def __init__(self, parent=None, item=None, categories=None, brands=None, default_type=None):
         super().__init__(parent)
         self._editing = item is not None
         self.setWindowTitle("Edit product" if item else "Add product")
@@ -51,7 +51,20 @@ class ItemDialog(QDialog):
         f = QFormLayout(basics)
         f.setSpacing(10)
         self.name = self._line(item.get("name"), "e.g. Carved Teak Armchair")
-        self.sku = self._line(item.get("sku"), "e.g. CH-TEAK-01")
+        self.item_type = QComboBox()
+        self.item_type.addItem("Furniture", "furniture")
+        self.item_type.addItem("Sculpture (temple carving)", "sculpture")
+        start = item.get("item_type") or default_type or "furniture"
+        self.item_type.setCurrentIndex(max(0, self.item_type.findData(start)))
+        self.item_type.setStyleSheet(Theme.input_style())
+        # The code is made by the server from the type (FUR-0001, SCU-0001) and never changes
+        self.sku = self._line(item.get("sku"), "")
+        if self._editing:
+            self.sku.setReadOnly(True)
+            self.sku.setToolTip("A product's code never changes")
+        else:
+            self.sku.setPlaceholderText("Given automatically when you save")
+            self.sku.setEnabled(False)
         self.description = QPlainTextEdit(item.get("description") or "")
         self.description.setFixedHeight(70)
         self.description.setStyleSheet(Theme.input_style())
@@ -64,7 +77,8 @@ class ItemDialog(QDialog):
         self.min_stock.setStyleSheet(Theme.input_style())
         for label, w in [
             ("Name *", self.name),
-            ("SKU *", self.sku),
+            ("Type", self.item_type),
+            ("Code (SKU)", self.sku),
             ("Description", self.description),
             ("Category", self.category),
             ("Brand", self.brand),
@@ -162,6 +176,8 @@ class ItemDialog(QDialog):
         w.addRow(self.made_to_order)
         w.addRow(self.furniture)
         tabs.addTab(web, "Website")
+        self.item_type.currentIndexChanged.connect(self._type_changed)
+        self._type_changed()
 
         # ---- Buttons
         btns = QHBoxLayout()
@@ -194,6 +210,14 @@ class ItemDialog(QDialog):
         s.setStyleSheet(Theme.input_style())
         return s
 
+    def _type_changed(self, _i=0):
+        """Only furniture has parts for the 3D Lab."""
+        sculpture = self.item_type.currentData() == "sculpture"
+        if sculpture:
+            self.furniture.setChecked(False)
+        self.furniture.setEnabled(not sculpture)
+        self.furniture.setToolTip("Only furniture has parts for the 3D Lab" if sculpture else "")
+
     @staticmethod
     def _combo(rows, current):
         c = QComboBox()
@@ -212,7 +236,7 @@ class ItemDialog(QDialog):
         dims = {k: s.value() for k, s in self.dim.items() if s.value() > 0}
         data = {
             "name": self.name.text().strip(),
-            "sku": self.sku.text().strip(),
+            "item_type": self.item_type.currentData(),
             "description": self.description.toPlainText().strip() or None,
             "category_id": self.category.currentData(),
             "brand_id": self.brand.currentData(),

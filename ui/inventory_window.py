@@ -10,6 +10,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import (
     QDialog,
+    QComboBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -39,7 +40,8 @@ from ui.theme import Colors, Fonts, Theme
 
 
 class InventoryWindow(QWidget):
-    COL_NAME, COL_SKU, COL_PRICE, COL_STOCK, COL_STATUS, COL_ACTIONS = range(6)
+    COL_NAME, COL_TYPE, COL_SKU, COL_PRICE, COL_STOCK, COL_STATUS, COL_ACTIONS = range(7)
+    TYPE_WORDS = {"furniture": "Furniture", "sculpture": "Sculpture"}
 
     def __init__(self):
         super().__init__()
@@ -84,14 +86,23 @@ class InventoryWindow(QWidget):
         )
         layout.addLayout(header_row)
 
+        find_row = QHBoxLayout()
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("🔍  Search by name or code...")
         self.search_input.setStyleSheet(Theme.input_style())
         self.search_input.textChanged.connect(self._filter_table)
-        layout.addWidget(self.search_input)
+        find_row.addWidget(self.search_input, 1)
+        self.type_filter = QComboBox()
+        self.type_filter.addItem("All types", None)
+        self.type_filter.addItem("Furniture", "furniture")
+        self.type_filter.addItem("Sculptures", "sculpture")
+        self.type_filter.setStyleSheet(Theme.input_style())
+        self.type_filter.currentIndexChanged.connect(lambda _i: self._filter_table(self.search_input.text()))
+        find_row.addWidget(self.type_filter)
+        layout.addLayout(find_row)
 
         self.table = QTableWidget()
-        cols = ["Product", "Code", "Price (₹)", "In stock", "Status"]
+        cols = ["Product", "Type", "Code", "Price (₹)", "In stock", "Status"]
         if self.can_edit:
             cols.append("")
         self.table.setColumnCount(len(cols))
@@ -133,6 +144,7 @@ class InventoryWindow(QWidget):
 
             values = [
                 item["name"],
+                self.TYPE_WORDS.get(item.get("item_type") or "furniture", "Furniture"),
                 item.get("sku") or "",
                 f"₹{float(item.get('selling_price') or 0):,.2f}",
                 str(stock_val),
@@ -190,14 +202,16 @@ class InventoryWindow(QWidget):
     @handle_permissions
     def _add_item(self, _checked=False):
         cats, brands = self._lookups()
-        dialog = ItemDialog(self, None, cats, brands)
+        dialog = ItemDialog(self, None, cats, brands, default_type=self.type_filter.currentData())
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         data = dialog.get_data()
-        if not data["name"] or not data["sku"]:
-            QMessageBox.warning(self, "Required", "Name and code (SKU) are required.")
+        if not data["name"]:
+            QMessageBox.warning(self, "Required", "Enter the product's name.")
             return
-        if self._inventory_service.create(**data):
+        made = self._inventory_service.create(**data)
+        if made:
+            QMessageBox.information(self, "Saved", f"{made['name']} was saved with the code {made['sku']}.")
             self.refresh_data()
 
     @handle_permissions
@@ -207,8 +221,8 @@ class InventoryWindow(QWidget):
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         data = dialog.get_data()
-        if not data["name"] or not data["sku"]:
-            QMessageBox.warning(self, "Required", "Name and code (SKU) are required.")
+        if not data["name"]:
+            QMessageBox.warning(self, "Required", "Enter the product's name.")
             return
         if self._inventory_service.update(str(item["id"]), **data):
             self.refresh_data()
@@ -255,14 +269,9 @@ class InventoryWindow(QWidget):
 
     def _filter_table(self, text: str):
         """Live filter as the user types in the search box."""
-        query = text.strip().lower()
-        if not query:
-            self._populate_table(self._all_items)
-            return
-        self._populate_table(
-            [
-                i
-                for i in self._all_items
-                if query in i["name"].lower() or query in (i.get("sku") or "").lower()
-            ]
-        )
+        query = (text or "").strip().lower()
+        kind = self.type_filter.currentData()
+        items = [i for i in self._all_items if not kind or (i.get("item_type") or "furniture") == kind]
+        if query:
+            items = [i for i in items if query in i["name"].lower() or query in (i.get("sku") or "").lower()]
+        self._populate_table(items)

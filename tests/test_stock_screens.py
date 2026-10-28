@@ -58,7 +58,7 @@ def test_other_staff_only_read_stock(qapp, fake, monkeypatch, role):
     w = InventoryWindow()
     w.refresh_data()
     assert w.table.rowCount() == 2
-    assert w.table.columnCount() == 5  # no actions column
+    assert w.table.columnCount() == 6  # no actions column
     assert w.add_btn.isHidden() and w.categories_btn.isHidden() and w.brands_btn.isHidden()
 
 
