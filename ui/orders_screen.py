@@ -49,6 +49,7 @@ from services.orders_service import (
 from services.session import Session
 from ui.errors import handle_permissions
 from ui.expenses_screen import METHODS, date_edit, dialog_buttons, iso, money_spin
+from ui.letters_screen import issue_letter, show_letter
 from ui.theme import Colors, Fonts, Theme
 
 STATUS_COLORS = {
@@ -428,10 +429,11 @@ class OrdersScreen(QWidget):
         self.pay_btn = QPushButton("💵  Record payment")
         self.edit_btn = QPushButton("✏️  Edit")
         self.cancel_btn = QPushButton("Cancel order")
-        for b, slot in ((self.pay_btn, self._pay), (self.edit_btn, self._edit), (self.cancel_btn, self._cancel)):
+        self.letter_btn = QPushButton("✉️  Confirmation letter")
+        for b, slot in ((self.pay_btn, self._pay), (self.letter_btn, self._letter), (self.edit_btn, self._edit), (self.cancel_btn, self._cancel)):
             b.setStyleSheet(Theme.btn_secondary())
             b.clicked.connect(lambda _c=False, s=slot: s())
-        for b in (self.next_btn, self.pay_btn, self.edit_btn, self.cancel_btn):
+        for b in (self.next_btn, self.pay_btn, self.letter_btn, self.edit_btn, self.cancel_btn):
             actions.addWidget(b)
         actions.addStretch()
         d.addLayout(actions)
@@ -527,6 +529,7 @@ class OrdersScreen(QWidget):
         self.edit_btn.setVisible(o["status"] in OPEN and self.can_manage)
         self.cancel_btn.setVisible(o["status"] in OPEN and self.can_manage)
         self.pay_btn.setVisible(o["status"] != "cancelled")
+        self.letter_btn.setVisible(o["status"] != "cancelled")
         self.pay_btn.setEnabled(not (float(o["balance_due"]) <= 0 < amount_of(o)))  # nothing left to collect
 
         self.lines.setRowCount(len(o.get("items") or []))
@@ -583,6 +586,13 @@ class OrdersScreen(QWidget):
         if d.exec() == QDialog.DialogCode.Accepted:
             self._svc.add_payment(o["id"], d.get_data())
             self.refresh_data()
+
+    @handle_permissions
+    def _letter(self):
+        o = self._current
+        letter = issue_letter(self, "order_confirmation", order=o) if o else None
+        if letter:
+            show_letter(letter)
 
     @handle_permissions
     def _edit(self):
