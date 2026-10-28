@@ -23,6 +23,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 
+from services import notifications_service as ns
 from ui.theme import Theme, Colors, Fonts
 
 from ui.dashboard_window import DashboardWindow
@@ -43,6 +44,7 @@ from ui.restoration_screen import RestorationScreen
 from ui.orders_screen import OrdersScreen
 from ui.designs_screen import DesignsScreen
 from ui.letters_screen import LettersScreen
+from ui.notifier import Notifier
 from ui.updater import UpdateBanner, Updater
 from services.version import APP_VERSION
 from services.api_client import SessionExpiredError, set_session_expired_hook
@@ -203,6 +205,12 @@ class MainWindow(QMainWindow):
             }}
         """)
         pw_btn.clicked.connect(lambda: change_my_password(self))
+
+        # Notifications: a count of what is new, and the list
+        self.bell_btn = QPushButton("🔔  Notifications")
+        self.bell_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.bell_btn.setStyleSheet(pw_btn.styleSheet())
+        sidebar_layout.addWidget(self.bell_btn)
         sidebar_layout.addWidget(pw_btn)
 
         # Version, and a manual "check for updates"
@@ -299,12 +307,31 @@ class MainWindow(QMainWindow):
         self._sync_timer.timeout.connect(self._run_sync_cycle)
         self._sync_timer.start(SYNC_INTERVAL_MS)
 
+        # Desktop notifications (website orders, money received, low stock, finished scans)
+        self.notifier = Notifier(self)
+        self.notifier.changed.connect(self._show_unread)
+        self.notifier.open_screen.connect(self._open_screen)
+        self.bell_btn.clicked.connect(lambda: self.notifier.show_list())
+        self._show_unread()
+        self.notifier.start()
+
         # Tell the user when a newer version is published (installed builds only)
         self.updater = Updater(self, self.update_banner)
         self.updater.start()
         # Run one cycle shortly after startup too, rather than waiting a
         # full interval for the first sync.
         QTimer.singleShot(2000, self._run_sync_cycle)
+
+    def _show_unread(self):
+        n = self.notifier.unread
+        self.bell_btn.setText("🔔  Notifications" + (f"  ({n})" if n else ""))
+
+    def _open_screen(self, screen: str):
+        """Open the screen a notification is about, if this user has it in the side panel."""
+        label = ns.SCREEN_LABELS.get(screen)
+        index = next((i for _, name, i in self.NAV_ITEMS if name == label), None)
+        if index is not None and index in self._nav_mapping:
+            self._switch_page(index)
 
     # ------------------------------------------------------------------
     # Background sync cycle
@@ -477,6 +504,7 @@ class MainWindow(QMainWindow):
         if self._signing_out:
             return  # a 401 while handing over bills at sign-out: we are leaving anyway
         self._sync_timer.stop()
+        self.notifier.stop()
         Session.clear_token()
         QMessageBox.information(
             self,
@@ -503,6 +531,7 @@ class MainWindow(QMainWindow):
     def _handle_logout(self):
         self._signing_out = True
         self._sync_timer.stop()
+        self.notifier.stop()
         self._flush_outbox()
 
         from services.auth_service import AuthService
