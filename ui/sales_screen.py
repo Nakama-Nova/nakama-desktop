@@ -30,7 +30,7 @@ from PyQt6.QtCore import Qt, QStringListModel
 
 from ui.theme import Theme, Colors, Fonts
 from ui.errors import handle_permissions
-from services.sales_service import SalesService
+from services.sales_service import BillPdfError, SalesService
 from services.customer_service import CustomerService
 from services.inventory_service import InventoryService
 from services.event_bus import EventBus, SALE_CREATED
@@ -522,9 +522,15 @@ class SalesScreen(QWidget):
             )
             return
 
-        pdf_path = self._sales_service.fetch_and_save_pdf(invoice_number)
-        if pdf_path:
-            self._sales_service.open_pdf(pdf_path)
+        try:
+            self._sales_service.open_pdf(self._sales_service.fetch_and_save_pdf(invoice_number))
+        except BillPdfError as exc:
+            QMessageBox.warning(
+                self,
+                "Bill saved, PDF not shown",
+                f"Bill {invoice_number} was saved, but its PDF could not be opened.\n\n{exc}\n\n"
+                "You can open it again from Bill History.",
+            )
 
         QMessageBox.information(
             self,
