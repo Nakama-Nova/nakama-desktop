@@ -127,12 +127,20 @@ class RestorationService:
 
     # -- capture: photos or one video -> the workshop PC ------------------
     def upload_capture(self, restoration_id: str, kind: str, paths: list[str], params: dict, progress: Callable[[int, int, str], None]) -> dict:
+        """Photos or a video of a restoration: create the scan, send the files, queue it."""
+        return self._upload_scan({"restoration_id": restoration_id}, kind, paths, params, progress)
+
+    def upload_item_capture(self, item_id: str, kind: str, paths: list[str], params: dict, progress: Callable[[int, int, str], None]) -> dict:
+        """Photos or a video of a sculpture in Stock: the workshop PC builds its 3D model."""
+        return self._upload_scan({"item_id": item_id}, kind, paths, params, progress)
+
+    def _upload_scan(self, target: dict, kind: str, paths: list[str], params: dict, progress: Callable[[int, int, str], None]) -> dict:
         """Create the scan, send every file straight to the store, then queue it."""
         problem = check_capture(kind, paths, params.get("shape", "full"))
         if problem:
             raise ValueError(problem)
         t = self._t()
-        scan = self._api._post("/scans", t, json={"restoration_id": restoration_id, "source_kind": kind, "params": params}, quiet=True)
+        scan = self._api._post("/scans", t, json={**target, "source_kind": kind, "params": params}, quiet=True)
         specs = [{"filename": Path(p).name, "content_type": CONTENT_TYPES[Path(p).suffix.lower()], "size": os.path.getsize(p)} for p in paths]
         signed = self._api._post(f"/scans/{scan['id']}/presign", t, json={"files": specs}, quiet=True)["files"]
         total, sent = sum(s["size"] for s in specs), [0]

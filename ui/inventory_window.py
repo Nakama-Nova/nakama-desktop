@@ -36,6 +36,7 @@ from ui.stock_dialogs import (
     MovementsDialog,
     PhotosDialog,
 )
+from ui.item_scan import ItemScanDialog, view_3d
 from ui.theme import Colors, Fonts, Theme
 
 
@@ -50,6 +51,9 @@ class InventoryWindow(QWidget):
         self._all_items: list[dict] = []
         # Owner and manager manage stock; everyone else reads it.
         self.can_edit = Session.is_authorized([UserRole.OWNER, UserRole.MANAGER])
+        # Owner and artisans can scan a sculpture into 3D and open the model
+        self.can_scan = Session.is_authorized([UserRole.OWNER, UserRole.ARTISAN])
+        self.has_actions = self.can_edit or self.can_scan
 
         self.setStyleSheet(Theme.content_bg())
         self._build_ui()
@@ -103,7 +107,7 @@ class InventoryWindow(QWidget):
 
         self.table = QTableWidget()
         cols = ["Product", "Type", "Code", "Price (₹)", "In stock", "Status"]
-        if self.can_edit:
+        if self.has_actions:
             cols.append("")
         self.table.setColumnCount(len(cols))
         self.table.setHorizontalHeaderLabels(cols)
@@ -111,7 +115,7 @@ class InventoryWindow(QWidget):
         header.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(self.COL_NAME, QHeaderView.ResizeMode.Stretch)
         header.setMinimumSectionSize(90)
-        if self.can_edit:
+        if self.has_actions:
             self.table.horizontalHeader().setSectionResizeMode(
                 self.COL_ACTIONS, QHeaderView.ResizeMode.Fixed
             )
@@ -164,7 +168,7 @@ class InventoryWindow(QWidget):
                     )
                 self.table.setItem(row, col, cell)
 
-            if self.can_edit:
+            if self.has_actions:
                 self.table.setCellWidget(row, self.COL_ACTIONS, self._actions(item))
             self.table.setRowHeight(row, 52)
 
@@ -173,13 +177,18 @@ class InventoryWindow(QWidget):
         h = QHBoxLayout(box)
         h.setContentsMargins(4, 4, 4, 4)
         h.setSpacing(6)
-        for text, slot in [
-            ("✏️ Edit", self._edit_item),
-            ("± Stock", self._adjust),
-            ("🕘", self._history),
-            ("🖼️", self._photos),
-            ("🗑️", self._delete_item),
-        ]:
+        buttons = []
+        if self.can_edit:
+            buttons += [
+                ("✏️ Edit", self._edit_item),
+                ("± Stock", self._adjust),
+                ("🕘", self._history),
+                ("🖼️", self._photos),
+                ("🗑️", self._delete_item),
+            ]
+        if self.can_scan and item.get("item_type") == "sculpture":
+            buttons += [("📷 3D scan", self._scan_3d), ("🧊 View 3D", self._view_3d)]
+        for text, slot in buttons:
             b = QPushButton(text)
             b.setCursor(Qt.CursorShape.PointingHandCursor)
             b.setFixedHeight(30)
@@ -196,6 +205,12 @@ class InventoryWindow(QWidget):
         return box
 
     # --------------------------------------------------------------- actions
+    def _scan_3d(self, item: dict):
+        ItemScanDialog(self, item).exec()
+
+    def _view_3d(self, item: dict):
+        view_3d(self, item)
+
     def _lookups(self):
         return self._stock.rows("categories"), self._stock.rows("brands")
 
