@@ -377,7 +377,9 @@ class RestorationScreen(QWidget):
         self.design_btn = QPushButton("🎨  Make a design")
         self.cost_btn = QPushButton("💰  Cost")
         self.cost_btn.setVisible(Session.is_authorized([UserRole.OWNER]))  # money: the owner only
-        for b, slot in ((self.edit_btn, self._edit), (self.photos_btn, lambda: self._capture("photos")), (self.video_btn, lambda: self._capture("video")), (self.design_btn, self._make_design), (self.cost_btn, self._cost)):
+        self.certificate_btn = QPushButton("📜  Certificate")
+        self.certificate_btn.setVisible(False)  # owner, temple project marked Restored
+        for b, slot in ((self.edit_btn, self._edit), (self.photos_btn, lambda: self._capture("photos")), (self.video_btn, lambda: self._capture("video")), (self.design_btn, self._make_design), (self.cost_btn, self._cost), (self.certificate_btn, self._certificate)):
             b.setStyleSheet(Theme.btn_secondary())
             b.clicked.connect(lambda _c=False, s=slot: s())
             actions.addWidget(b)
@@ -470,6 +472,7 @@ class RestorationScreen(QWidget):
             self.status.addItem(label, value)
         self.status.setCurrentIndex(max(0, self.status.findData(d["status"])))
         self.status.blockSignals(False)
+        self.certificate_btn.setVisible(Session.is_authorized([UserRole.OWNER]) and kind == "temple" and d["status"] == "restored")
         self.scans.setRowCount(len(d["scans"]))
         for r, s in enumerate(d["scans"]):
             note = s.get("error") or s.get("note") or ""
@@ -528,6 +531,15 @@ class RestorationScreen(QWidget):
         made = DesignsService().create({"name": name.strip(), "restoration_id": d["id"], "description": d.get("piece")})
         QMessageBox.information(self, "Design saved", f"{made['name']} was saved as {made['sku']}. Find it under Designs, where you can build products from it.")
         self._load_detail(d["id"])
+
+    @handle_permissions
+    def _certificate(self):
+        from ui.letters_screen import issue_letter, show_letter  # imported here: letters_screen reaches this module through ui.item_scan
+
+        d = self._current
+        letter = issue_letter(self, "completion_certificate", restoration=d) if d else None
+        if letter:
+            show_letter(letter)
 
     @handle_permissions
     def _cost(self):
