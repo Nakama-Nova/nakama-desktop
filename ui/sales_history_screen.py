@@ -23,6 +23,29 @@ from services.sales_service import SalesService
 from services.event_bus import EventBus, SALE_CREATED
 
 
+def bill_text(sale: dict, items: list[dict]) -> str:
+    """A bill the way billing worked it out: each line before GST, its GST, then the totals."""
+    msg = f"Bill: {sale.get('invoice_number', 'N/A')}\n\n"
+    before_gst = 0.0
+    for item in items:
+        qty = item.get("quantity", 0)
+        price = float(item.get("price_at_sale", 0))
+        gst = float(item.get("cgst_amount") or 0) + float(item.get("sgst_amount") or 0)
+        line = f"  • {item.get('item_name', 'Item')}:  {qty} × ₹{price:,.2f}"
+        if gst:
+            line += f"  + GST {float(item.get('gst_percent') or 0):g}% ₹{gst:,.2f}"
+        msg += f"{line}  =  ₹{float(item.get('total_price', 0)):,.2f}\n"
+        before_gst += price * qty
+    tax = float(sale.get("tax_total") or 0)
+    discount = float(sale.get("discount") or 0)
+    msg += f"\nSubtotal (before GST): ₹{before_gst:,.2f}"
+    if tax:
+        msg += f"\nGST: ₹{tax:,.2f}  (CGST ₹{tax / 2:,.2f} + SGST ₹{tax / 2:,.2f})"
+    if discount:
+        msg += f"\nDiscount: -₹{discount:,.2f}"
+    return msg + f"\nTotal: ₹{float(sale.get('total_amount', 0)):,.2f}"
+
+
 class SalesHistoryScreen(QWidget):
 
     def __init__(self):
@@ -165,16 +188,7 @@ class SalesHistoryScreen(QWidget):
             QMessageBox.information(self, "No Items", "No items found for this bill.")
             return
 
-        msg = f"Bill: {sale.get('invoice_number', 'N/A')}\n\n"
-        for item in items:
-            item_name = item.get("item_name", "Item")
-            qty = item.get("quantity", 0)
-            price = float(item.get("price_at_sale", 0))
-            total = float(item.get("total_price", 0))
-            msg += f"  • {item_name}:  {qty} × ₹{price:,.2f} = ₹{total:,.2f}\n"
-
-        msg += f"\nTotal: ₹{float(sale.get('total_amount', 0)):,.2f}"
-        QMessageBox.information(self, "📋 Bill Details", msg)
+        QMessageBox.information(self, "📋 Bill Details", bill_text(sale, items))
 
     def _reprint_invoice(self, sale):
         inv_num = sale.get("invoice_number")

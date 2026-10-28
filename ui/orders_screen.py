@@ -46,6 +46,7 @@ from services.orders_service import (
     amount_of,
     items_summary,
 )
+from services import pricing
 from services.session import Session
 from ui.errors import handle_permissions
 from ui.expenses_screen import METHODS, date_edit, dialog_buttons, iso, money_spin
@@ -217,7 +218,7 @@ class NewOrderDialog(QDialog):
         root.addLayout(who)
 
         root.addWidget(QLabel("What they want", styleSheet=Theme.subheading()))
-        self.lines = _table(["Piece", "Description (for a custom piece)", "Qty", "Price each"], 1)
+        self.lines = _table(["Piece", "Description (for a custom piece)", "Qty", "Price each (with GST)"], 1)
         self.lines.setMaximumHeight(190)
         root.addWidget(self.lines)
         row = QHBoxLayout()
@@ -286,7 +287,7 @@ class NewOrderDialog(QDialog):
         text.setEnabled(item is None)
         if item:
             text.setText("")
-            price.setValue(float(item.get("selling_price") or 0))
+            price.setValue(pricing.price_with_gst(item))  # the customer price: GST included
         self._recount()
 
     def _recount(self):
@@ -440,7 +441,7 @@ class OrdersScreen(QWidget):
         both = QHBoxLayout()
         left, right = QVBoxLayout(), QVBoxLayout()
         left.addWidget(QLabel("Pieces ordered", styleSheet=Theme.subheading()))
-        self.lines = _table(["Piece", "Qty", "Price", "Note"], 0)
+        self.lines = _table(["Piece", "Qty", "Price (with GST)", "Note"], 0)
         left.addWidget(self.lines)
         right.addWidget(QLabel("Payments", styleSheet=Theme.subheading()))
         self.payments = _table(["Date", "Amount", "How", "Reference"], 3)

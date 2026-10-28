@@ -125,7 +125,7 @@ class QuotationDialog(QDialog):
         self.phone = _line()
         self.address = _line()
         self.subject = _line(placeholder="optional, e.g. Quotation for temple door")
-        self.lines = _table(["What", "Qty", "Price each"], 0)
+        self.lines = _table(["What", "Qty", "Price each (with GST)"], 0)
         self.lines.setMaximumHeight(170)
         add = QPushButton("➕  Add a line")
         add.setStyleSheet(Theme.btn_secondary())
