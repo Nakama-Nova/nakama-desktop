@@ -25,6 +25,7 @@ from ui.errors import handle_permissions
 from services.customer_service import CustomerService
 from services.session import Session
 from services.enums import UserRole
+from ui.workers import load_async
 
 
 class CustomerDialog(QDialog):
@@ -164,7 +165,13 @@ class CustomersScreen(QWidget):
 
     @handle_permissions
     def refresh_data(self):
-        customers = self._customer_service.get_all()
+        self._show_customers(self._customer_service.get_all())
+
+    def refresh_async(self):
+        """Same as refresh_data, but the list is fetched in the background."""
+        load_async(self, self._customer_service.get_all, self._show_customers)
+
+    def _show_customers(self, customers):
         self._all_customers = customers or []
         self._populate_table(self._all_customers)
 

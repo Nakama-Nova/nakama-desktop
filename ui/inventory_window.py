@@ -39,6 +39,7 @@ from ui.stock_dialogs import (
 )
 from ui.item_scan import ItemScanDialog, view_3d
 from ui.theme import Colors, Fonts, Theme
+from ui.workers import load_async
 
 
 class InventoryWindow(QWidget):
@@ -85,7 +86,7 @@ class InventoryWindow(QWidget):
         self.brands_btn = head_button(
             "🏭  Brands", Theme.btn_secondary(), self._brands, self.can_edit
         )
-        head_button("🔄  Refresh", Theme.btn_secondary(), self.refresh_data)
+        head_button("🔄  Refresh", Theme.btn_secondary(), self.refresh_async)
         self.add_btn = head_button(
             "➕  Add product", Theme.btn_primary(), self._add_item, self.can_edit
         )
@@ -125,13 +126,21 @@ class InventoryWindow(QWidget):
         self.table.verticalHeader().setVisible(False)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setStyleSheet(Theme.table_style())
+        self.table.verticalHeader().setDefaultSectionSize(52)
+        self.table.verticalScrollBar().valueChanged.connect(self._ensure_actions)
         layout.addWidget(self.table)
 
     # ------------------------------------------------------------------ data
     @handle_permissions
     def refresh_data(self):
         """Auto-called on page switch or manual refresh."""
-        items = self._inventory_service.get_items()
+        self._show_items(self._inventory_service.get_items())
+
+    def refresh_async(self, _checked=False):
+        """Same as refresh_data, but the list is fetched in the background."""
+        load_async(self, self._inventory_service.get_items, self._show_items)
+
+    def _show_items(self, items):
         if items is None:
             QMessageBox.warning(
                 self, "Connection Issue", "Could not load stock from server."
@@ -140,49 +149,81 @@ class InventoryWindow(QWidget):
         self._all_items = items
         self._filter_table(self.search_input.text())
 
+    ACTION_ROWS_AHEAD = 10  # rows beyond the visible ones that already have their buttons
+
     def _populate_table(self, items: list[dict]):
-        self.table.setRowCount(len(items))
-        for row, item in enumerate(items):
-            stock_val = int(item.get("current_stock") or 0)
-            min_stock = int(item.get("min_stock") or 0)
-            low = stock_val <= min_stock
-
-            values = [
-                item["name"],
-                self.TYPE_WORDS.get(item.get("item_type") or "furniture", "Furniture"),
-                item.get("sku") or "",
-                f"₹{pricing.price_with_gst(item):,.2f}",
-                f"{float(item.get('gst_percent') or 0):g}%" if float(item.get("gst_percent") or 0) else "-",
-                str(stock_val),
-                "⚠️ Low" if low else "✅ OK",
-            ]
-            for col, text in enumerate(values):
-                cell = QTableWidgetItem(text)
-                if col == self.COL_PRICE:
-                    cell.setTextAlignment(
-                        Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
-                    )
-                elif col in (self.COL_GST, self.COL_STOCK, self.COL_STATUS):
-                    cell.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                if col == self.COL_STATUS:
-                    cell.setBackground(
-                        QColor(Colors.LOW_STOCK_BG if low else Colors.SUCCESS_BG)
-                    )
-                self.table.setItem(row, col, cell)
-
-            if self.has_actions:
-                self.table.setCellWidget(row, self.COL_ACTIONS, self._actions(item))
-            self.table.setRowHeight(row, 52)
+        """Fill the table quickly. The cells are cheap, the row of buttons is not (about 3 ms a
+        row), so the buttons are made only for the rows on screen and as you scroll."""
+        self._shown_items = items
+        self.table.setUpdatesEnabled(False)
+        try:
+            self.table.setRowCount(0)  # the old rows' buttons go with them
+            self.table.setRowCount(len(items))
+            for row, item in enumerate(items):
+                self._fill_row(row, item)
+        finally:
+            self.table.setUpdatesEnabled(True)
         if self.has_actions:
-            # wide enough for the widest row (a sculpture has seven buttons), so none is clipped
-            widest = max((self.table.cellWidget(r, self.COL_ACTIONS).sizeHint().width() for r in range(len(items))), default=0)
-            self.table.setColumnWidth(self.COL_ACTIONS, max(330, widest + 8))
+            self.table.setColumnWidth(self.COL_ACTIONS, 330)
+            self._ensure_actions()
+
+    def _ensure_actions(self, *_):
+        """Make the buttons for the visible rows (and a few more each way) that lack them."""
+        items = getattr(self, "_shown_items", [])
+        if not self.has_actions or not items:
+            return
+        first = max(self.table.rowAt(0), 0)
+        last = self.table.rowAt(max(self.table.viewport().height() - 1, 0))
+        last = len(items) - 1 if last < 0 else last
+        last = max(last, first + self.ACTION_ROWS_AHEAD)  # a window that is not shown yet has no height
+        widest = 0
+        for row in range(max(first - self.ACTION_ROWS_AHEAD, 0), min(last + self.ACTION_ROWS_AHEAD, len(items) - 1) + 1):
+            box = self.table.cellWidget(row, self.COL_ACTIONS)
+            if box is None:
+                box = self._actions(items[row])
+                self.table.setCellWidget(row, self.COL_ACTIONS, box)
+            widest = max(widest, box.sizeHint().width())
+        # wide enough for the widest row (a sculpture has seven buttons), so none is clipped
+        self.table.setColumnWidth(self.COL_ACTIONS, max(self.table.columnWidth(self.COL_ACTIONS), widest + 8))
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._ensure_actions()
+
+    def _fill_row(self, row: int, item: dict):
+        stock_val = int(item.get("current_stock") or 0)
+        min_stock = int(item.get("min_stock") or 0)
+        low = stock_val <= min_stock
+
+        values = [
+            item["name"],
+            self.TYPE_WORDS.get(item.get("item_type") or "furniture", "Furniture"),
+            item.get("sku") or "",
+            f"₹{pricing.price_with_gst(item):,.2f}",
+            f"{float(item.get('gst_percent') or 0):g}%" if float(item.get("gst_percent") or 0) else "-",
+            str(stock_val),
+            "⚠️ Low" if low else "✅ OK",
+        ]
+        for col, text in enumerate(values):
+            cell = QTableWidgetItem(text)
+            if col == self.COL_PRICE:
+                cell.setTextAlignment(
+                    Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+                )
+            elif col in (self.COL_GST, self.COL_STOCK, self.COL_STATUS):
+                cell.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            if col == self.COL_STATUS:
+                cell.setBackground(
+                    QColor(Colors.LOW_STOCK_BG if low else Colors.SUCCESS_BG)
+                )
+            self.table.setItem(row, col, cell)
 
     def _actions(self, item: dict) -> QWidget:
         box = QWidget()
         h = QHBoxLayout(box)
         h.setContentsMargins(4, 4, 4, 4)
         h.setSpacing(6)
+        box.setStyleSheet(Theme.btn_table_action())  # one parse for all the row's buttons
         buttons = []
         if self.can_edit:
             buttons += [
@@ -198,7 +239,6 @@ class InventoryWindow(QWidget):
             b = QPushButton(text)
             b.setCursor(Qt.CursorShape.PointingHandCursor)
             b.setFixedHeight(30)
-            b.setStyleSheet(Theme.btn_table_action())
             if text in ("🕘", "🗑️"):
                 b.setFixedWidth(40)
             b.setToolTip(

@@ -1,7 +1,9 @@
 """With the server down the app must still open (the counter bills offline)."""
 
 from ui.attendance_screen import AttendanceScreen
+from conftest import settle
 from ui.main_window import MainWindow
+
 
 
 def test_main_window_opens_without_a_server(qapp):
@@ -14,6 +16,7 @@ def test_opening_a_screen_offline_shows_a_notice_not_a_crash(qapp):
     w = MainWindow()
     w._sync_timer.stop()
     w._switch_page(2)  # Stock: refresh hits the dead server
+    settle()
     assert "No connection" in w.statusBar().currentMessage()
 
 

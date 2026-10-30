@@ -36,6 +36,32 @@ def isolated(tmp_path, monkeypatch):
     yield
 
 
+def settle():
+    """Let the screens' background loads finish and deliver their rows to the window."""
+    import time
+
+    from PyQt6.QtCore import QCoreApplication
+
+    from ui import workers
+
+    workers.wait_for_jobs()
+    for _ in range(100):
+        QCoreApplication.processEvents()
+        if workers._pending == 0:
+            break
+        time.sleep(0.01)
+
+
+@pytest.fixture(autouse=True)
+def finish_background_jobs():
+    """Screens load in the background: let every job end before the next test (and before the
+    Qt application is destroyed), so none answers into a window that is gone."""
+    yield
+    from ui.workers import wait_for_jobs
+
+    wait_for_jobs()
+
+
 @pytest.fixture(scope="session")
 def qapp():
     from PyQt6.QtWidgets import QApplication

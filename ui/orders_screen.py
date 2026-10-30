@@ -55,6 +55,7 @@ from ui.errors import handle_permissions
 from ui.expenses_screen import METHODS, date_edit, dialog_buttons, iso, money_spin
 from ui.letters_screen import issue_letter, show_letter
 from ui.theme import Colors, Fonts, Theme
+from ui.workers import load_async
 
 STATUS_COLORS = {
     "draft": Colors.ORANGE,
@@ -360,7 +361,7 @@ class OrdersScreen(QWidget):
         self._search_timer = QTimer(self)
         self._search_timer.setSingleShot(True)
         self._search_timer.setInterval(400)
-        self._search_timer.timeout.connect(self.refresh_data)
+        self._search_timer.timeout.connect(self.refresh_async)
         self._build_ui()
 
     # ------------------------------------------------------------ layout
@@ -385,18 +386,18 @@ class OrdersScreen(QWidget):
         for label, value in STATUSES:
             self.status.addItem(label, value)
         self.status.setStyleSheet(Theme.input_style())
-        self.status.currentIndexChanged.connect(lambda _i: self.refresh_data())
+        self.status.currentIndexChanged.connect(lambda _i: self.refresh_async())
         head.addWidget(self.status)
         self.source = QComboBox()
         self.source.addItem("Shop and website", None)
         self.source.addItem("Shop only", "pos")
         self.source.addItem("Website only", "web")
         self.source.setStyleSheet(Theme.input_style())
-        self.source.currentIndexChanged.connect(lambda _i: self.refresh_data())
+        self.source.currentIndexChanged.connect(lambda _i: self.refresh_async())
         head.addWidget(self.source)
         refresh = QPushButton("🔄  Refresh")
         refresh.setStyleSheet(Theme.btn_secondary())
-        refresh.clicked.connect(self.refresh_data)
+        refresh.clicked.connect(self.refresh_async)
         head.addWidget(refresh)
         self.new_btn = QPushButton("➕  New order")
         self.new_btn.setStyleSheet(Theme.btn_primary())
@@ -459,12 +460,27 @@ class OrdersScreen(QWidget):
     # ------------------------------------------------------------- data
     @handle_permissions
     def refresh_data(self, _checked=False):
-        keep = self._current["id"] if self._current else None
-        status = self.status.currentData()
+        self._show_orders(self._load_orders(self._order_query()))
+
+    def refresh_async(self, _checked=False):
+        """Same as refresh_data, but the orders are fetched in the background."""
+        query = self._order_query()
+        load_async(self, lambda: self._load_orders(query), self._show_orders)
+
+    def _order_query(self):
+        return self.status.currentData(), self.source.currentData(), self.search.text().strip()
+
+    def _load_orders(self, query):
+        """The server call (no widgets), so it can run on a background thread."""
+        status, source, search = query
         asked = None if status in ("open", "all") else status
-        rows = self._svc.orders(asked, self.source.currentData(), self.search.text().strip())
+        rows = self._svc.orders(asked, source, search)
         if status == "open":
             rows = [o for o in rows if o["status"] in OPEN]
+        return rows
+
+    def _show_orders(self, rows):
+        keep = self._current["id"] if self._current else None
         self._rows = rows
         self.table.blockSignals(True)
         self.table.setRowCount(len(rows))

@@ -3,6 +3,7 @@
 import pytest
 from PyQt6.QtWidgets import QInputDialog, QMessageBox
 
+from conftest import settle
 from services.customer_service import CustomerService
 from services.enums import UserRole
 from services.inventory_service import InventoryService
@@ -10,6 +11,7 @@ from services.orders_service import OrdersService, amount_of, items_summary
 from services.session import Session
 from ui.main_window import MainWindow
 from ui.orders_screen import EditOrderDialog, NewOrderDialog, OrdersScreen, PaymentDialog
+
 
 
 def order(n, status="confirmed", **kw):
@@ -81,10 +83,13 @@ def test_lists_open_orders_by_default_with_customer_and_money(qapp, fake):
 def test_filters_and_search_reach_the_server(qapp, fake):
     s = OrdersScreen()
     s.status.setCurrentIndex(s.status.findData("delivered"))
+    settle()
     assert fake[-1] == ("list", "delivered", None, "")
     s.source.setCurrentIndex(s.source.findData("web"))
+    settle()
     assert fake[-1][2] == "web"
     s.status.setCurrentIndex(s.status.findData("all"))
+    settle()
     assert s.table.rowCount() == 0 or fake[-1][1] is None  # "all" asks for no status filter
     s.search.setText("ravi")
     s._search_timer.stop()
@@ -96,6 +101,7 @@ def test_details_show_customer_address_pieces_and_payments(qapp, fake):
     s = OrdersScreen()
     s.status.setCurrentIndex(s.status.findData("all"))
     s.source.setCurrentIndex(0)
+    settle()
     web_row = next(r for r in range(s.table.rowCount()) if s.table.item(r, 0).text().startswith("ORD-2026-0002"))
     select(s, web_row)
     assert "New" in s.heading.text() and "Website standard order" in s.heading.text()
@@ -173,6 +179,7 @@ def test_a_delivered_or_cancelled_order_offers_no_change(qapp, fake, monkeypatch
         monkeypatch.setattr(OrdersService, "orders", lambda self, *a, _o=o, **k: [_o])
         s = OrdersScreen()
         s.status.setCurrentIndex(s.status.findData("all"))
+        settle()
         select(s, 0)
         assert s.next_btn.isHidden() and s.edit_btn.isHidden() and s.cancel_btn.isHidden()
         assert s.pay_btn.isHidden() is (status == "cancelled")
