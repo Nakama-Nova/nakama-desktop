@@ -47,7 +47,7 @@ def test_owner_sees_the_stock_tools_and_can_search_by_code(qapp, fake):
     assert w.table.rowCount() == 2
     assert w.table.item(0, w.COL_STATUS).text() == "⚠️ Low"  # 2 left, warn at 5
     assert w.table.item(1, w.COL_STATUS).text() == "✅ OK"
-    assert row_buttons(w.table, 0, w.COL_ACTIONS) == ["✏️ Edit", "± Stock", "🕘", "🖼️", "🗑️"]
+    assert row_buttons(w.table, 0, w.COL_ACTIONS) == ["✏️ Edit", "± Stock", "🕘", "🖼️ Photos", "🗑️"]
     w.search_input.setText("tb-2")  # by code, any case
     assert w.table.rowCount() == 1 and w.table.item(0, w.COL_NAME).text() == "Study Table"
 
