@@ -30,6 +30,9 @@ def isolated(tmp_path, monkeypatch):
     import services.api_client as api
 
     monkeypatch.setattr(api, "_down_until", 0.0)  # no "server is down" carried between tests
+    from ui.notifier import Notifier
+
+    monkeypatch.setattr(Notifier, "AUTOSTART", False)  # tests never poll a server in the background
     yield
 
 
