@@ -131,35 +131,49 @@ class EmptyState(QWidget):
 class _TableWatcher(QObject):
     """Keeps an EmptyState over a table's body, visible exactly while the table has no rows.
 
-    It looks at the table whenever the table's body is painted or resized (adding or
-    removing rows repaints it) rather than listening to the model, whose signals also
-    fire while the table is being torn down."""
+    The EmptyState is built the first time the table is on screen and empty, so screens
+    that are never opened (or always have rows) cost nothing. It looks at the table when
+    its body is shown, resized or repainted (adding or removing rows repaints it) rather
+    than listening to the model, whose signals also fire while the table is torn down."""
 
     EMPTY_MIN_HEIGHT = 300
 
-    def table_is_empty(self) -> bool:
-        return self._table.rowCount() == 0
-
-    def __init__(self, table: QTableWidget, state: EmptyState):
+    def __init__(self, table: QTableWidget, make_state):
         super().__init__(table)
-        self._table, self._state = table, state
+        self._table, self._make_state = table, make_state
+        self.state: EmptyState | None = None
         table.viewport().installEventFilter(self)
 
     def sync(self):
-        empty = self.table_is_empty()
+        empty = self._table.rowCount() == 0
+        if self.state is None:
+            if not (empty and self._table.isVisible()):
+                return
+            self.state = self._make_state()
         # An empty list gets room for the carvings even when its screen would squeeze it.
         floor = self.EMPTY_MIN_HEIGHT if empty else 0
         if self._table.minimumHeight() != floor and self._table.minimumHeight() in (0, self.EMPTY_MIN_HEIGHT):
             self._table.setMinimumHeight(floor)
-        if self._state.geometry() != self._table.viewport().rect():
-            self._state.setGeometry(self._table.viewport().rect())
-        if self._state.isHidden() == empty:
-            self._state.setVisible(empty)
-            self._state.raise_()
+        if self.state.geometry() != self._table.viewport().rect():
+            self.state.setGeometry(self._table.viewport().rect())
+        if self.state.isHidden() == empty:
+            self.state.setVisible(empty)
+            self.state.raise_()
+
+    def _out_of_date(self) -> bool:
+        empty = self._table.rowCount() == 0
+        if self.state is None:
+            return empty and self._table.isVisible()
+        return empty == self.state.isHidden()
 
     def eventFilter(self, obj, event):
-        if event.type() in (QEvent.Type.Resize, QEvent.Type.Show, QEvent.Type.Paint):
-            QTimer.singleShot(0, self._deferred_sync)
+        kind = event.type()
+        if kind == QEvent.Type.Paint:
+            if self._out_of_date():
+                QTimer.singleShot(0, self._deferred_sync)
+        elif kind == QEvent.Type.Resize or kind == QEvent.Type.Show:
+            if self.state is not None or self._out_of_date():
+                QTimer.singleShot(0, self._deferred_sync)
         return False
 
     def _deferred_sync(self):
@@ -170,9 +184,11 @@ class _TableWatcher(QObject):
 
 
 def attach_empty_state(table: QTableWidget, title: str, message: str = "", set_name: str = "temple",
-                       action: QPushButton | None = None) -> EmptyState:
-    """Show an EmptyState over `table` while it has no rows. Returns the EmptyState."""
-    state = EmptyState(title, message, set_name, action, parent=table.viewport())
-    watcher = _TableWatcher(table, state)
+                       action: QPushButton | None = None) -> _TableWatcher:
+    """Show an EmptyState over `table` while it has no rows. Returns the watcher; its
+    `state` is the EmptyState once the table has first been shown empty."""
+    watcher = _TableWatcher(
+        table, lambda: EmptyState(title, message, set_name, action, parent=table.viewport())
+    )
     watcher.sync()
-    return state
+    return watcher

@@ -5,7 +5,7 @@ Bootstrap-style building blocks on top of ui/theme.py: Button, Badge, Alert, Car
 12-column responsive Grid12. Plain widgets, so they drop into any existing layout.
 """
 
-from PyQt6.QtCore import QEvent, QObject, Qt
+from PyQt6.QtCore import QObject, Qt
 from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import (
     QAbstractSpinBox,
@@ -18,7 +18,6 @@ from PyQt6.QtWidgets import (
     QPlainTextEdit,
     QPushButton,
     QSizePolicy,
-    QTableWidget,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -154,19 +153,23 @@ class Grid12(QWidget):
 
 
 class BootstrapBehaviour(QObject):
-    """Things a style sheet cannot do, applied app-wide by Theme.install():
-    a soft focus ring around the focused form control, and striped table rows."""
+    """What a style sheet cannot do, applied app-wide by Theme.install(): a soft focus ring
+    around the focused form control. Listens to the application's focusChanged signal
+    rather than filtering every event, which would run Python for each mouse move."""
 
     FIELDS = (QLineEdit, QAbstractSpinBox, QComboBox, QPlainTextEdit, QTextEdit)
 
-    def eventFilter(self, obj, event):
-        kind = event.type()
-        if kind == QEvent.Type.FocusIn or kind == QEvent.Type.FocusOut:
-            if isinstance(obj, QWidget):
-                self._ring(obj, kind == QEvent.Type.FocusIn)
-        elif kind == QEvent.Type.Polish and isinstance(obj, QTableWidget):
-            obj.setAlternatingRowColors(True)
-        return False
+    def __init__(self, app):
+        super().__init__(app)
+        app.focusChanged.connect(self._focus_changed)
+
+    def _focus_changed(self, old, new):
+        for widget, focused in ((old, False), (new, True)):
+            if widget is not None:
+                try:
+                    self._ring(widget, focused)
+                except RuntimeError:  # the widget was deleted while focus moved
+                    pass
 
     @classmethod
     def _field_of(cls, widget: QWidget) -> QWidget | None:

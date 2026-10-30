@@ -316,6 +316,7 @@ class MainWindow(QMainWindow):
         self.content_stack.addWidget(self.designs_view)  # 16
         self.content_stack.addWidget(self.letters_view)  # 17
 
+        Theme.stripe_tables(self)
         self._decorate_empty_states()
 
         # Show Home at once; its numbers load right after the window is on screen
