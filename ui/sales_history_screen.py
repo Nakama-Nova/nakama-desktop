@@ -21,6 +21,7 @@ from PyQt6.QtCore import Qt, QDate
 from ui.theme import Theme, Fonts
 from services.sales_service import BillPdfError, SalesService
 from services.event_bus import EventBus, SALE_CREATED
+from ui.workers import load_async
 
 
 def bill_text(sale: dict, items: list[dict]) -> str:
@@ -54,7 +55,7 @@ class SalesHistoryScreen(QWidget):
         self.setStyleSheet(Theme.content_bg())
         self._build_ui()
 
-        EventBus.subscribe(SALE_CREATED, self.refresh_data)
+        EventBus.subscribe(SALE_CREATED, self.refresh_async)
 
     def _build_ui(self):
         layout = QVBoxLayout(self)
@@ -126,6 +127,10 @@ class SalesHistoryScreen(QWidget):
         """EventBus-safe: no args. Loads all sales."""
         sales = self._sales_service.get_sales()
         self._populate_table(sales or [])
+
+    def refresh_async(self):
+        """Same as refresh_data, but the bills are fetched in the background."""
+        load_async(self, self._sales_service.get_sales, lambda sales: self._populate_table(sales or []))
 
     def _load_sales(self, customer_id=None, date=None):
         """Load sales with optional filters."""

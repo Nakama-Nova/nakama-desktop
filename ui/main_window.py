@@ -51,6 +51,7 @@ from ui.orders_screen import OrdersScreen
 from ui.designs_screen import DesignsScreen
 from ui.letters_screen import LettersScreen
 from ui.notifier import Notifier
+from ui.workers import on_busy_changed, run_async
 from ui.updater import UpdateBanner, Updater
 from services.version import APP_VERSION
 from services.api_client import SessionExpiredError, set_session_expired_hook
@@ -128,6 +129,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self._signing_out = False
+        self._sync_running = False
         self.session_expired.connect(self._on_session_expired)
         set_session_expired_hook(self.session_expired.emit)
         self.setWindowTitle("Vriksha Studio — Staff desk")
@@ -270,6 +272,7 @@ class MainWindow(QMainWindow):
         logout_btn.clicked.connect(self._handle_logout)
         self.navbar.add_right(logout_btn)
         content_layout.addWidget(self.navbar)
+        on_busy_changed(self.navbar.set_busy)  # "Loading…" while a screen fetches in the background
 
         self.content_stack = QStackedWidget()
         self.update_banner = UpdateBanner()
@@ -329,7 +332,7 @@ class MainWindow(QMainWindow):
         # previously SyncService was never invoked from anywhere in the app.
         self._sync_service = SyncService()
         self._sync_timer = QTimer(self)
-        self._sync_timer.timeout.connect(self._run_sync_cycle)
+        self._sync_timer.timeout.connect(self._sync_async)
         self._sync_timer.start(SYNC_INTERVAL_MS)
 
         # Desktop notifications (website orders, money received, low stock, finished scans)
@@ -345,7 +348,7 @@ class MainWindow(QMainWindow):
         self.updater.start()
         # Run one cycle shortly after startup too, rather than waiting a
         # full interval for the first sync.
-        QTimer.singleShot(2000, self._run_sync_cycle)
+        QTimer.singleShot(2000, self._sync_async)
 
     def _show_unread(self):
         n = self.notifier.unread
@@ -361,38 +364,74 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
     # Background sync cycle
     # ------------------------------------------------------------------
+    def _sync_work(self):
+        """
+        The slow part of a sync cycle: the network and the local outbox. It touches no
+        widget, so it can run on a background thread. Returns the push result, or None
+        when the server cannot be reached.
+        """
+        if not self._sync_service.is_online():
+            return None
+        push_result = self._sync_service.push_sync()
+        try:
+            self._sync_service.pull_sync()
+        except SessionExpiredError:
+            raise
+        except Exception:
+            logger.exception("Background sync pull failed")
+        return push_result
+
+    def _sync_done(self, push_result):
+        """What a finished cycle changes on screen. Runs on the GUI thread."""
+        if not push_result:
+            return
+        if push_result.get("pushed"):
+            # Offline sales just got official bill numbers and moved stock.
+            EventBus.emit(SALE_CREATED)
+        if push_result.get("failed"):
+            logger.warning("Background sync push had failures: %s", push_result)
+        held = push_result.get("held", 0)
+        if held:
+            self.statusBar().showMessage(
+                (
+                    "1 bill saved by another user is waiting for them to sign in."
+                    if held == 1
+                    else f"{held} bills saved by other users are waiting for them to sign in."
+                ),
+                15000,
+            )
+
     def _run_sync_cycle(self):
         """
-        Push any queued offline changes, then pull incremental updates.
+        Push any queued offline changes, then pull incremental updates, and wait for it.
 
-        Runs on a timer (see SYNC_INTERVAL_MS) and once shortly after
-        startup. Silently skips when the backend is unreachable, and never
-        raises — a background sync failure shouldn't interrupt the user.
+        The timer uses _sync_async, which does the same without freezing the window. Silently
+        skips when the backend is unreachable, and never raises: a background sync failure
+        shouldn't interrupt the user.
         """
         try:
-            if not self._sync_service.is_online():
-                return
-            push_result = self._sync_service.push_sync()
-            if push_result.get("pushed"):
-                # Offline sales just got official bill numbers and moved stock.
-                EventBus.emit(SALE_CREATED)
-            if push_result.get("failed"):
-                logger.warning("Background sync push had failures: %s", push_result)
-            held = push_result.get("held", 0)
-            if held:
-                self.statusBar().showMessage(
-                    (
-                        "1 bill saved by another user is waiting for them to sign in."
-                        if held == 1
-                        else f"{held} bills saved by other users are waiting for them to sign in."
-                    ),
-                    15000,
-                )
-            self._sync_service.pull_sync()
+            self._sync_done(self._sync_work())
         except SessionExpiredError:
             return  # the expiry hook has signed the user out; the outbox is kept
         except Exception:
             logger.exception("Background sync cycle failed")
+
+    def _sync_async(self):
+        """A sync cycle on a background thread (runs on a timer, and once after startup)."""
+        if self._sync_running:
+            return  # the last cycle is still going: never two on one connection
+
+        def done(push_result):
+            self._sync_running = False
+            self._sync_done(push_result)
+
+        def failed(exc):
+            self._sync_running = False
+            if not isinstance(exc, SessionExpiredError):  # expiry: the hook has signed the user out
+                logger.error("Background sync cycle failed", exc_info=exc)
+
+        self._sync_running = True
+        run_async(self._sync_work, done, failed)
 
     def _get_allowed_nav_items(self):
         role = Session.get_role()
@@ -534,7 +573,9 @@ class MainWindow(QMainWindow):
     def _refresh_current(self):
         # Auto-refresh data for the visible screen
         widget = self.content_stack.currentWidget()
-        if hasattr(widget, "refresh_data"):
+        if hasattr(widget, "refresh_async"):
+            widget.refresh_async()  # fetches in the background; the old rows stay until the new ones arrive
+        elif hasattr(widget, "refresh_data"):
             try:
                 widget.refresh_data()
             except requests.RequestException:
@@ -586,6 +627,8 @@ class MainWindow(QMainWindow):
     def _flush_outbox(self):
         """Best effort: hand queued bills to the server under this user's own login
         before it is cleared, so they do not wait for this user's next sign-in."""
+        if self._sync_running:
+            return  # a cycle on the background thread is already sending them
         try:
             if self._sync_service.is_online():
                 self._sync_service.push_sync()

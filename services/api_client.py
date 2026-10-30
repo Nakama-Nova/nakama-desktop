@@ -18,6 +18,7 @@ Routes aligned with actual backend API endpoints:
 import json
 import os
 import sys
+import threading
 import time
 from typing import Any, Callable
 
@@ -43,6 +44,22 @@ _http = requests.Session()
 # seconds instead of each click waiting out the connect timeout.
 OFFLINE_PAUSE = 10
 _down_until = 0.0
+
+
+# Calls made from a background job (ui/workers.py) must not open dialogs from their own
+# thread. While a thread is "in the background", errors that would be shown are queued here
+# and handed back to the GUI thread with the job's result.
+_local = threading.local()
+
+
+def begin_background() -> None:
+    _local.reports = []
+
+
+def end_background() -> list:
+    """Stop queueing; returns the errors that a foreground call would have shown."""
+    reports, _local.reports = getattr(_local, "reports", None) or [], None
+    return reports
 
 
 def _could_not_connect(exc: requests.ConnectionError) -> bool:
@@ -186,8 +203,12 @@ class APIClient:
             return _session_expired(response)
         err = APIError(response.status_code, response.text)
         if not quiet and response.status_code != 404:
-            sys.excepthook(type(err), err, None)
-            err.reported = True
+            queue = getattr(_local, "reports", None)
+            if queue is not None:  # on a background thread: show it on the GUI thread later
+                queue.append(err)
+            else:
+                sys.excepthook(type(err), err, None)
+                err.reported = True
         return err
 
     def _get(

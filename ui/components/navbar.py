@@ -41,10 +41,17 @@ class Navbar(QFrame):
         titles.addStretch()
         row.addLayout(titles)
         row.addStretch()
+        self.busy_lbl = QLabel("⏳  Loading…")
+        self.busy_lbl.setStyleSheet(f"font-size: {Fonts.CAPTION}px; color: {Colors.TEXT_MUTED};")
+        self.busy_lbl.hide()
+        row.addWidget(self.busy_lbl)
         self.right = row
 
     def set_title(self, text: str) -> None:
         self.title_lbl.setText(text)
+
+    def set_busy(self, busy: bool) -> None:
+        self.busy_lbl.setVisible(busy)
 
     def add_right(self, widget: QWidget) -> None:
         self.right.addWidget(widget)

@@ -23,6 +23,7 @@ from services.report_service import ReportService
 from services.event_bus import EventBus, SALE_CREATED
 from services.session import Session
 from services.enums import UserRole
+from ui.workers import load_async
 
 
 class DashboardWindow(QWidget):
@@ -33,7 +34,7 @@ class DashboardWindow(QWidget):
         self.setStyleSheet(Theme.content_bg())
         self._build_ui()
         # refresh_data() is NOT called here — MainWindow._switch_page(0) triggers it
-        EventBus.subscribe(SALE_CREATED, self.refresh_data)
+        EventBus.subscribe(SALE_CREATED, self.refresh_async)
 
     def _build_ui(self):
         layout = QVBoxLayout(self)
@@ -116,6 +117,16 @@ class DashboardWindow(QWidget):
         layout.addWidget(self.welcome_card, 1)
 
     def refresh_data(self):
+        if self._prepare():
+            self._show_summary(self._report_service.get_dashboard_summary())
+
+    def refresh_async(self):
+        """Same as refresh_data, but the numbers are fetched in the background."""
+        if self._prepare():
+            load_async(self, self._report_service.get_dashboard_summary, self._show_summary)
+
+    def _prepare(self) -> bool:
+        """Greeting and who sees what (no server call). True when the numbers are wanted."""
         # Update greeting dynamically
         hour = datetime.now().hour
         if hour < 12:
@@ -144,17 +155,18 @@ class DashboardWindow(QWidget):
         else:
             self.subtitle_lbl.setText("Here's your business at a glance")
 
-        if is_admin:
-            summary = self._report_service.get_dashboard_summary()
-            if summary:
-                self.card_sales.set_value(summary.get("today_sales_count", 0))
-                self.card_revenue.set_value(
-                    f"₹{float(summary.get('today_revenue', 0)):,.2f}"
-                )
-                self.card_low_stock.set_value(summary.get("low_stock_count", 0))
-                self.card_wages.set_value(
-                    f"₹{float(summary.get('pending_wages_total', 0)):,.2f}"
-                )
+        return is_admin
+
+    def _show_summary(self, summary):
+        if summary:
+            self.card_sales.set_value(summary.get("today_sales_count", 0))
+            self.card_revenue.set_value(
+                f"₹{float(summary.get('today_revenue', 0)):,.2f}"
+            )
+            self.card_low_stock.set_value(summary.get("low_stock_count", 0))
+            self.card_wages.set_value(
+                f"₹{float(summary.get('pending_wages_total', 0)):,.2f}"
+            )
 
     def _navigate(self, page_name: str):
         """Navigate to another page via MainWindow."""
