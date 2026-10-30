@@ -115,7 +115,7 @@ class InventoryWindow(QWidget):
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(self.COL_NAME, QHeaderView.ResizeMode.Stretch)
-        header.setMinimumSectionSize(90)
+        header.setMinimumSectionSize(64)
         if self.has_actions:
             self.table.horizontalHeader().setSectionResizeMode(
                 self.COL_ACTIONS, QHeaderView.ResizeMode.Fixed
@@ -173,6 +173,10 @@ class InventoryWindow(QWidget):
             if self.has_actions:
                 self.table.setCellWidget(row, self.COL_ACTIONS, self._actions(item))
             self.table.setRowHeight(row, 52)
+        if self.has_actions:
+            # wide enough for the widest row (a sculpture has seven buttons), so none is clipped
+            widest = max((self.table.cellWidget(r, self.COL_ACTIONS).sizeHint().width() for r in range(len(items))), default=0)
+            self.table.setColumnWidth(self.COL_ACTIONS, max(330, widest + 8))
 
     def _actions(self, item: dict) -> QWidget:
         box = QWidget()
@@ -185,7 +189,7 @@ class InventoryWindow(QWidget):
                 ("✏️ Edit", self._edit_item),
                 ("± Stock", self._adjust),
                 ("🕘", self._history),
-                ("🖼️", self._photos),
+                ("🖼️ Photos", self._photos),
                 ("🗑️", self._delete_item),
             ]
         if self.can_scan and item.get("item_type") == "sculpture":
@@ -195,15 +199,16 @@ class InventoryWindow(QWidget):
             b.setCursor(Qt.CursorShape.PointingHandCursor)
             b.setFixedHeight(30)
             b.setStyleSheet(Theme.btn_table_action())
-            if text in ("🕘", "🖼️", "🗑️"):
+            if text in ("🕘", "🗑️"):
                 b.setFixedWidth(40)
             b.setToolTip(
-                {"🕘": "Stock history", "🖼️": "Photos and model", "🗑️": "Delete"}.get(
+                {"🕘": "Stock history", "🖼️ Photos": "Photos and 3D model shown on the website", "🗑️": "Delete"}.get(
                     text, ""
                 )
             )
             b.clicked.connect(lambda _=False, it=item, s=slot: s(it))
             h.addWidget(b)
+        h.addStretch()  # buttons keep their own width in the (widest-row) column
         return box
 
     # --------------------------------------------------------------- actions
@@ -228,8 +233,14 @@ class InventoryWindow(QWidget):
             return
         made = self._inventory_service.create(**data)
         if made:
-            QMessageBox.information(self, "Saved", f"{made['name']} was saved with the code {made['sku']}.")
             self.refresh_data()
+            ask = QMessageBox.question(
+                self, "Saved",
+                f"{made['name']} was saved with the code {made['sku']}.\n\nAdd its photos for the website now?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            if ask == QMessageBox.StandardButton.Yes:
+                self._photos(made)
 
     @handle_permissions
     def _edit_item(self, item: dict):

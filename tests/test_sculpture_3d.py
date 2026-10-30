@@ -40,7 +40,7 @@ def test_the_owner_gets_the_3d_buttons_on_sculptures_only(qapp, stock):
     rows = rows_by_sku(w)
     assert buttons(w.table, rows["SCU-0001"], w.COL_ACTIONS)[-2:] == ["📷 3D scan", "🧊 View 3D"]
     assert "✏️ Edit" in buttons(w.table, rows["SCU-0001"], w.COL_ACTIONS)  # the usual tools stay
-    assert buttons(w.table, rows["FUR-0001"], w.COL_ACTIONS) == ["✏️ Edit", "± Stock", "🕘", "🖼️", "🗑️"]
+    assert buttons(w.table, rows["FUR-0001"], w.COL_ACTIONS) == ["✏️ Edit", "± Stock", "🕘", "🖼️ Photos", "🗑️"]
 
 
 def test_an_artisan_gets_only_the_3d_buttons_on_sculptures(qapp, stock, monkeypatch):

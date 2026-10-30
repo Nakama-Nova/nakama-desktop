@@ -135,3 +135,27 @@ def test_the_dialog_stays_quiet_when_everything_uploads(qapp, wire, tmp_path, mo
     monkeypatch.setattr(StockService, "assets", lambda self, item_id: [])
     PhotosDialog(None, StockService(), {"id": "item-1", "name": "Chair"})._add()
     assert dialogs == []
+
+
+def test_a_new_product_offers_its_photos_straight_away(qapp, monkeypatch):
+    """Adding a product asks to add its website photos next; No skips, Yes opens the photo dialog."""
+    from PyQt6.QtWidgets import QDialog, QMessageBox
+
+    import ui.inventory_window as inv
+    from services.inventory_service import InventoryService
+
+    made = {"id": "i1", "name": "Chair", "sku": "FUR-0001"}
+    opened, answers = [], iter([QMessageBox.StandardButton.No, QMessageBox.StandardButton.Yes])
+    monkeypatch.setattr(inv.StockService, "rows", lambda self, kind: [])
+    monkeypatch.setattr(InventoryService, "create", lambda self, **d: made)
+    monkeypatch.setattr(InventoryService, "get_items", lambda self: [])
+    monkeypatch.setattr(inv.ItemDialog, "exec", lambda self: QDialog.DialogCode.Accepted)
+    monkeypatch.setattr(inv.ItemDialog, "get_data", lambda self: {"name": "Chair"})
+    monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *a, **k: next(answers)))
+    monkeypatch.setattr(inv, "PhotosDialog", lambda parent, svc, item: type("D", (), {"exec": lambda s: opened.append(item["id"])})())
+
+    w = inv.InventoryWindow()
+    w._add_item()
+    assert opened == []
+    w._add_item()
+    assert opened == ["i1"]

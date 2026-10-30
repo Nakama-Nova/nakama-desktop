@@ -81,10 +81,13 @@ def test_adding_a_product_tells_you_its_new_code(qapp, stock, monkeypatch, dialo
     w.refresh_data()
     w.type_filter.setCurrentIndex(w.type_filter.findData("sculpture"))
     monkeypatch.setattr(ItemDialog, "exec", lambda self: (self.name.setText("Nandi in wood"), QDialog.DialogCode.Accepted)[-1])
+    monkeypatch.setattr("ui.inventory_window.PhotosDialog", lambda *a: type("D", (), {"exec": lambda s: None})())
     w.add_btn.click()
     sent = next(c for c in stock if c[0] == "create")[1]
     assert sent["item_type"] == "sculpture" and "sku" not in sent  # the filter chose the starting type
-    assert dialogs[-1][0] == "information" and "SCU-0002" in dialogs[-1][2] and "Nandi in wood" in dialogs[-1][2]
+    # the confirmation also offers the website photos
+    assert dialogs[-1][0] == "question" and "SCU-0002" in dialogs[-1][2] and "Nandi in wood" in dialogs[-1][2]
+    assert "photos" in dialogs[-1][2]
 
 
 def test_a_product_needs_only_a_name(qapp, stock, monkeypatch, dialogs):
