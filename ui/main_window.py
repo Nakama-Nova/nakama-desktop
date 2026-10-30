@@ -20,11 +20,17 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QFrame,
     QScrollArea,
+    QTableWidget,
 )
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QSize, Qt, QTimer, pyqtSignal
+from PyQt6.QtWidgets import QApplication
 
 from services import notifications_service as ns
-from ui.theme import Theme, Colors, Fonts
+from ui.assets import logo_path, scaled_pixmap
+from ui.components.bootstrap import Badge, Button
+from ui.components.carvings import attach_empty_state
+from ui.components.navbar import Navbar
+from ui.theme import Theme, Colors, Fonts, Radius, Spacing
 
 from ui.dashboard_window import DashboardWindow
 from ui.inventory_window import InventoryWindow
@@ -57,6 +63,31 @@ logger = logging.getLogger(__name__)
 
 # How often to run a background push/pull sync cycle, in milliseconds.
 SYNC_INTERVAL_MS = 60_000
+
+SIDEBAR_WIDTH = 256
+LOGO_BOX = QSize(56, 76)  # the logo is 3:4; this box keeps it sharp and inside the header
+
+# What each list screen says when it has no rows (title, hint, carving set). The screens
+# need no change: MainWindow lays the empty state over each screen's table.
+EMPTY_STATES = {
+    "New Bill": ("No items on this bill yet", "Search for an item above, or scan its code, to start the bill.", "temple"),
+    "Bill History": ("No bills found", "Bills you save will be listed here. Change the date filter to look at another day.", "dark"),
+    "Orders": ("No orders yet", "Orders from the counter and from the website will appear here.", "horse"),
+    "Buyers": ("No buyers yet", "Add a buyer to keep their name, phone and bills together.", "dark-horse"),
+    "Letters": ("No letters yet", "Quotes and letters you issue will be listed here.", "pillar"),
+    "Stock": ("Nothing in stock yet", "Add your first product to start keeping stock.", "temple"),
+    "Materials": ("No materials yet", "Wood and other materials you add will be listed here.", "dark"),
+    "Purchases": ("No purchases yet", "Record what you buy and it will show here.", "horse"),
+    "3D Lab": ("No 3D models yet", "Scan a carving and its model will appear here.", "dark-horse"),
+    "Restoration": ("No restoration jobs yet", "Temple and heritage work you take up will be tracked here.", "pillar"),
+    "Designs": ("No designs yet", "Designs you save will be listed here.", "temple"),
+    "Attendance": ("No attendance marked", "Mark who came in and it will be listed here.", "dark"),
+    "Wages": ("No wages to show", "Wages due and paid will appear here.", "horse"),
+    "Staff": ("No staff accounts yet", "People you add will be listed here.", "dark-horse"),
+    "Expenses": ("No expenses yet", "Add an expense to see it here.", "pillar"),
+    "Profit": ("No figures yet", "Profit shows once there are bills and expenses.", "temple"),
+    "Reports": ("No report data yet", "Reports fill in as bills are saved.", "dark"),
+}
 
 
 class MainWindow(QMainWindow):
@@ -100,14 +131,18 @@ class MainWindow(QMainWindow):
         self.session_expired.connect(self._on_session_expired)
         set_session_expired_hook(self.session_expired.emit)
         self.setWindowTitle("Vriksha Studio — Staff desk")
-        self.resize(1200, 750)
         self.setStyleSheet(Theme.global_stylesheet())
+        app = QApplication.instance()
+        if app is not None:
+            Theme.install(app)
 
-        # Center on screen
+        # Open at 1200x750, or the whole usable screen on a small one (1366x768 laptops
+        # lose a strip to the taskbar), and centre it.
         screen = self.screen().availableGeometry()
-        x = (screen.width() - 1200) // 2
-        y = (screen.height() - 750) // 2
-        self.move(x, y)
+        width, height = min(1200, screen.width()), min(750, screen.height())
+        self.setMinimumSize(min(960, screen.width()), min(600, screen.height()))
+        self.resize(width, height)
+        self.move(screen.x() + (screen.width() - width) // 2, screen.y() + (screen.height() - height) // 2)
 
         central = QWidget()
         self.setCentralWidget(central)
@@ -116,50 +151,65 @@ class MainWindow(QMainWindow):
         main_layout.setSpacing(0)
 
         # ── Sidebar ───────────────────────────────────
-        self.sidebar = QWidget()
-        self.sidebar.setFixedWidth(240)
-        self.sidebar.setStyleSheet(f"background-color: {Colors.SIDEBAR_BG};")
+        self.sidebar = QFrame()
+        self.sidebar.setObjectName("sidebar")
+        self.sidebar.setFixedWidth(SIDEBAR_WIDTH)
+        self.sidebar.setStyleSheet(
+            f"QFrame#sidebar {{ background-color: {Colors.SIDEBAR_BG};"
+            f" border-right: 1px solid {Colors.CARD_BORDER}; }}"
+        )
         sidebar_layout = QVBoxLayout(self.sidebar)
         sidebar_layout.setContentsMargins(0, 0, 0, 0)
         sidebar_layout.setSpacing(0)
 
-        # Brand header
-        brand_container = QWidget()
+        # Brand header: the Vriksha logo beside the name
+        brand_container = QFrame()
         brand_container.setStyleSheet(
-            f"background-color: {Colors.SIDEBAR_BG}; border-bottom: 1px solid {Colors.SIDEBAR_HOVER};"
+            f"QFrame {{ background-color: {Colors.SIDEBAR_BG}; border: none;"
+            f" border-bottom: 1px solid {Colors.CARD_BORDER}; }}"
+            "QLabel { border: none; background: transparent; }"
         )
-        brand_layout = QVBoxLayout(brand_container)
-        brand_layout.setContentsMargins(20, 24, 20, 20)
+        brand_layout = QHBoxLayout(brand_container)
+        brand_layout.setContentsMargins(Spacing.MD, Spacing.MD, Spacing.MD, Spacing.MD)
+        brand_layout.setSpacing(Spacing.SM + 4)
 
+        self.logo_lbl = QLabel()
+        self.logo_lbl.setFixedSize(LOGO_BOX)
+        self.logo_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        logo = scaled_pixmap(logo_path(), LOGO_BOX.height(), False, self.devicePixelRatioF())
+        if not logo.isNull():
+            self.logo_lbl.setPixmap(logo)
+        brand_layout.addWidget(self.logo_lbl)
+
+        brand_text = QVBoxLayout()
+        brand_text.setSpacing(0)
+        brand_text.addStretch()
         brand_lbl = QLabel("Vriksha Studio")
         brand_lbl.setStyleSheet(f"""
             font-family: '{Fonts.HEADING_FAMILY}', Georgia, serif;
-            font-size: 26px;
+            font-size: 22px;
             font-weight: bold;
-            color: {Colors.BG};
+            color: {Colors.BRAND_BROWN};
         """)
-        brand_layout.addWidget(brand_lbl)
-
+        brand_text.addWidget(brand_lbl)
         brand_sub = QLabel("Staff desk")
-        brand_sub.setStyleSheet(f"""
-            font-size: {Fonts.CAPTION}px;
-            color: {Colors.SIDEBAR_TEXT};
-            margin-top: 2px;
-        """)
-        brand_layout.addWidget(brand_sub)
+        brand_sub.setStyleSheet(f"font-size: {Fonts.CAPTION}px; color: {Colors.TEXT_MUTED};")
+        brand_text.addWidget(brand_sub)
+        brand_text.addStretch()
+        brand_layout.addLayout(brand_text, 1)
 
         sidebar_layout.addWidget(brand_container)
 
         # Nav buttons
-        sidebar_layout.addSpacing(12)
+        sidebar_layout.addSpacing(Spacing.SM)
         self._nav_buttons: list[QPushButton] = []
         self._nav_mapping: dict[int, QPushButton] = {}
 
         nav_box = QWidget()
         nav_box.setStyleSheet(f"background-color: {Colors.SIDEBAR_BG};")
         nav_layout = QVBoxLayout(nav_box)
-        nav_layout.setContentsMargins(0, 0, 0, 0)
-        nav_layout.setSpacing(0)
+        nav_layout.setContentsMargins(Spacing.SM, 0, Spacing.SM, Spacing.SM)
+        nav_layout.setSpacing(2)
         section_of = {label: name for name, labels in self.NAV_SECTIONS.items() for label in labels}
         current_section = None
         for icon, label, index in self._get_allowed_nav_items():
@@ -179,7 +229,7 @@ class MainWindow(QMainWindow):
         nav_scroll.setStyleSheet(
             f"QScrollArea {{ background-color: {Colors.SIDEBAR_BG}; border: none; }}"
             f"QScrollBar:vertical {{ width: 6px; background: transparent; }}"
-            f"QScrollBar::handle:vertical {{ background: {Colors.SIDEBAR_HOVER}; border-radius: 3px; min-height: 24px; }}"
+            f"QScrollBar::handle:vertical {{ background: {Colors.INPUT_BORDER}; border-radius: 3px; min-height: 24px; }}"
             "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }"
         )
         nav_scroll.setWidget(nav_box)
@@ -189,65 +239,37 @@ class MainWindow(QMainWindow):
         # Everyone can change their own password
         pw_btn = QPushButton("🔑  My password")
         pw_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        pw_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: transparent;
-                color: {Colors.SIDEBAR_TEXT};
-                border: none;
-                border-top: 1px solid {Colors.SIDEBAR_HOVER};
-                padding: 14px 20px;
-                font-size: {Fonts.BODY}px;
-                text-align: left;
-            }}
-            QPushButton:hover {{
-                color: white;
-                background-color: {Colors.SIDEBAR_HOVER};
-            }}
-        """)
+        pw_btn.setStyleSheet(self._footer_button_css())
         pw_btn.clicked.connect(lambda: change_my_password(self))
-
-        # Notifications: a count of what is new, and the list
-        self.bell_btn = QPushButton("🔔  Notifications")
-        self.bell_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.bell_btn.setStyleSheet(pw_btn.styleSheet())
-        sidebar_layout.addWidget(self.bell_btn)
         sidebar_layout.addWidget(pw_btn)
 
         # Version, and a manual "check for updates"
         self.update_btn = QPushButton(f"⬆  Updates  ·  v{APP_VERSION}")
         self.update_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.update_btn.setStyleSheet(pw_btn.styleSheet())
+        self.update_btn.setStyleSheet(self._footer_button_css())
         self.update_btn.clicked.connect(lambda: self.updater.check(manual=True))
         sidebar_layout.addWidget(self.update_btn)
 
-        # Logout at bottom
-        logout_btn = QPushButton("🚪  Sign Out")
-        logout_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        logout_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: transparent;
-                color: {Colors.SIDEBAR_TEXT};
-                border: none;
-                border-top: 1px solid {Colors.SIDEBAR_HOVER};
-                padding: 16px 20px;
-                font-size: {Fonts.BODY}px;
-                text-align: left;
-            }}
-            QPushButton:hover {{
-                color: {Colors.RED};
-                background-color: {Colors.SIDEBAR_HOVER};
-            }}
-        """)
-        logout_btn.clicked.connect(self._handle_logout)
-        sidebar_layout.addWidget(logout_btn)
-
         main_layout.addWidget(self.sidebar)
 
-        # ── Content area ──────────────────────────────
+        # ── Navbar + content area ─────────────────────
         content_wrapper = QWidget()
         content_wrapper.setStyleSheet(f"background-color: {Colors.BG};")
         content_layout = QVBoxLayout(content_wrapper)
         content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(0)
+
+        # Navbar: page title on the left; notifications, who is signed in, sign out on the right
+        self.navbar = Navbar()
+        # Notifications: a count of what is new, and the list
+        self.bell_btn = Button("🔔  Notifications", "secondary", "sm", outline=True)
+        self.navbar.add_right(self.bell_btn)
+        self.role_badge = Badge(self._role_text(), "primary")
+        self.navbar.add_right(self.role_badge)
+        logout_btn = Button("🚪  Sign Out", "danger", "sm", outline=True)
+        logout_btn.clicked.connect(self._handle_logout)
+        self.navbar.add_right(logout_btn)
+        content_layout.addWidget(self.navbar)
 
         self.content_stack = QStackedWidget()
         self.update_banner = UpdateBanner()
@@ -293,6 +315,8 @@ class MainWindow(QMainWindow):
         self.content_stack.addWidget(self.orders_view)  # 15
         self.content_stack.addWidget(self.designs_view)  # 16
         self.content_stack.addWidget(self.letters_view)  # 17
+
+        self._decorate_empty_states()
 
         # Show Home at once; its numbers load right after the window is on screen
         self._switch_page(0, refresh=False)
@@ -410,15 +434,15 @@ class MainWindow(QMainWindow):
     def _section_heading(self, text: str) -> QLabel:
         heading = QLabel(text.upper())
         heading.setStyleSheet(
-            f"color: {Colors.SIDEBAR_TEXT}; font-size: 11px; font-weight: 600; letter-spacing: 1px;"
-            " padding: 14px 20px 4px 20px; background: transparent; opacity: 0.7;"
+            f"color: {Colors.SIDEBAR_HEADING}; font-size: 11px; font-weight: 700; letter-spacing: 1px;"
+            f" padding: {Spacing.MD}px 12px {Spacing.XS}px 12px; background: transparent;"
         )
         return heading
 
     def _create_nav_button(self, icon: str, label: str, index: int) -> QPushButton:
         btn = QPushButton(f"  {icon}   {label}")
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn.setFixedHeight(44)
+        btn.setFixedHeight(40)
         btn.setStyleSheet(self._nav_button_css(active=False))
         btn.clicked.connect(lambda _, idx=index: self._switch_page(idx))
         return btn
@@ -431,34 +455,73 @@ class MainWindow(QMainWindow):
                     color: {Colors.SIDEBAR_ACTIVE_TEXT};
                     border: none;
                     border-left: 3px solid {Colors.SIDEBAR_ACCENT};
-                    padding: 0 20px;
-                    font-size: 15px;
-                    font-weight: 600;
+                    border-radius: {Radius.MD}px;
+                    padding: 0 12px;
+                    font-size: {Fonts.BODY}px;
+                    font-weight: 700;
                     text-align: left;
                 }}
             """
-        else:
-            return f"""
-                QPushButton {{
-                    background-color: transparent;
-                    color: {Colors.SIDEBAR_TEXT};
-                    border: none;
-                    border-left: 3px solid transparent;
-                    padding: 0 20px;
-                    font-size: 15px;
-                    text-align: left;
-                }}
-                QPushButton:hover {{
-                    background-color: {Colors.SIDEBAR_HOVER};
-                    color: white;
-                }}
-            """
+        return f"""
+            QPushButton {{
+                background-color: transparent;
+                color: {Colors.SIDEBAR_TEXT};
+                border: none;
+                border-left: 3px solid transparent;
+                border-radius: {Radius.MD}px;
+                padding: 0 12px;
+                font-size: {Fonts.BODY}px;
+                text-align: left;
+            }}
+            QPushButton:hover {{
+                background-color: {Colors.SIDEBAR_HOVER};
+                color: {Colors.SIDEBAR_ACTIVE_TEXT};
+            }}
+        """
+
+    def _footer_button_css(self) -> str:
+        return f"""
+            QPushButton {{
+                background-color: transparent;
+                color: {Colors.SIDEBAR_TEXT};
+                border: none;
+                border-top: 1px solid {Colors.CARD_BORDER};
+                padding: 12px {Spacing.MD}px;
+                font-size: {Fonts.BODY_SM}px;
+                text-align: left;
+            }}
+            QPushButton:hover {{
+                color: {Colors.SIDEBAR_ACTIVE_TEXT};
+                background-color: {Colors.SIDEBAR_HOVER};
+            }}
+        """
+
+    def _role_text(self) -> str:
+        role = Session.get_role()
+        return str(getattr(role, "value", role) or "staff").title()
+
+    def _decorate_empty_states(self):
+        """Lay an empty state (carving pair, title, hint) over each list screen's table."""
+        by_index = {index: label for _, label, index in self.NAV_ITEMS}
+        for index in range(self.content_stack.count()):
+            spec = EMPTY_STATES.get(by_index.get(index, ""))
+            if spec is None:
+                continue
+            view = self.content_stack.widget(index)
+            table = getattr(view, "table", None)
+            if not isinstance(table, QTableWidget):
+                tables = view.findChildren(QTableWidget)
+                table = tables[0] if tables else None
+            if table is not None:
+                attach_empty_state(table, *spec)
 
     # ------------------------------------------------------------------
     # Page switching with active state + auto-refresh
     # ------------------------------------------------------------------
     def _switch_page(self, index: int, refresh: bool = True):
         self.content_stack.setCurrentIndex(index)
+        label = next((name for icon, name, i in self.NAV_ITEMS if i == index), "")
+        self.navbar.set_title(label)
 
         # Update active state on nav buttons
         for i, btn in self._nav_mapping.items():

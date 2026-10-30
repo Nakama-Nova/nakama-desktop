@@ -20,5 +20,5 @@ foreach ($f in "OFL-CormorantGaramond.txt", "OFL-Inter.txt") {
 # cannot see on its own.
 pyinstaller --noconfirm --clean --windowed --name VrikshaDesk `
     --collect-submodules keyring.backends --copy-metadata keyring `
-    --add-data "assets/fonts;assets/fonts" main.py
+    --add-data "assets/fonts;assets/fonts" --add-data "assets/images;assets/images" main.py
 if ($LASTEXITCODE -ne 0) { throw "pyinstaller failed" }

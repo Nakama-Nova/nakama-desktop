@@ -11,12 +11,13 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QHBoxLayout,
     QLabel,
-    QGridLayout,
     QPushButton,
 )
 from PyQt6.QtCore import Qt
 
-from ui.theme import Theme, Colors, Fonts
+from ui.theme import Theme, Colors, Fonts, Spacing
+from ui.components.bootstrap import Card, Grid12
+from ui.components.carvings import CarvingRow
 from ui.components.metric_card import MetricCard
 from services.report_service import ReportService
 from services.event_bus import EventBus, SALE_CREATED
@@ -36,8 +37,8 @@ class DashboardWindow(QWidget):
 
     def _build_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(32, 28, 32, 28)
-        layout.setSpacing(24)
+        layout.setContentsMargins(Spacing.XL, Spacing.LG + 4, Spacing.XL, Spacing.LG + 4)
+        layout.setSpacing(Spacing.LG)
 
         # ── Greeting ──────────────────────────────────
         self.greeting_lbl = QLabel("")
@@ -53,8 +54,9 @@ class DashboardWindow(QWidget):
         layout.addWidget(self.subtitle_lbl)
 
         # ── Metric Cards ──────────────────────────────
-        cards_grid = QGridLayout()
-        cards_grid.setSpacing(16)
+        # A 12-column grid: four cards across on a wide window, two by two on a
+        # medium one, stacked on a narrow one.
+        cards_grid = Grid12()
 
         self.card_sales = MetricCard("Today's Sales", "0", Colors.GREEN, icon="🧾")
         self.card_revenue = MetricCard(
@@ -63,15 +65,13 @@ class DashboardWindow(QWidget):
         self.card_low_stock = MetricCard("Low Stock Alert", "0", Colors.RED, icon="⚠️")
         self.card_wages = MetricCard("Wages Due", "₹0.00", Colors.PURPLE, icon="👷")
 
-        cards_grid.addWidget(self.card_sales, 0, 0)
-        cards_grid.addWidget(self.card_revenue, 0, 1)
-        cards_grid.addWidget(self.card_low_stock, 1, 0)
-        cards_grid.addWidget(self.card_wages, 1, 1)
+        for card in (self.card_sales, self.card_revenue, self.card_low_stock, self.card_wages):
+            cards_grid.add(card, lg=3, md=6, sm=12)
 
         self.metrics_container = QWidget()
         metrics_layout = QVBoxLayout(self.metrics_container)
         metrics_layout.setContentsMargins(0, 0, 0, 0)
-        metrics_layout.addLayout(cards_grid)
+        metrics_layout.addWidget(cards_grid)
         layout.addWidget(self.metrics_container)
 
         # ── Quick Actions ─────────────────────────────
@@ -82,29 +82,38 @@ class DashboardWindow(QWidget):
         self.qa_container = QWidget()
         qa_row = QHBoxLayout(self.qa_container)
         qa_row.setContentsMargins(0, 0, 0, 0)
-        qa_row.setSpacing(14)
+        qa_row.setSpacing(Spacing.MD)
 
         self.btn_new_bill = QPushButton("🧾  New Bill")
         self.btn_new_bill.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_new_bill.setStyleSheet(Theme.btn_quick_action(Colors.GREEN))
+        self.btn_new_bill.setStyleSheet(Theme.btn_quick_action("success"))
         self.btn_new_bill.clicked.connect(lambda: self._navigate("new_bill"))
 
         self.btn_view_stock = QPushButton("📦  View Stock")
         self.btn_view_stock.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_view_stock.setStyleSheet(Theme.btn_quick_action(Colors.BLUE))
+        self.btn_view_stock.setStyleSheet(Theme.btn_quick_action("primary"))
         self.btn_view_stock.clicked.connect(lambda: self._navigate("stock"))
 
         self.btn_add_buyer = QPushButton("👤  Add Buyer")
         self.btn_add_buyer.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_add_buyer.setStyleSheet(Theme.btn_quick_action(Colors.TEAL))
+        self.btn_add_buyer.setStyleSheet(Theme.btn_quick_action("secondary"))
         self.btn_add_buyer.clicked.connect(lambda: self._navigate("buyers"))
 
         qa_row.addWidget(self.btn_new_bill)
         qa_row.addWidget(self.btn_view_stock)
         qa_row.addWidget(self.btn_add_buyer)
+        qa_row.addStretch()
 
         layout.addWidget(self.qa_container)
-        layout.addStretch()
+
+        # ── Welcome card: the carving pair facing the god, from the website ──
+        self.welcome_card = Card()
+        self.welcome_card.body.setContentsMargins(Spacing.MD, Spacing.MD, Spacing.MD, Spacing.MD)
+        self.carvings = CarvingRow("temple")
+        self.carvings.setMinimumHeight(96)
+        self.carvings.setMaximumHeight(320)
+        self.welcome_card.body.addWidget(self.carvings, 1)
+        layout.addWidget(self.welcome_card, 1)
 
     def refresh_data(self):
         # Update greeting dynamically

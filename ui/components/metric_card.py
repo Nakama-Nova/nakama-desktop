@@ -1,12 +1,12 @@
 """
 ui/components/metric_card.py
 
-Reusable MetricCard widget for displaying KPI values.
-Redesigned: emoji icon support, softer shadows, hover effect.
+Reusable MetricCard widget for displaying KPI values: a Bootstrap-style card with a
+coloured accent on its left edge, a small title and a large value.
 """
 
 from PyQt6.QtWidgets import QFrame, QVBoxLayout, QLabel
-from ui.theme import Colors, Fonts
+from ui.theme import Colors, Fonts, Radius, Spacing
 
 
 class MetricCard(QFrame):
@@ -22,9 +22,9 @@ class MetricCard(QFrame):
         self.setStyleSheet(f"""
             MetricCard {{
                 background-color: {Colors.CARD_BG};
-                border-radius: 12px;
+                border-radius: {Radius.LG}px;
                 border: 1px solid {Colors.CARD_BORDER};
-                padding: 4px;
+                border-left: 4px solid {color};
             }}
             MetricCard:hover {{
                 border-color: {color};
@@ -36,16 +36,16 @@ class MetricCard(QFrame):
         """)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 18, 20, 18)
-        layout.setSpacing(6)
+        layout.setContentsMargins(Spacing.MD + 4, Spacing.MD, Spacing.MD, Spacing.MD)
+        layout.setSpacing(Spacing.XS)
 
         # Title row (with optional emoji icon)
         display_title = f"{icon}  {title}" if icon else title
         self.title_lbl = QLabel(display_title)
         self.title_lbl.setStyleSheet(f"""
-            font-size: {Fonts.BODY}px;
+            font-size: {Fonts.BODY_SM}px;
             color: {Colors.TEXT_SECONDARY};
-            font-weight: 500;
+            font-weight: 600;
         """)
 
         self.value_lbl = QLabel(str(value))
@@ -53,7 +53,6 @@ class MetricCard(QFrame):
             font-size: 28px;
             font-weight: bold;
             color: {color};
-            margin-top: 4px;
         """)
 
         layout.addWidget(self.title_lbl)
