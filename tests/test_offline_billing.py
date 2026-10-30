@@ -151,7 +151,8 @@ def test_a_finished_bill_does_not_donate_its_id_to_the_next_one(
         return {"invoice_number": "INV-1"}
 
     monkeypatch.setattr(SalesService, "create_sale", ok)
-    monkeypatch.setattr(SalesService, "fetch_and_save_pdf", lambda self, n: None)
+    monkeypatch.setattr(SalesService, "fetch_and_save_pdf", lambda self, n: "bill.pdf")
+    monkeypatch.setattr(SalesService, "open_pdf", staticmethod(lambda path: None))
     screen._generate_invoice()
     screen._cart = [CartItem(LINES[0]["item_id"], "Chair", 100.0, 0.0, 2)]
     screen.phone_input.setText("9876543210")

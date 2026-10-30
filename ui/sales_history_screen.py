@@ -19,7 +19,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QDate
 
 from ui.theme import Theme, Fonts
-from services.sales_service import SalesService
+from services.sales_service import BillPdfError, SalesService
 from services.event_bus import EventBus, SALE_CREATED
 
 
@@ -195,8 +195,7 @@ class SalesHistoryScreen(QWidget):
         if not inv_num:
             return
 
-        pdf_path = self._sales_service.fetch_and_save_pdf(inv_num)
-        if pdf_path:
-            self._sales_service.open_pdf(pdf_path)
-        else:
-            QMessageBox.critical(self, "Error", "Could not download the bill PDF.")
+        try:
+            self._sales_service.open_pdf(self._sales_service.fetch_and_save_pdf(inv_num))
+        except BillPdfError as exc:
+            QMessageBox.critical(self, "Bill PDF", f"Could not open the PDF for {inv_num}.\n\n{exc}")

@@ -308,6 +308,22 @@ class APIClient:
             raise self._fail(response)
         return response.json()
 
+    def _get_file(self, path: str, token: str) -> bytes:
+        """A file's bytes. Unlike _get_bytes, a failure is raised with the server's reason."""
+        response = _send(
+            "get",
+            f"{self._base_url}{path}",
+            headers=self._headers(token),
+            timeout=UPLOAD_TIMEOUT,
+        )
+        if response.status_code == 403:
+            raise ForbiddenError(
+                403, "Access Denied: You don't have permission for this action."
+            )
+        if response.status_code != 200:
+            raise self._fail(response, quiet=True)
+        return response.content
+
     def _get_bytes(self, path: str, token: str) -> bytes | None:
         response = _send(
             "get",
