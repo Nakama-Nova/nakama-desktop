@@ -27,6 +27,8 @@ STATUSES = [
     ("Building 3D model", "processing"),
     ("Ready to review", "review"),
     ("Carving", "carving"),
+    ("Finishing", "finishing"),
+    ("Painting", "painting"),
     ("Restored", "restored"),
     ("On hold", "on_hold"),
     ("Cancelled", "cancelled"),

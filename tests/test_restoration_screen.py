@@ -125,6 +125,24 @@ def test_project_dialog_collects_the_record_and_needs_a_title_and_temple(qapp, d
     assert editing.get_data()["lead_artisan_id"] == "u9" and editing.title.text() == "Dwarapalaka left"
 
 
+def test_a_piece_bought_in_has_no_temple_and_the_screen_still_works(qapp, fake, monkeypatch, dialogs):
+    from services.restoration_service import STATUS_WORDS
+
+    bought = {**P1, "id": "r3", "kind": "finishing", "temple_name": None, "location": None, "status": "painting"}
+    monkeypatch.setattr(RestorationService, "projects", lambda self, status=None: [bought])
+    monkeypatch.setattr(RestorationService, "project", lambda self, rid: {**DETAIL, **bought})
+    s = RestorationScreen()
+    s.refresh_data()
+    assert s.table.item(0, s.COL_TEMPLE).text() == "" and s.table.item(0, s.COL_STATUS).text() == "Painting"
+    select(s, 0)
+    assert s.heading.text() == "Dwarapalaka left"  # no stray "None"
+    assert STATUS_WORDS["finishing"] == "Finishing"
+    d = ProjectDialog(None, [], bought)
+    d._check()
+    assert d.result() != 0 or not dialogs  # saving without a temple is fine for a bought piece
+    assert d.get_data()["temple_name"] is None
+
+
 def test_scan_options_gcode_needs_a_width(qapp, dialogs):
     d = ScanOptionsDialog(None, "photos", ["a.jpg"] * 10)
     d.gcode.setChecked(True)

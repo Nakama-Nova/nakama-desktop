@@ -75,6 +75,7 @@ class ProjectDialog(QDialog):
     def __init__(self, parent, team: list[dict], project: dict | None = None):
         super().__init__(parent)
         p = project or {}
+        self._kind = p.get("kind", "temple")  # a piece bought in to be finished has no temple
         self.setWindowTitle("Edit restoration" if project else "New restoration")
         self.setMinimumWidth(480)
         self.setStyleSheet(f"background-color: {Colors.BG};")
@@ -100,15 +101,15 @@ class ProjectDialog(QDialog):
         form.addRow(_buttons(self))
 
     def _check(self):
-        if not self.title.text().strip() or not self.temple.text().strip():
-            QMessageBox.warning(self, "Check the form", "Enter a title and the temple's name.")
+        if not self.title.text().strip() or (self._kind == "temple" and not self.temple.text().strip()):
+            QMessageBox.warning(self, "Check the form", "Enter a title and the temple's name." if self._kind == "temple" else "Enter a title.")
         else:
             self.accept()
 
     def get_data(self) -> dict:
         return {
             "title": self.title.text().strip(),
-            "temple_name": self.temple.text().strip(),
+            "temple_name": self.temple.text().strip() or None,
             "location": self.location.text().strip() or None,
             "piece": self.piece.text().strip() or None,
             "condition_notes": self.notes.toPlainText().strip() or None,
@@ -326,7 +327,7 @@ class RestorationScreen(QWidget):
         self.table.blockSignals(True)
         self.table.setRowCount(len(self._rows))
         for r, p in enumerate(self._rows):
-            values = [p["title"], p["temple_name"], p.get("piece") or "", STATUS_WORDS.get(p["status"], p["status"]), p.get("lead_artisan_name") or "", str(p["scan_count"]), str(p["file_count"])]
+            values = [p["title"], p.get("temple_name") or "", p.get("piece") or "", STATUS_WORDS.get(p["status"], p["status"]), p.get("lead_artisan_name") or "", str(p["scan_count"]), str(p["file_count"])]
             for c, text in enumerate(values):
                 self.table.setItem(r, c, QTableWidgetItem(text))
             if p["id"] == keep:
@@ -348,7 +349,8 @@ class RestorationScreen(QWidget):
         d = self._svc.project(restoration_id)
         self._current = d
         self.detail.setVisible(True)
-        self.heading.setText(f"{d['title']}  ·  {d['temple_name']}" + (f", {d['location']}" if d.get("location") else ""))
+        place = ", ".join(x for x in (d.get("temple_name"), d.get("location")) if x)
+        self.heading.setText(f"{d['title']}  ·  {place}" if place else d["title"])
         self.notes.setText(d.get("condition_notes") or "No condition notes yet.")
         self.status.setCurrentIndex(max(0, self.status.findData(d["status"])))
         self.scans.setRowCount(len(d["scans"]))
