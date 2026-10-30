@@ -8,6 +8,7 @@ and product photos.
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
+    QApplication,
     QDialog,
     QDoubleSpinBox,
     QFileDialog,
@@ -24,6 +25,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
 )
 
+from services.stock_service import AssetUploadError
 from ui.theme import Colors, Theme
 
 MOVEMENT_WORDS = {
@@ -319,10 +321,25 @@ class PhotosDialog(QDialog):
             self, "Choose photos or a model", "",
             "Photos and models (*.jpg *.jpeg *.png *.webp *.glb)",
         )
-        for path in paths:
-            self._svc.upload_asset(self._item["id"], path)
+        failed = []
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            for path in paths:
+                try:
+                    self._svc.upload_asset(self._item["id"], path)
+                except AssetUploadError as exc:
+                    failed.append(str(exc))
+        finally:
+            QApplication.restoreOverrideCursor()
         if paths:
             self.reload()
+        if failed:
+            done = len(paths) - len(failed)
+            QMessageBox.warning(
+                self,
+                "Some files were not added",
+                (f"{done} of {len(paths)} added.\n\n" if done else "") + "\n".join(failed),
+            )
 
     def _delete(self):
         i = self.table.currentRow()
