@@ -37,6 +37,7 @@ from services.inventory_service import InventoryService
 from services.money_service import rupees
 from services.orders_service import (
     NEXT_STEP,
+    BILLABLE,
     OPEN,
     SOURCE_WORDS,
     STATUS_WORDS,
@@ -47,6 +48,8 @@ from services.orders_service import (
     items_summary,
 )
 from services import pricing
+from services.api_client import APIError
+from services.sales_service import BillPdfError, SalesService
 from services.session import Session
 from ui.errors import handle_permissions
 from ui.expenses_screen import METHODS, date_edit, dialog_buttons, iso, money_spin
@@ -431,10 +434,11 @@ class OrdersScreen(QWidget):
         self.edit_btn = QPushButton("✏️  Edit")
         self.cancel_btn = QPushButton("Cancel order")
         self.letter_btn = QPushButton("✉️  Confirmation letter")
-        for b, slot in ((self.pay_btn, self._pay), (self.letter_btn, self._letter), (self.edit_btn, self._edit), (self.cancel_btn, self._cancel)):
+        self.bill_btn = QPushButton("🧾  Create bill")
+        for b, slot in ((self.pay_btn, self._pay), (self.bill_btn, self._bill), (self.letter_btn, self._letter), (self.edit_btn, self._edit), (self.cancel_btn, self._cancel)):
             b.setStyleSheet(Theme.btn_secondary())
             b.clicked.connect(lambda _c=False, s=slot: s())
-        for b in (self.next_btn, self.pay_btn, self.letter_btn, self.edit_btn, self.cancel_btn):
+        for b in (self.next_btn, self.pay_btn, self.bill_btn, self.letter_btn, self.edit_btn, self.cancel_btn):
             actions.addWidget(b)
         actions.addStretch()
         d.addLayout(actions)
@@ -505,7 +509,8 @@ class OrdersScreen(QWidget):
         self._current = o
         self.detail.setVisible(True)
         kind = f"{SOURCE_WORDS.get(o.get('source'), 'Shop')} {TYPE_WORDS.get(o['order_type'], o['order_type']).lower()} order"
-        self.heading.setText(f"{o['order_number']}  ·  {STATUS_WORDS.get(o['status'], o['status'])}  ·  {kind}")
+        billed = o.get("invoice_number")
+        self.heading.setText(f"{o['order_number']}  ·  {STATUS_WORDS.get(o['status'], o['status'])}  ·  {kind}" + (f"  ·  Bill {billed}" if billed else ""))
         who = o.get("customer_name") or "Walk-in customer"
         if o.get("customer_phone"):
             who += f"  ·  {o['customer_phone']}"
@@ -527,8 +532,10 @@ class OrdersScreen(QWidget):
         step = NEXT_STEP.get(o["status"])
         self.next_btn.setVisible(bool(step) and self.can_manage)
         self.next_btn.setText(step[1] if step else "")
-        self.edit_btn.setVisible(o["status"] in OPEN and self.can_manage)
-        self.cancel_btn.setVisible(o["status"] in OPEN and self.can_manage)
+        self.edit_btn.setVisible(o["status"] in OPEN and self.can_manage and not billed)  # a billed order's amount is fixed
+        self.cancel_btn.setVisible(o["status"] in OPEN and self.can_manage and not billed)
+        self.bill_btn.setVisible(bool(billed) or o["status"] in BILLABLE)
+        self.bill_btn.setText("🧾  Open bill" if billed else "🧾  Create bill")
         self.pay_btn.setVisible(o["status"] != "cancelled")
         self.letter_btn.setVisible(o["status"] != "cancelled")
         self.pay_btn.setEnabled(not (float(o["balance_due"]) <= 0 < amount_of(o)))  # nothing left to collect
@@ -587,6 +594,57 @@ class OrdersScreen(QWidget):
         if d.exec() == QDialog.DialogCode.Accepted:
             self._svc.add_payment(o["id"], d.get_data())
             self.refresh_data()
+
+    @handle_permissions
+    def _bill(self):
+        """Make the order's bill (once) and open its PDF; opening it again is the same button."""
+        o = self._current
+        if not o:
+            return
+        invoice = o.get("invoice_number")
+        if not invoice:
+            ask = QMessageBox.question(
+                self,
+                "Create the bill",
+                f"Make the bill for {o['order_number']}: {rupees(amount_of(o))}?\n\n"
+                "Stock is taken off for catalogue pieces, and what the customer has already paid "
+                f"({rupees(o['advance_paid'])}) is carried onto the bill. The amount can no longer be "
+                "changed afterwards.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            if ask != QMessageBox.StandardButton.Yes:
+                return
+            sale = self._make_bill(o)
+            if sale is None:
+                return
+            invoice = sale["invoice_number"]
+            self.refresh_data()
+        self._show_bill(invoice)
+
+    def _make_bill(self, o: dict) -> dict | None:
+        """The bill, or None with the reason shown. Offers to go ahead when stock is short."""
+        try:
+            return self._svc.invoice(o["id"])
+        except APIError as exc:
+            if exc.status_code == 400 and "stock" in str(exc).lower():
+                again = QMessageBox.question(
+                    self,
+                    "Not enough in stock",
+                    f"{exc}\n\nBill it anyway? Use this when the pieces have already left the workshop; "
+                    "the stock count will go below zero until it is corrected.",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                )
+                if again == QMessageBox.StandardButton.Yes:
+                    return self._svc.invoice(o["id"], allow_negative_stock=True)
+                return None
+            QMessageBox.warning(self, "The bill was not made", str(exc))
+            return None
+
+    def _show_bill(self, invoice_number: str):
+        try:
+            SalesService.open_pdf(SalesService().fetch_and_save_pdf(invoice_number))
+        except BillPdfError as exc:
+            QMessageBox.warning(self, "Bill made, PDF not shown", f"The bill {invoice_number} was made, but its PDF could not be opened.\n\n{exc}")
 
     @handle_permissions
     def _letter(self):

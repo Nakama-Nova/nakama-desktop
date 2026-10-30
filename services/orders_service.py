@@ -18,6 +18,8 @@ STATUSES = [
 ]
 STATUS_WORDS = {value: label for label, value in STATUSES}
 OPEN = ("draft", "confirmed", "in_production", "ready")
+# an order can be billed from the moment it is confirmed with the customer
+BILLABLE = ("confirmed", "in_production", "ready", "delivered")
 # the one forward step from each stage: (next status, button label)
 NEXT_STEP = {
     "draft": ("confirmed", "✅  Confirm order"),
@@ -66,6 +68,16 @@ class OrdersService:
 
     def add_payment(self, order_id: str, data: dict) -> dict:
         return self._api._post(f"/orders/{order_id}/payments", self._t(), json=data)
+
+    def invoice(self, order_id: str, allow_negative_stock: bool = False) -> dict:
+        """Make the bill for an order (or get the one it already has). Raises APIError with
+        the server's reason, which the screen shows; nothing is popped up from here."""
+        return self._api._post(
+            f"/orders/{order_id}/invoice",
+            self._t(),
+            json={"allow_negative_stock": allow_negative_stock},
+            quiet=True,
+        )
 
     def update(self, order_id: str, data: dict) -> dict:
         return self._api._patch(f"/orders/{order_id}", self._t(), json=data)
