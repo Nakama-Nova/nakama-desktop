@@ -48,7 +48,7 @@ def main():
 
     app = QApplication(sys.argv)
     load_brand_fonts()
-    app.setStyleSheet(Theme.global_stylesheet())
+    Theme.install(app)
 
     # An expired login is kept only when the server is down: the counter still bills
     # offline, and the server turns the stale token away once it is reachable.

@@ -1,27 +1,34 @@
 """
 ui/login_window.py
 
-Branded login screen — centered, styled, with inline error feedback.
+Branded login screen: a split layout with the Vriksha logo and a pair of carvings
+facing a god sculpture on the left, and a Bootstrap-style sign-in card on the right.
+Inline error feedback.
 """
 
 import requests
 from PyQt6.QtWidgets import (
-    QWidget,
+    QFrame,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
     QPushButton,
-    QVBoxLayout,
-    QSpacerItem,
     QSizePolicy,
+    QVBoxLayout,
+    QWidget,
 )
-from PyQt6.QtCore import Qt
-# No QtGui imports needed here
+from PyQt6.QtCore import QSize, Qt
 
-from ui.theme import Theme, Colors, Fonts
-import requests
+from ui.assets import logo_path, scaled_pixmap
+from ui.components.bootstrap import Alert, Card
+from ui.components.carvings import CarvingRow
+from ui.theme import Theme, Colors, Fonts, Spacing
 
 from services.api_client import BASE_URL, APIError, insecure_remote
 from services.auth_service import AuthService
+
+LOGO_SIZE = QSize(120, 162)  # the logo is 3:4
+FORM_MAX_WIDTH = 420
 
 
 class LoginWindow(QWidget):
@@ -31,91 +38,107 @@ class LoginWindow(QWidget):
         self._auth = AuthService()
 
         self.setWindowTitle("Vriksha Studio — Staff sign in")
-        self.setFixedSize(420, 520)
-        self.setStyleSheet(f"""
-            QWidget {{
-                background-color: {Colors.BG};
-                font-family: '{Fonts.FAMILY}';
-            }}
-        """)
+        self.setObjectName("login")
+        self.setStyleSheet(f"QWidget#login {{ background-color: {Colors.CARD_BG}; }}")
 
-        # Center on screen
+        # 1000x640 is comfortable; a small screen gets all it has. Everything inside
+        # scales with the window, so 1366x768 up to 1920x1080 (and high-DPI) all fit.
         screen = self.screen().availableGeometry()
-        x = (screen.width() - 420) // 2
-        y = (screen.height() - 520) // 2
-        self.move(x, y)
+        width, height = min(1000, screen.width()), min(640, screen.height())
+        self.setMinimumSize(min(820, screen.width()), min(560, screen.height()))
+        self.resize(width, height)
+        self.move(screen.x() + (screen.width() - width) // 2, screen.y() + (screen.height() - height) // 2)
 
         self._build_ui()
 
     def _build_ui(self):
-        root = QVBoxLayout(self)
-        root.setContentsMargins(40, 40, 40, 40)
+        root = QHBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
+        root.addWidget(self._build_brand_panel(), 5)
+        root.addWidget(self._build_form_panel(), 4)
 
-        # ── Brand ─────────────────────────────────────
-        root.addSpacerItem(
-            QSpacerItem(0, 20, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
+    # ── Left: logo and carvings ───────────────────────
+    def _build_brand_panel(self) -> QFrame:
+        panel = QFrame()
+        panel.setObjectName("brandPanel")
+        panel.setStyleSheet(
+            "QFrame#brandPanel { background: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
+            f" stop:0 {Colors.BG}, stop:1 #F1E2C3); border: none;"
+            f" border-right: 1px solid {Colors.CARD_BORDER}; }}"
+            "QFrame#brandPanel QLabel { background: transparent; border: none; }"
         )
+        col = QVBoxLayout(panel)
+        col.setContentsMargins(Spacing.XL, Spacing.XL, Spacing.XL, Spacing.LG)
+        col.setSpacing(Spacing.SM)
+
+        self.logo_lbl = QLabel()
+        self.logo_lbl.setFixedHeight(LOGO_SIZE.height())
+        self.logo_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        logo = scaled_pixmap(logo_path(), LOGO_SIZE.height(), False, self.devicePixelRatioF())
+        if not logo.isNull():
+            self.logo_lbl.setPixmap(logo)
+        col.addWidget(self.logo_lbl)
+
+        tagline = QLabel("Wood furniture and temple carvings")
+        tagline.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        tagline.setStyleSheet(
+            f"font-family: '{Fonts.HEADING_FAMILY}', Georgia, serif; font-size: 22px;"
+            f" font-weight: 600; color: {Colors.BRAND_BROWN};"
+        )
+        col.addWidget(tagline)
+
+        # The painted pair faces the god between them; it takes the room that is left.
+        self.carvings = CarvingRow("temple")
+        self.carvings.setMinimumHeight(120)
+        self.carvings.setMaximumHeight(520)
+        col.addWidget(self.carvings, 1)
+        return panel
+
+    # ── Right: the sign-in card ───────────────────────
+    def _build_form_panel(self) -> QWidget:
+        panel = QWidget()
+        outer = QVBoxLayout(panel)
+        outer.setContentsMargins(Spacing.XL, Spacing.XL, Spacing.XL, Spacing.XL)
+        outer.addStretch(1)
+
+        column = QWidget()
+        column.setMaximumWidth(FORM_MAX_WIDTH)
+        column.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+        col = QVBoxLayout(column)
+        col.setContentsMargins(0, 0, 0, 0)
+        col.setSpacing(Spacing.MD)
 
         brand = QLabel("Vriksha Studio")
-        brand.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        brand.setStyleSheet(f"""
-            font-family: '{Fonts.HEADING_FAMILY}', Georgia, serif;
-            font-size: 40px;
-            font-weight: bold;
-            color: {Colors.BRAND_BROWN};
-            margin-bottom: 8px;
-        """)
-        root.addWidget(brand)
+        brand.setStyleSheet(
+            f"font-family: '{Fonts.HEADING_FAMILY}', Georgia, serif; font-size: 36px;"
+            f" font-weight: bold; color: {Colors.BRAND_BROWN};"
+        )
+        col.addWidget(brand)
 
         tagline = QLabel("Staff sign in")
-        tagline.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        tagline.setStyleSheet(f"""
-            font-size: {Fonts.BODY}px;
-            color: {Colors.TEXT_SECONDARY};
-            margin-bottom: 32px;
-        """)
-        root.addWidget(tagline)
+        tagline.setStyleSheet(f"font-size: {Fonts.BODY}px; color: {Colors.TEXT_SECONDARY};")
+        col.addWidget(tagline)
 
         if insecure_remote(BASE_URL):
-            warn = QLabel(
+            warn = Alert(
                 "⚠ This server address is not encrypted (http://). Passwords and bills could be seen on "
-                "the network. Ask for an https:// address."
+                "the network. Ask for an https:// address.",
+                "danger",
             )
-            warn.setWordWrap(True)
-            warn.setStyleSheet(f"""
-                color: {Colors.RED};
-                background-color: {Colors.ERROR_BG};
-                border-radius: 6px;
-                padding: 8px;
-                font-size: {Fonts.BODY_SM}px;
-            """)
-            root.addWidget(warn)
-            root.addSpacing(12)
+            col.addWidget(warn)
 
-        # ── Form Card ─────────────────────────────────
-        card = QWidget()
-        card.setStyleSheet(f"""
-            QWidget {{
-                background-color: {Colors.CARD_BG};
-                border-radius: 12px;
-                border: 1px solid {Colors.CARD_BORDER};
-            }}
-            QLabel {{
-                border: none;
-                background: transparent;
-            }}
-        """)
-        card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(28, 28, 28, 28)
-        card_layout.setSpacing(16)
+        # ── Form card ─────────────────────────────────
+        card = Card()
+        card.body.setContentsMargins(Spacing.LG, Spacing.LG, Spacing.LG, Spacing.LG)
+        card.body.setSpacing(Spacing.MD)
 
         # Username
         lbl_user = QLabel("Username")
         lbl_user.setStyleSheet(Theme.label())
         self.username = QLineEdit()
         self.username.setPlaceholderText("Enter your username")
-        self.username.setStyleSheet(self._input_css())
+        self.username.setStyleSheet(Theme.input_style())
 
         # Password
         lbl_pass = QLabel("Password")
@@ -123,70 +146,36 @@ class LoginWindow(QWidget):
         self.password = QLineEdit()
         self.password.setPlaceholderText("Enter your password")
         self.password.setEchoMode(QLineEdit.EchoMode.Password)
-        self.password.setStyleSheet(self._input_css())
+        self.password.setStyleSheet(Theme.input_style())
 
         # Error label (hidden by default)
-        self.error_lbl = QLabel("")
+        self.error_lbl = Alert("", "danger")
         self.error_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.error_lbl.setStyleSheet(f"""
-            color: {Colors.RED};
-            font-size: {Fonts.BODY_SM}px;
-            padding: 8px;
-            background-color: {Colors.ERROR_BG};
-            border-radius: 6px;
-        """)
         self.error_lbl.hide()
 
         # Sign In button
         self.button = QPushButton("Sign In")
         self.button.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.button.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {Colors.BRAND_BROWN};
-                color: white;
-                border: none;
-                border-radius: 10px;
-                padding: 14px;
-                font-size: 15px;
-                font-weight: bold;
-            }}
-            QPushButton:hover {{
-                background-color: #6E3A12;
-            }}
-            QPushButton:disabled {{
-                background-color: {Colors.TEXT_MUTED};
-            }}
-        """)
+        self.button.setStyleSheet(Theme.btn("primary", "lg"))
         self.button.clicked.connect(self.handle_login)
         self.password.returnPressed.connect(self.handle_login)
 
-        card_layout.addWidget(lbl_user)
-        card_layout.addWidget(self.username)
-        card_layout.addWidget(lbl_pass)
-        card_layout.addWidget(self.password)
-        card_layout.addWidget(self.error_lbl)
-        card_layout.addWidget(self.button)
+        card.body.addWidget(lbl_user)
+        card.body.addWidget(self.username)
+        card.body.addWidget(lbl_pass)
+        card.body.addWidget(self.password)
+        card.body.addWidget(self.error_lbl)
+        card.body.addWidget(self.button)
 
-        root.addWidget(card)
+        col.addWidget(card)
 
-        root.addSpacerItem(
-            QSpacerItem(0, 20, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
-        )
-
-    def _input_css(self) -> str:
-        return f"""
-            QLineEdit {{
-                border: 1.5px solid {Colors.INPUT_BORDER};
-                border-radius: 8px;
-                padding: 12px 14px;
-                font-size: {Fonts.BODY}px;
-                background: white;
-                color: {Colors.TEXT_PRIMARY};
-            }}
-            QLineEdit:focus {{
-                border-color: {Colors.INPUT_FOCUS};
-            }}
-        """
+        row = QHBoxLayout()
+        row.addStretch(1)
+        row.addWidget(column, 100)
+        row.addStretch(1)
+        outer.addLayout(row)
+        outer.addStretch(1)
+        return panel
 
     def handle_login(self):
         username = self.username.text().strip()
