@@ -15,9 +15,10 @@ look up without changes. New code can use the generic helpers: Theme.btn(),
 Theme.badge(), Theme.alert(), Theme.card().
 """
 
-import atexit
+from functools import lru_cache
 
 
+@lru_cache(maxsize=None)
 def mix(color: str, other: str, weight: float) -> str:
     """Blend `color` towards `other` (0 = color, 1 = other), like Sass mix()."""
     a = [int(color[i : i + 2], 16) for i in (1, 3, 5)]
@@ -229,25 +230,21 @@ class Theme:
     @staticmethod
     def install(app) -> None:
         """Apply the global stylesheet and the behaviours QSS cannot express: the soft
-        focus ring on form controls and striped rows on every table."""
+        focus ring on form controls."""
         from ui.components.bootstrap import BootstrapBehaviour
 
         if getattr(app, "_bootstrap_behaviour", None) is not None:
             return  # once is enough: re-applying a style sheet re-polishes every open window
         app.setStyleSheet(Theme.global_stylesheet())
-        behaviour = BootstrapBehaviour(app)
-        app._bootstrap_behaviour = behaviour
-        app.installEventFilter(behaviour)
-        # Windows still open at exit are torn down after Python is done with us: stop
-        # filtering their events first.
-        def stop_filtering():
-            try:
-                app.removeEventFilter(behaviour)
-            except RuntimeError:  # the application is already gone
-                pass
+        app._bootstrap_behaviour = BootstrapBehaviour(app)
 
-        app.aboutToQuit.connect(stop_filtering)
-        atexit.register(stop_filtering)
+    @staticmethod
+    def stripe_tables(widget) -> None:
+        """Turn on striped rows for every table under `widget` (a style sheet cannot)."""
+        from PyQt6.QtWidgets import QTableWidget
+
+        for table in widget.findChildren(QTableWidget):
+            table.setAlternatingRowColors(True)
 
     # ------------------------------------------------------------------
     # Content area background
@@ -305,6 +302,7 @@ class Theme:
     # Buttons (Bootstrap .btn, .btn-{role}, .btn-outline-{role}, .btn-sm/.btn-lg)
     # ------------------------------------------------------------------
     @staticmethod
+    @lru_cache(maxsize=None)  # a table of 500 rows asks for the same button style 2,500 times
     def btn(role: str = "primary", size: str = "md", outline: bool = False) -> str:
         """Style sheet for a QPushButton: `role` is a Bootstrap role, `size` is sm/md/lg."""
         base, on_base = _role(role)
@@ -423,6 +421,7 @@ class Theme:
     # Badges and alerts (Bootstrap .badge, .alert)
     # ------------------------------------------------------------------
     @staticmethod
+    @lru_cache(maxsize=None)
     def badge(role: str = "primary", pill: bool = True) -> str:
         base, on_base = _role(role)
         radius = 10 if pill else Radius.SM
@@ -436,6 +435,7 @@ class Theme:
         """
 
     @staticmethod
+    @lru_cache(maxsize=None)
     def alert(role: str = "primary") -> str:
         base, _ = _role(role)
         if role in ("light",):

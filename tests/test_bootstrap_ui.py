@@ -101,9 +101,11 @@ def test_the_pair_shrinks_to_fit_a_narrow_row(qapp):
 def test_empty_state_shows_over_an_empty_table_only(qapp):
     table = QTableWidget(0, 2)
     table.resize(600, 500)
+    watcher = attach_empty_state(table, "No orders yet", "Orders appear here.")
+    assert watcher.state is None  # nothing is built until the table is shown
     table.show()
-    state = attach_empty_state(table, "No orders yet", "Orders appear here.")
     _settle()
+    state = watcher.state
     assert state.isVisible() and state.title_lbl.text() == "No orders yet"
 
     table.setRowCount(1)
@@ -114,6 +116,16 @@ def test_empty_state_shows_over_an_empty_table_only(qapp):
     table.setRowCount(0)
     _settle()
     assert state.isVisible()
+    table.close()
+
+
+def test_a_table_that_always_has_rows_never_builds_an_empty_state(qapp):
+    table = QTableWidget(1, 1)
+    table.setItem(0, 0, QTableWidgetItem("x"))
+    watcher = attach_empty_state(table, "None", "")
+    table.show()
+    _settle()
+    assert watcher.state is None
     table.close()
 
 
