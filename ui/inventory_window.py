@@ -3,7 +3,7 @@ ui/inventory_window.py
 
 Stock screen: every product with its stock level, a search box, and (for owner
 and manager) the full product form, stock changes with a reason, the stock
-history, photos for the website, and categories and brands.
+history, photos for the website, and categories.
 """
 
 from PyQt6.QtCore import Qt
@@ -82,9 +82,6 @@ class InventoryWindow(QWidget):
 
         self.categories_btn = head_button(
             "🏷️  Categories", Theme.btn_secondary(), self._categories, self.can_edit
-        )
-        self.brands_btn = head_button(
-            "🏭  Brands", Theme.btn_secondary(), self._brands, self.can_edit
         )
         head_button("🔄  Refresh", Theme.btn_secondary(), self.refresh_async)
         self.add_btn = head_button(
@@ -259,12 +256,11 @@ class InventoryWindow(QWidget):
         view_3d(self, item)
 
     def _lookups(self):
-        return self._stock.rows("categories"), self._stock.rows("brands")
+        return self._stock.rows("categories")
 
     @handle_permissions
     def _add_item(self, _checked=False):
-        cats, brands = self._lookups()
-        dialog = ItemDialog(self, None, cats, brands, default_type=self.type_filter.currentData())
+        dialog = ItemDialog(self, None, self._lookups(), default_type=self.type_filter.currentData())
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         data = dialog.get_data()
@@ -284,8 +280,7 @@ class InventoryWindow(QWidget):
 
     @handle_permissions
     def _edit_item(self, item: dict):
-        cats, brands = self._lookups()
-        dialog = ItemDialog(self, item, cats, brands)
+        dialog = ItemDialog(self, item, self._lookups())
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         data = dialog.get_data()
@@ -330,10 +325,6 @@ class InventoryWindow(QWidget):
         ManageRowsDialog(
             self, self._stock, "categories", "Categories", CATEGORY_FIELDS
         ).exec()
-
-    @handle_permissions
-    def _brands(self, _checked=False):
-        ManageRowsDialog(self, self._stock, "brands", "Brands", CATEGORY_FIELDS).exec()
 
     def _filter_table(self, text: str):
         """Live filter as the user types in the search box."""

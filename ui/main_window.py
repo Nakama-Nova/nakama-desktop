@@ -23,6 +23,7 @@ from PyQt6.QtWidgets import (
     QTableWidget,
 )
 from PyQt6.QtCore import QSize, Qt, QTimer, pyqtSignal
+from PyQt6.QtGui import QKeySequence, QShortcut
 from PyQt6.QtWidgets import QApplication
 
 from services import notifications_service as ns
@@ -50,6 +51,9 @@ from ui.restoration_screen import RestorationScreen
 from ui.orders_screen import OrdersScreen
 from ui.designs_screen import DesignsScreen
 from ui.letters_screen import LettersScreen
+from ui.places_screen import PlacesScreen
+from ui.machines_screen import MachinesScreen
+from ui.budgets_screen import BudgetsScreen
 from ui.notifier import Notifier
 from ui.workers import on_busy_changed, run_async
 from ui.updater import UpdateBanner, Updater
@@ -77,16 +81,19 @@ EMPTY_STATES = {
     "Buyers": ("No buyers yet", "Add a buyer to keep their name, phone and bills together.", "dark-horse"),
     "Letters": ("No letters yet", "Quotes and letters you issue will be listed here.", "pillar"),
     "Stock": ("Nothing in stock yet", "Add your first product to start keeping stock.", "temple"),
+    "Places": ("No stock counted at a place yet", "Move stock to a place, or receive a purchase there, and it will be listed here.", "horse"),
     "Materials": ("No materials yet", "Wood and other materials you add will be listed here.", "dark"),
     "Purchases": ("No purchases yet", "Record what you buy and it will show here.", "horse"),
     "3D Lab": ("No 3D models yet", "Scan a carving and its model will appear here.", "dark-horse"),
     "Restoration": ("No restoration jobs yet", "Temple and heritage work you take up will be tracked here.", "pillar"),
     "Designs": ("No designs yet", "Designs you save will be listed here.", "temple"),
+    "Machines and tools": ("No machines or tools yet", "Add a machine or tool to keep track of its service and who has it.", "pillar"),
     "Attendance": ("No attendance marked", "Mark who came in and it will be listed here.", "dark"),
     "Wages": ("No wages to show", "Wages due and paid will appear here.", "horse"),
     "Staff": ("No staff accounts yet", "People you add will be listed here.", "dark-horse"),
     "Expenses": ("No expenses yet", "Add an expense to see it here.", "pillar"),
     "Profit": ("No figures yet", "Profit shows once there are bills and expenses.", "temple"),
+    "Budgets": ("No budgets set yet", "The owner can set a monthly or yearly budget for machines and raw materials.", "horse"),
     "Reports": ("No report data yet", "Reports fill in as bills are saved.", "dark"),
 }
 
@@ -108,22 +115,25 @@ class MainWindow(QMainWindow):
         ("📦", "Stock", 2),
         ("🌳", "Materials", 8),
         ("🛒", "Purchases", 9),
+        ("📍", "Places", 18),
         ("🧊", "3D Lab", 7),
         ("🏛️", "Restoration", 14),
         ("🎨", "Designs", 16),
+        ("🛠️", "Machines and tools", 19),
         ("👷", "Attendance", 6),
         ("💰", "Wages", 11),
         ("👥", "Staff", 10),
         ("💸", "Expenses", 12),
         ("💹", "Profit", 13),
+        ("🎯", "Budgets", 20),
         ("📊", "Reports", 5),
     ]
     NAV_SECTIONS = {
         "Selling": ["New Bill", "Bill History", "Orders", "Buyers", "Letters"],
-        "Stock and buying": ["Stock", "Materials", "Purchases"],
-        "Workshop": ["3D Lab", "Restoration", "Designs"],
+        "Stock and buying": ["Stock", "Materials", "Purchases", "Places"],
+        "Workshop": ["3D Lab", "Restoration", "Designs", "Machines and tools"],
         "People and pay": ["Attendance", "Wages", "Staff"],
-        "Money": ["Expenses", "Profit", "Reports"],
+        "Money": ["Expenses", "Profit", "Budgets", "Reports"],
     }
 
     def __init__(self):
@@ -299,6 +309,9 @@ class MainWindow(QMainWindow):
         self.orders_view = OrdersScreen()
         self.designs_view = DesignsScreen()
         self.letters_view = LettersScreen()
+        self.places_view = PlacesScreen()
+        self.machines_view = MachinesScreen()
+        self.budgets_view = BudgetsScreen()
 
         self.content_stack.addWidget(self.dashboard_view)  # 0
         self.content_stack.addWidget(self.sales_view)  # 1
@@ -318,9 +331,13 @@ class MainWindow(QMainWindow):
         self.content_stack.addWidget(self.orders_view)  # 15
         self.content_stack.addWidget(self.designs_view)  # 16
         self.content_stack.addWidget(self.letters_view)  # 17
+        self.content_stack.addWidget(self.places_view)  # 18
+        self.content_stack.addWidget(self.machines_view)  # 19
+        self.content_stack.addWidget(self.budgets_view)  # 20
 
         Theme.stripe_tables(self)
         self._decorate_empty_states()
+        self._install_shortcuts()
 
         # Show Home at once; its numbers load right after the window is on screen
         self._switch_page(0, refresh=False)
@@ -448,11 +465,11 @@ class MainWindow(QMainWindow):
             if role == UserRole.SALES:
                 # Sales can sell and manage buyers, but not see reports, the Lab,
                 # or the buying side (materials and purchases)
-                if label not in ["Reports", "3D Lab", "Materials", "Purchases", "Staff", "Wages", "Expenses", "Profit", "Restoration", "Designs"]:
+                if label not in ["Reports", "3D Lab", "Materials", "Purchases", "Staff", "Wages", "Expenses", "Profit", "Restoration", "Designs", "Machines and tools", "Budgets"]:
                     allowed.append((icon, label, index))
             elif role == UserRole.ACHARI:
                 # Achari focuses on stock/manufacturing and the 3D Lab, no billing/reports
-                if label in ["Home", "Stock", "Attendance", "Wages", "3D Lab"]:
+                if label in ["Home", "Stock", "Attendance", "Wages", "3D Lab", "Machines and tools"]:
                     allowed.append((icon, label, index))
             elif role == UserRole.ARTISAN:
                 # Artisans: stock and the 3D Lab to look things up, their pay, and Restoration
@@ -569,6 +586,31 @@ class MainWindow(QMainWindow):
 
         if refresh:
             self._refresh_current()
+
+    def _install_shortcuts(self):
+        """F5 refreshes this screen, Ctrl+F jumps to its search box, Ctrl+1..9 open the first nine
+        sidebar entries (the ones this role can see, in the order shown)."""
+        keys = {"F5": self._refresh_current, "Ctrl+F": self._focus_search}
+        for n in range(1, 10):
+            keys[f"Ctrl+{n}"] = lambda n=n: self._go_to_nth(n)
+        self._shortcuts = []
+        for key, slot in keys.items():
+            sc = QShortcut(QKeySequence(key), self)
+            sc.activated.connect(slot)
+            self._shortcuts.append(sc)
+
+    def _go_to_nth(self, n: int):
+        if n <= len(self._nav_buttons):
+            self._nav_buttons[n - 1].click()
+
+    def _focus_search(self):
+        from PyQt6.QtWidgets import QLineEdit
+
+        for box in self.content_stack.currentWidget().findChildren(QLineEdit):
+            if box.isVisibleTo(self) and box.isEnabled() and not box.isReadOnly():
+                box.setFocus()
+                box.selectAll()
+                return
 
     def _refresh_current(self):
         # Auto-refresh data for the visible screen

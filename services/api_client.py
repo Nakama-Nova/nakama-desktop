@@ -80,7 +80,14 @@ def _send(method: str, url: str, fast_fail: bool = True, **kwargs):
     if fast_fail and time.monotonic() < _down_until:
         raise requests.ConnectionError("The server could not be reached a moment ago")
     try:
-        response = getattr(_http, method)(url, **kwargs)
+        try:
+            response = getattr(_http, method)(url, **kwargs)
+        except requests.ConnectionError as exc:
+            if method != "get" or _could_not_connect(exc):
+                raise
+            # A reading call whose link dropped mid-way (often a kept-alive connection the
+            # server had closed) is safe to repeat once. Writes never are.
+            response = getattr(_http, method)(url, **kwargs)
     except requests.ConnectionError as exc:
         if _could_not_connect(exc):
             _down_until = time.monotonic() + OFFLINE_PAUSE

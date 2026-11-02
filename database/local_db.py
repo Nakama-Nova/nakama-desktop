@@ -5,8 +5,12 @@ SQLite connection manager for offline caching and outbox queue.
 Uses Python's built-in sqlite3 — zero additional dependencies.
 """
 
+import logging
 import sqlite3
+import time
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 DB_PATH = Path("data") / "nakama_local.db"
 
@@ -24,11 +28,25 @@ class LocalDB:
         if self._conn is None:
             # One connection is used by one job at a time (the sync cycle runs on a background
             # thread, never twice at once), so it may be created on another thread than it is used on.
-            self._conn = sqlite3.connect(str(self._db_path), check_same_thread=False)
-            self._conn.row_factory = sqlite3.Row
-            self._conn.execute("PRAGMA journal_mode=WAL;")
-            self.initialize_tables()
+            try:
+                self._open()
+            except sqlite3.DatabaseError:
+                # Not a database (damaged file): keep it aside for recovery, never delete it,
+                # and start a fresh one so the app still opens. A full pull refills the data.
+                self.close()
+                aside = self._db_path.with_name(f"{self._db_path.stem}.damaged-{int(time.time())}{self._db_path.suffix}")
+                self._db_path.replace(aside)
+                for ext in ("-wal", "-shm"):
+                    Path(str(self._db_path) + ext).unlink(missing_ok=True)
+                logger.error("local database was damaged; kept as %s and started a new one", aside)
+                self._open()
         return self._conn
+
+    def _open(self) -> None:
+        self._conn = sqlite3.connect(str(self._db_path), check_same_thread=False)
+        self._conn.row_factory = sqlite3.Row
+        self._conn.execute("PRAGMA journal_mode=WAL;")
+        self.initialize_tables()
 
     def initialize_tables(self) -> None:
         """Create tables if they don't exist yet."""
