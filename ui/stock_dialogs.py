@@ -2,7 +2,7 @@
 ui/stock_dialogs.py
 
 Small dialogs used by the stock screens: change stock with a reason, the stock
-ledger, a generic "manage a short list" dialog (categories, brands, suppliers)
+ledger, a generic "manage a short list" dialog (categories, suppliers)
 and product photos.
 """
 

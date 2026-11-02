@@ -1,7 +1,7 @@
 """
 services/stock_service.py
 
-Everything the stock screens need beyond plain items: categories and brands,
+Everything the stock screens need beyond plain items: categories,
 suppliers, raw materials, purchases, manual stock changes, the stock ledger and
 product photos. Thin wrappers over the backend, owner/manager only (the server
 enforces it).
@@ -51,9 +51,9 @@ class StockService:
     def _t(self) -> str:
         return Session.get_token()
 
-    # ----- categories, brands, suppliers (same shape: list / save / delete)
+    # ----- categories, suppliers (same shape: list / save / delete)
     def rows(self, kind: str) -> list:
-        """kind: 'categories' | 'brands' | 'suppliers'"""
+        """kind: 'categories' | 'suppliers'"""
         return self._api._get(f"/{kind}/", self._t()) or []
 
     def save_row(self, kind: str, data: dict, row_id: str | None = None) -> dict:
@@ -115,8 +115,10 @@ class StockService:
     def create_purchase(self, data: dict) -> dict:
         return self._api._post("/purchases/", self._t(), json=data)
 
-    def confirm_purchase(self, purchase_id: str) -> dict:
-        return self._api._patch(f"/purchases/{purchase_id}/confirm", self._t())
+    def confirm_purchase(self, purchase_id: str, location_id: str | None = None) -> dict:
+        """Goods received. location_id is the place that received them (None = not placed yet)."""
+        suffix = f"?location_id={location_id}" if location_id else ""
+        return self._api._patch(f"/purchases/{purchase_id}/confirm{suffix}", self._t())
 
     # ----- product photos and models (what the website shows)
     def assets(self, item_id: str) -> list:

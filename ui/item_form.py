@@ -34,7 +34,7 @@ def _label(text: str) -> QLabel:
 
 
 class ItemDialog(QDialog):
-    def __init__(self, parent=None, item=None, categories=None, brands=None, default_type=None):
+    def __init__(self, parent=None, item=None, categories=None, default_type=None):
         super().__init__(parent)
         self._editing = item is not None
         self.setWindowTitle("Edit product" if item else "Add product")
@@ -70,7 +70,6 @@ class ItemDialog(QDialog):
         self.description.setFixedHeight(70)
         self.description.setStyleSheet(Theme.input_style())
         self.category = self._combo(categories, item.get("category_id"))
-        self.brand = self._combo(brands, item.get("brand_id"))
         self.unit = self._line(item.get("unit") or "pcs", "pcs")
         self.min_stock = QSpinBox()
         self.min_stock.setRange(0, 100000)
@@ -82,7 +81,6 @@ class ItemDialog(QDialog):
             ("Code (SKU)", self.sku),
             ("Description", self.description),
             ("Category", self.category),
-            ("Brand", self.brand),
             ("Unit", self.unit),
             ("Warn me below", self.min_stock),
         ]:
@@ -303,7 +301,6 @@ class ItemDialog(QDialog):
             "item_type": self.item_type.currentData(),
             "description": self.description.toPlainText().strip() or None,
             "category_id": self.category.currentData(),
-            "brand_id": self.brand.currentData(),
             "unit": self.unit.text().strip() or "pcs",
             "min_stock": self.min_stock.value(),
             "selling_price": self._net_saved,  # before GST: bills add the GST on top

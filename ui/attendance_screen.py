@@ -17,6 +17,7 @@ from PyQt6.QtWidgets import (
     QMessageBox,
 )
 from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QColor
 from datetime import datetime
 
 from ui.theme import Theme, Colors, Fonts
@@ -80,8 +81,8 @@ class AttendanceScreen(QWidget):
         # History Table
         layout.addWidget(QLabel("Recent Attendance History"))
         self.table = QTableWidget()
-        self.table.setColumnCount(6)
-        self.table.setHorizontalHeaderLabels(["Date", "User", "Check In", "Check Out", "Hours", "Wage"])
+        self.table.setColumnCount(7)
+        self.table.setHorizontalHeaderLabels(["Date", "User", "Check In", "Check Out", "Hours", "Wage", "Where"])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         layout.addWidget(self.table)
         # loaded when the screen is opened (the main window calls refresh_data), not
@@ -137,6 +138,7 @@ class AttendanceScreen(QWidget):
             self.table.setItem(i, 3, QTableWidgetItem(out_str))
             self.table.setItem(i, 4, QTableWidgetItem(hours))
             self.table.setItem(i, 5, QTableWidgetItem(f"₹{wage}"))
+            self.table.setItem(i, 6, self._where(r))
 
             # An open record belongs to one person: remember it per user, newest wins
             uid = str(r.get("user_id") or "")
@@ -147,6 +149,21 @@ class AttendanceScreen(QWidget):
 
         self._open_by_user = {uid: r["id"] for uid, r in open_records.items()}
         self._update_check_out_button()
+
+    @staticmethod
+    def _where(record: dict) -> QTableWidgetItem:
+        """Marked from a phone at a plant unit (on site), away from every unit (off site, for
+        the owner to review), or without a position (a check-in at the desk)."""
+        status = record.get("location_status")
+        if status == "off_site":
+            cell = QTableWidgetItem("⚠️ Off site")
+            cell.setToolTip("Marked from a phone that was outside every plant unit. The owner reviews these.")
+            cell.setForeground(QColor(Colors.DANGER))
+        elif status == "on_site":
+            cell = QTableWidgetItem("📍 On site")
+        else:
+            cell = QTableWidgetItem("-")
+        return cell
 
     def _selected_user_id(self) -> str | None:
         combo = getattr(self, "user_combo", None)

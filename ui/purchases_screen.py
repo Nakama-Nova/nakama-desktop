@@ -17,6 +17,7 @@ from PyQt6.QtWidgets import (
     QFormLayout,
     QHBoxLayout,
     QHeaderView,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QMessageBox,
@@ -28,6 +29,7 @@ from PyQt6.QtWidgets import (
 )
 
 from services.inventory_service import InventoryService
+from services.places_service import NOT_PLACED, PlacesService
 from services.stock_service import StockService
 from ui.errors import handle_permissions
 from ui.item_form import GST_CHOICES
@@ -317,9 +319,19 @@ class PurchasesScreen(QWidget):
             "Confirming adds these goods to stock. This cannot be undone. Continue?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
-        if ask == QMessageBox.StandardButton.Yes:
-            self._svc.confirm_purchase(p["id"])
-            self.refresh_data()
+        if ask != QMessageBox.StandardButton.Yes:
+            return
+        places = [pl for pl in PlacesService().places() if pl.get("is_active", True)]
+        location_id = None
+        if places:  # say where the goods went, so the stock counts at that place
+            names = [NOT_PLACED] + [pl["name"] for pl in places]
+            choice, ok = QInputDialog.getItem(self, "Where did they arrive?", "Received at:", names, 0, False)
+            if not ok:
+                return
+            if choice != NOT_PLACED:
+                location_id = str(places[names.index(choice) - 1]["id"])
+        self._svc.confirm_purchase(p["id"], location_id)
+        self.refresh_data()
 
     @handle_permissions
     def _suppliers_dialog(self, _checked=False):

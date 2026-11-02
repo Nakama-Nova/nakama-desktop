@@ -37,8 +37,13 @@ class StaffService:
         )
 
     def change_my_password(self, current: str, new: str) -> dict:
-        return self._api._post(
+        """The server ends every older sign-in when a password changes, and hands back a fresh
+        one: keep it, or the next call would sign this user out."""
+        result = self._api._post(
             "/auth/me/password",
             self._t(),
             json={"current_password": current, "new_password": new},
         )
+        if result and result.get("access_token"):
+            Session.set_token(result["access_token"])
+        return result
