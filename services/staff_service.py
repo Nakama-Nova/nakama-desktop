@@ -2,8 +2,8 @@
 services/staff_service.py
 
 Staff accounts: list, add, edit (including role and daily wage), switch on/off,
-reset a password, and change your own. Adding, editing and resetting are
-owner-only on the server.
+email someone a code to set their own password, and change your own. Adding, editing
+and emailing a code are owner-only on the server.
 """
 
 from services.api_client import APIClient
@@ -29,12 +29,9 @@ class StaffService:
     def update(self, user_id: str, data: dict) -> dict:
         return self._api._patch(f"/auth/users/{user_id}", self._t(), json=data)
 
-    def reset_password(self, user_id: str, new_password: str) -> dict:
-        return self._api._post(
-            f"/auth/users/{user_id}/reset-password",
-            self._t(),
-            json={"new_password": new_password},
-        )
+    def send_invite(self, user_id: str) -> dict:
+        """Email this person a code to set their own password (nobody else types or sees it)."""
+        return self._api._post(f"/auth/users/{user_id}/send-invite", self._t())
 
     def change_my_password(self, current: str, new: str) -> dict:
         """The server ends every older sign-in when a password changes, and hands back a fresh

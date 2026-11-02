@@ -15,6 +15,7 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QVBoxLayout,
     QPushButton,
+    QDialog,
     QStackedWidget,
     QLabel,
     QMessageBox,
@@ -691,6 +692,7 @@ class MainWindow(QMainWindow):
         self._sync_timer.stop()
         self.notifier.stop()
         Session.clear_token()
+        self._close_open_dialogs()
         QMessageBox.information(
             self,
             "Signed out",
@@ -703,6 +705,13 @@ class MainWindow(QMainWindow):
         self._login_window = LoginWindow()
         self._login_window.show()
         self.close()
+
+    @staticmethod
+    def _close_open_dialogs():
+        """A form left open must not stay on screen after the user is signed out."""
+        for w in QApplication.topLevelWidgets():
+            if isinstance(w, QDialog) and w.isVisible():
+                w.reject()
 
     def _flush_outbox(self):
         """Best effort: hand queued bills to the server under this user's own login
@@ -724,6 +733,7 @@ class MainWindow(QMainWindow):
         from services.auth_service import AuthService
 
         AuthService().logout()
+        self._close_open_dialogs()
         from ui.login_window import LoginWindow
 
         self._login_window = LoginWindow()

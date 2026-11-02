@@ -389,6 +389,26 @@ class APIClient:
             return None
         raise APIError(response.status_code, response.text)
 
+    def _anonymous_post(self, path: str, body: dict) -> dict:
+        """A call made before anyone is signed in (forgot password). Failures are raised as
+        APIError for the dialog to show next to the form, not through the global pop-up."""
+        response = _send(
+            "post", f"{self._base_url}{path}", fast_fail=False, json=body, timeout=LOGIN_TIMEOUT
+        )
+        if response.status_code != 200:
+            raise APIError(response.status_code, response.text)
+        return response.json()
+
+    def forgot_password(self, email: str) -> dict:
+        """Ask the server to email a code. It answers the same for any address."""
+        return self._anonymous_post("/auth/password/forgot", {"email": email})
+
+    def set_password_with_code(self, email: str, code: str, new_password: str) -> dict:
+        """Choose a new password with the emailed code (an invite or a reset)."""
+        return self._anonymous_post(
+            "/auth/password/set", {"email": email, "code": code, "new_password": new_password}
+        )
+
     # ------------------------------------------------------------------
     # Items  (ItemResponse fields: id, sku, name, selling_price,
     #         purchase_price, gst_percent, current_stock, min_stock, ...)

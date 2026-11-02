@@ -21,7 +21,7 @@ def fake(monkeypatch):
     monkeypatch.setattr(StaffService, "users", lambda self: [OLD, ASHA, ME])
     monkeypatch.setattr(StaffService, "update", lambda self, uid, data: calls.append(("update", uid, data)))
     monkeypatch.setattr(StaffService, "create", lambda self, data: calls.append(("create", data)))
-    monkeypatch.setattr(StaffService, "reset_password", lambda self, uid, pw: calls.append(("reset", uid, pw)))
+    monkeypatch.setattr(StaffService, "send_invite", lambda self, uid: calls.append(("invite", uid)))
     return calls
 
 
@@ -43,8 +43,8 @@ def test_lists_active_people_first_and_marks_you(qapp, fake):
 def test_you_cannot_switch_yourself_off(qapp, fake):
     s = StaffScreen()
     s.refresh_data()
-    assert buttons(s, 1) == ["✏️ Edit", "🔑 Password"]  # row 1 is you
-    assert buttons(s, 0) == ["✏️ Edit", "🔑 Password", "Switch off"]
+    assert buttons(s, 1) == ["✏️ Edit", "✉️ Email code"]  # row 1 is you
+    assert buttons(s, 0) == ["✏️ Edit", "✉️ Email code", "Switch off"]
     assert buttons(s, 2)[-1] == "Switch on"
 
 
@@ -66,11 +66,10 @@ def test_add_staff_collects_login_details_and_wage(qapp):
     d.email.setText("k@x.com")
     d.role.setCurrentIndex(d.role.findData("sales"))
     d.wage.setValue(700)
-    d.password.setText("Strong1234")
-    d.repeat.setText("Strong1234")
+    assert not hasattr(d, "password")  # the owner never types a password: the person is emailed a code
     data = d.get_data()
     assert data == {
-        "username": "kavya", "password": "Strong1234", "full_name": "Kavya R", "email": "k@x.com",
+        "username": "kavya", "full_name": "Kavya R", "email": "k@x.com",
         "phone": None, "base_daily_wage": 700.0, "overtime_rate_per_hour": None, "role": "sales",
     }
 
@@ -108,3 +107,28 @@ def test_only_the_owner_sees_staff_in_the_menu(qapp, monkeypatch, role, sees):
     w = MainWindow()
     w._sync_timer.stop()
     assert ("Staff" in [label for _, label, _ in w._get_allowed_nav_items()]) is sees
+
+
+def test_emailing_a_code_asks_the_server_and_tells_the_owner(qapp, fake, dialogs):
+    s = StaffScreen()
+    s.refresh_data()
+    s.table.cellWidget(0, s.COL_ACTIONS).findChildren(QPushButton)[1].click()
+    assert fake == [("invite", "u1")]
+    assert dialogs and dialogs[0][1] == "Code sent"
+
+
+def test_a_person_added_while_email_is_down_is_kept_and_the_owner_is_told(qapp, monkeypatch, dialogs):
+    from services.api_client import APIError
+
+    def refuse(self, data):
+        raise APIError(503, '{"detail": "Email is not set up yet"}')
+
+    monkeypatch.setattr(StaffService, "me", lambda self: ME)
+    monkeypatch.setattr(StaffService, "users", lambda self: [ME])
+    monkeypatch.setattr(StaffService, "create", refuse)
+    monkeypatch.setattr(StaffDialog, "exec", lambda self: 1)
+    monkeypatch.setattr(StaffDialog, "get_data", lambda self: {"username": "kavya", "full_name": "Kavya", "email": "k@x.com"})
+    s = StaffScreen()
+    s._add()
+    assert dialogs and "Added, but the email did not go" in dialogs[0][1]
+    assert "Email is not set up yet" in dialogs[0][2]
