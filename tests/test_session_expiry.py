@@ -263,3 +263,49 @@ def test_the_offline_check_is_only_made_when_the_token_is_expired(monkeypatch):
     asked = []
     assert _restore(monkeypatch, kr, allow_expired=lambda: asked.append(1) or False)
     assert asked == []  # no needless network check at every start
+
+
+def test_a_form_left_open_is_closed_when_the_user_is_signed_out(qapp, dialogs, monkeypatch):
+    from PyQt6.QtWidgets import QDialog
+
+    w = MainWindow()
+    w._sync_timer.stop()
+    form = QDialog(w)
+    form.show()
+    assert form.isVisible()
+    monkeypatch.setattr(LoginWindow, "show", lambda self: None)
+    w._on_session_expired()
+    assert not form.isVisible()
+
+
+def test_remember_me_keeps_the_sign_in_and_the_username_only_when_ticked(qapp, monkeypatch):
+    kept = {}
+    kr = SimpleNamespace(
+        set_password=lambda s, k, v: kept.__setitem__(k, v),
+        delete_password=lambda s, k: kept.pop(k, None),
+        errors=SimpleNamespace(PasswordDeleteError=Exception),
+    )
+    monkeypatch.setattr(sess, "_keyring", lambda: kr)
+    monkeypatch.setattr(Session, "_remember", True)
+    monkeypatch.setattr(
+        "ui.login_window.AuthService.login",
+        lambda self, u, p: Session.set_token("tok") or Session.set_role("owner") or {"role": "owner"},
+    )
+    monkeypatch.setattr("ui.main_window.MainWindow.show", lambda self: None)
+
+    box = LoginWindow()
+    assert box.remember.isChecked()  # kept by default, as before
+    box.username.setText("asha")
+    box.password.setText("secret")
+    box.remember.setChecked(False)
+    box.handle_login()
+    assert kept == {}  # nothing stored on this PC
+    again = LoginWindow()
+    assert not again.remember.isChecked() and again.username.text() == ""
+
+    again.username.setText("asha")
+    again.password.setText("secret")
+    again.remember.setChecked(True)
+    again.handle_login()
+    assert kept.get("auth_token") == "tok"
+    assert LoginWindow().username.text() == "asha"

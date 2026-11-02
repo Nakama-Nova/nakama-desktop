@@ -124,6 +124,7 @@ class Session(metaclass=_SessionMeta):
 
     _token: str | None = None
     _role: UserRole | None = None
+    _remember: bool = True  # False: the login lives only until the program closes
     _last_sync_at: datetime | None = None
 
     @classmethod
@@ -131,9 +132,18 @@ class Session(metaclass=_SessionMeta):
         return cls._token
 
     @classmethod
+    def set_remember(cls, remember: bool) -> None:
+        """Whether the sign-in is kept on this PC for next time ("Remember me")."""
+        cls._remember = remember
+        if not remember:
+            _persist_token(None)
+            _persist_role(None)
+
+    @classmethod
     def set_token(cls, token: str) -> None:
         cls._token = token
-        _persist_token(token)
+        if cls._remember:
+            _persist_token(token)
 
     @classmethod
     def get_role(cls) -> UserRole | None:
@@ -145,7 +155,8 @@ class Session(metaclass=_SessionMeta):
             cls._role = UserRole(role)
         else:
             cls._role = role
-        _persist_role(cls._role.value if cls._role else None)
+        if cls._remember:
+            _persist_role(cls._role.value if cls._role else None)
 
     @classmethod
     def clear_token(cls) -> None:

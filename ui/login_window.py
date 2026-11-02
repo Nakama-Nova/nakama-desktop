@@ -6,11 +6,15 @@ facing a god sculpture on the left, and a Bootstrap-style sign-in card on the ri
 Inline error feedback.
 """
 
+import json
+from pathlib import Path
+
 import requests
 from PyQt6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QCheckBox,
     QLineEdit,
     QPushButton,
     QSizePolicy,
@@ -26,6 +30,25 @@ from ui.theme import Theme, Colors, Fonts, Spacing
 
 from services.api_client import BASE_URL, APIError, insecure_remote
 from services.auth_service import AuthService
+from services.session import Session
+
+PREFS = Path("data") / "login_prefs.json"  # only the choice and the username, never a password
+
+
+def load_login_prefs() -> dict:
+    try:
+        return json.loads(PREFS.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def save_login_prefs(remember: bool, username: str) -> None:
+    try:
+        PREFS.parent.mkdir(parents=True, exist_ok=True)
+        PREFS.write_text(json.dumps({"remember": remember, "username": username if remember else ""}), encoding="utf-8")
+    except OSError:
+        pass  # a preference that cannot be saved is not worth stopping a sign-in for
+
 
 LOGO_SIZE = QSize(120, 162)  # the logo is 3:4
 FORM_MAX_WIDTH = 420
@@ -164,6 +187,25 @@ class LoginWindow(QWidget):
         card.body.addWidget(self.username)
         card.body.addWidget(lbl_pass)
         card.body.addWidget(self.password)
+        self.remember = QCheckBox("Remember me on this computer")
+        self.remember.setStyleSheet(f"color: {Colors.TEXT_SECONDARY};")
+        prefs = load_login_prefs()
+        self.remember.setChecked(prefs.get("remember", True))
+        if self.remember.isChecked():
+            self.username.setText(prefs.get("username", ""))
+        row = QHBoxLayout()
+        row.addWidget(self.remember)
+        row.addStretch()
+        self.forgot = QPushButton("Forgot password?")
+        self.forgot.setFlat(True)
+        self.forgot.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.forgot.setStyleSheet(
+            f"QPushButton {{ color: {Colors.BRAND_BROWN}; border: none; text-decoration: underline;"
+            " background: transparent; }}"
+        )
+        self.forgot.clicked.connect(self.open_forgot)
+        row.addWidget(self.forgot)
+        card.body.addLayout(row)
         card.body.addWidget(self.error_lbl)
         card.body.addWidget(self.button)
 
@@ -176,6 +218,16 @@ class LoginWindow(QWidget):
         outer.addLayout(row)
         outer.addStretch(1)
         return panel
+
+    def open_forgot(self):
+        """Email a code, then choose a new password with it. Nobody else sets or sees it."""
+        from ui.forgot_password_dialog import ForgotPasswordDialog
+
+        d = ForgotPasswordDialog(self, email=self.username.text() if "@" in self.username.text() else "")
+        if d.exec() == d.DialogCode.Accepted:
+            self.password.clear()
+            self._show_error("Password set. Sign in with your new password.", role="success")
+            self.password.setFocus()
 
     def handle_login(self):
         username = self.username.text().strip()
@@ -194,6 +246,7 @@ class LoginWindow(QWidget):
 
         QApplication.processEvents()
 
+        Session.set_remember(self.remember.isChecked())
         try:
             result = self._auth.login(username, password)
         except requests.RequestException:
@@ -211,6 +264,7 @@ class LoginWindow(QWidget):
             return
 
         if result:
+            save_login_prefs(self.remember.isChecked(), username)
             from ui.main_window import MainWindow
 
             self.main_window = MainWindow()
@@ -224,6 +278,7 @@ class LoginWindow(QWidget):
         self.button.setEnabled(True)
         self._show_error(msg)
 
-    def _show_error(self, msg: str):
+    def _show_error(self, msg: str, role: str = "danger"):
+        self.error_lbl.set_role(role)
         self.error_lbl.setText(msg)
         self.error_lbl.show()

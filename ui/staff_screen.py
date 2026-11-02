@@ -2,8 +2,10 @@
 ui/staff_screen.py
 
 Staff accounts (owner only): add someone, change their details, role and daily
-wage, switch an account off (they can no longer sign in) or back on, and reset a
-forgotten password. Everyone can change their own password.
+wage, switch an account off (they can no longer sign in) or back on, and email a code to
+someone who needs to set a password. Nobody types another person's password: a new
+person, or one who forgot theirs, is emailed a code and chooses their own. Everyone can
+change their own password.
 """
 
 from PyQt6.QtCore import Qt
@@ -24,6 +26,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from services.api_client import APIError
 from services.staff_service import StaffService
 from ui.errors import handle_permissions
 from ui.theme import Colors, Fonts, Theme
@@ -72,7 +75,8 @@ def password_problem(new: str, repeat: str) -> str | None:
 
 
 class StaffDialog(QDialog):
-    """Add a person (password asked) or edit one (role locked for yourself)."""
+    """Add a person (they are emailed a code to choose their own password) or edit one (role
+    locked for yourself)."""
 
     def __init__(self, parent, user: dict | None = None, is_me: bool = False):
         super().__init__(parent)
@@ -125,10 +129,10 @@ class StaffDialog(QDialog):
         ]:
             form.addRow(QLabel(label, styleSheet=Theme.label()), w)
         if self._adding:
-            self.password = _line("", f"at least {MIN_PASSWORD} characters", True)
-            self.repeat = _line("", "", True)
-            form.addRow(QLabel("Password *", styleSheet=Theme.label()), self.password)
-            form.addRow(QLabel("Repeat *", styleSheet=Theme.label()), self.repeat)
+            note = QLabel("✉️  They will be emailed a code to choose their own password. You never see it.")
+            note.setWordWrap(True)
+            note.setStyleSheet(f"color: {Colors.TEXT_SECONDARY};")
+            form.addRow(note)
         form.addRow(_buttons(self))
 
     def _check(self):
@@ -137,8 +141,6 @@ class StaffDialog(QDialog):
             problem = "Enter a username."
         elif "@" not in self.email.text():
             problem = "Enter a valid email."
-        elif self._adding:
-            problem = password_problem(self.password.text(), self.repeat.text())
         if problem:
             QMessageBox.warning(self, "Check the form", problem)
         else:
@@ -156,7 +158,6 @@ class StaffDialog(QDialog):
             data["role"] = self.role.currentData()
         if self._adding:
             data["username"] = self.username.text().strip()
-            data["password"] = self.password.text()
         return data
 
 
@@ -283,7 +284,7 @@ class StaffScreen(QWidget):
         h.setContentsMargins(4, 4, 4, 4)
         h.setSpacing(6)
         is_me = u["id"] == self._me
-        buttons = [("✏️ Edit", self._edit), ("🔑 Password", self._reset)]
+        buttons = [("✏️ Edit", self._edit), ("✉️ Email code", self._send_code)]
         if not is_me:  # you cannot switch yourself off
             buttons.append(("Switch on" if not u.get("is_active") else "Switch off", self._toggle))
         for text, slot in buttons:
@@ -299,7 +300,20 @@ class StaffScreen(QWidget):
     def _add(self, _checked=False):
         d = StaffDialog(self)
         if d.exec() == QDialog.DialogCode.Accepted:
-            self._svc.create(d.get_data())
+            data = d.get_data()
+            try:
+                self._svc.create(data)
+            except APIError as e:
+                if e.status_code not in (502, 503):
+                    raise
+                e.reported = True  # explained here, not by the general error pop-up
+                QMessageBox.warning(
+                    self,
+                    "Added, but the email did not go",
+                    f"{data['full_name'] or data['username']} was added, but the email with the code "
+                    f"could not be sent ({APIError._plain(e.detail)}).\n\n"
+                    "Use ✉️ Email code on their row to try again once email works.",
+                )
             self.refresh_data()
 
     @handle_permissions
@@ -310,11 +324,14 @@ class StaffScreen(QWidget):
             self.refresh_data()
 
     @handle_permissions
-    def _reset(self, u: dict):
-        d = PasswordDialog(self, f"New password for {u['username']}")
-        if d.exec() == QDialog.DialogCode.Accepted:
-            self._svc.reset_password(u["id"], d.new.text())
-            QMessageBox.information(self, "Password", f"{u['username']} can sign in with the new password.")
+    def _send_code(self, u: dict):
+        self._svc.send_invite(u["id"])
+        QMessageBox.information(
+            self,
+            "Code sent",
+            f"A code was emailed to {u.get('email') or u['username']}.\n\n"
+            "They enter it under Forgot password? on the sign-in screen and choose their own password.",
+        )
 
     @handle_permissions
     def _toggle(self, u: dict):
