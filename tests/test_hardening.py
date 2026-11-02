@@ -135,3 +135,38 @@ def test_unhandled_network_errors_become_plain_messages(qapp, monkeypatch):
     app_main.exception_hook(requests.Timeout, requests.Timeout(), None)
     app_main.exception_hook(requests.ConnectionError, requests.ConnectionError(), None)
     assert shown == ["Server not answering", "No connection"]
+
+
+def test_a_dropped_read_is_repeated_once_but_a_write_never_is(monkeypatch):
+    calls = []
+
+    def flaky(url, **kw):
+        calls.append(url)
+        if len(calls) == 1:
+            raise requests.ConnectionError("connection reset")
+        return Resp(200, {"ok": True})
+
+    monkeypatch.setattr(api_client._http, "get", flaky)
+    assert APIClient("http://x")._get("/a", "t") == {"ok": True} and len(calls) == 2
+
+    posts = []
+
+    def drop(url, **kw):
+        posts.append(url)
+        raise requests.ConnectionError("connection reset")
+
+    monkeypatch.setattr(api_client._http, "post", drop)
+    with pytest.raises(requests.ConnectionError):
+        APIClient("http://x")._post("/a", "t", json={})
+    assert len(posts) == 1
+
+
+def test_a_damaged_local_database_is_set_aside_and_replaced(tmp_path):
+    from database.local_db import LocalDB
+
+    path = tmp_path / "nakama_local.db"
+    path.write_bytes(b"this is not a database" * 50)
+    conn = LocalDB(path).get_connection()
+    assert conn.execute("SELECT COUNT(*) FROM outbox").fetchone()[0] == 0
+    conn.close()
+    assert len(list(tmp_path.glob("nakama_local.damaged-*.db"))) == 1

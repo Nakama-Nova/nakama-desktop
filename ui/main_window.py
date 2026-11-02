@@ -23,6 +23,7 @@ from PyQt6.QtWidgets import (
     QTableWidget,
 )
 from PyQt6.QtCore import QSize, Qt, QTimer, pyqtSignal
+from PyQt6.QtGui import QKeySequence, QShortcut
 from PyQt6.QtWidgets import QApplication
 
 from services import notifications_service as ns
@@ -336,6 +337,7 @@ class MainWindow(QMainWindow):
 
         Theme.stripe_tables(self)
         self._decorate_empty_states()
+        self._install_shortcuts()
 
         # Show Home at once; its numbers load right after the window is on screen
         self._switch_page(0, refresh=False)
@@ -584,6 +586,31 @@ class MainWindow(QMainWindow):
 
         if refresh:
             self._refresh_current()
+
+    def _install_shortcuts(self):
+        """F5 refreshes this screen, Ctrl+F jumps to its search box, Ctrl+1..9 open the first nine
+        sidebar entries (the ones this role can see, in the order shown)."""
+        keys = {"F5": self._refresh_current, "Ctrl+F": self._focus_search}
+        for n in range(1, 10):
+            keys[f"Ctrl+{n}"] = lambda n=n: self._go_to_nth(n)
+        self._shortcuts = []
+        for key, slot in keys.items():
+            sc = QShortcut(QKeySequence(key), self)
+            sc.activated.connect(slot)
+            self._shortcuts.append(sc)
+
+    def _go_to_nth(self, n: int):
+        if n <= len(self._nav_buttons):
+            self._nav_buttons[n - 1].click()
+
+    def _focus_search(self):
+        from PyQt6.QtWidgets import QLineEdit
+
+        for box in self.content_stack.currentWidget().findChildren(QLineEdit):
+            if box.isVisibleTo(self) and box.isEnabled() and not box.isReadOnly():
+                box.setFocus()
+                box.selectAll()
+                return
 
     def _refresh_current(self):
         # Auto-refresh data for the visible screen

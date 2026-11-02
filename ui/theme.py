@@ -48,7 +48,7 @@ class Colors:
     # Bootstrap contextual roles, mapped onto the brand
     PRIMARY = BRAND_BROWN
     SECONDARY = BRAND_GOLD
-    SUCCESS = "#2F7D4F"
+    SUCCESS = "#2B7149"
     DANGER = "#B3261E"
     WARNING = BRAND_GOLD_LIGHT
     INFO = "#8C5A2B"
@@ -75,12 +75,12 @@ class Colors:
     # Text
     TEXT_PRIMARY = "#3A1B04"
     TEXT_SECONDARY = "#7A5A3C"
-    TEXT_MUTED = "#A38A6D"
+    TEXT_MUTED = "#7E6648"  # 4.5:1 on every surface (was #A38A6D, 3:1)
 
     # Accent colors
-    GREEN = "#2F7D4F"
+    GREEN = SUCCESS
     GREEN_DARK = "#256640"
-    ORANGE = "#BF830B"
+    ORANGE = "#8F5F00"  # text-safe amber; BRAND_GOLD stays for borders and fills
     RED = "#B3261E"
     PURPLE = "#7A4620"
     BLUE = "#8C5A2B"

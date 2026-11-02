@@ -93,7 +93,8 @@ def test_a_slow_or_dropped_reply_does_not_start_the_pause(monkeypatch, error):
     for _ in range(2):
         with pytest.raises(requests.RequestException):
             api._get("/a", "t")
-    assert len(calls) == 2  # both really tried
+    # both really tried (a dropped read is repeated once, a slow one is not)
+    assert len(calls) == (4 if isinstance(error, requests.ConnectionError) else 2)
 
 
 def test_the_pause_ends(monkeypatch):

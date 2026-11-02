@@ -3,6 +3,8 @@
 from datetime import date
 
 import pytest
+
+from ui.theme import Colors
 from PyQt6.QtWidgets import QInputDialog, QPushButton
 
 from services.enums import UserRole
@@ -180,7 +182,7 @@ def test_profit_screen_numbers_and_loss_colour(qapp, fake, monkeypatch):
     assert s.cards["margin"].value_lbl.text() == "56.7%"
     assert "Owed to staff now ₹4,950.00" in s.owed.text() and "₹22,000.00" in s.owed.text()
     assert s.table.rowCount() == 2 and s.table.item(1, 5).text() == "₹6,500.00"
-    assert "#2F7D4F" in s.cards["profit"].value_lbl.styleSheet()
+    assert Colors.SUCCESS in s.cards["profit"].value_lbl.styleSheet()
     monkeypatch.setattr(MoneyService, "profit", lambda self, s=None, e=None: {**PROFIT, "profit": "-250.00", "margin_pct": "-5.00"})
     s.refresh_data()
     assert "#B3261E" in s.cards["profit"].value_lbl.styleSheet()
