@@ -240,11 +240,16 @@ class Theme:
 
     @staticmethod
     def stripe_tables(widget) -> None:
-        """Turn on striped rows for every table under `widget` (a style sheet cannot)."""
+        """Striped rows, content-fitted columns and a details popup for every table under `widget` (a style sheet cannot)."""
         from PyQt6.QtWidgets import QTableWidget
+
+        from ui.components.elastic import make_elastic
+        from ui.components.row_details import make_inspectable
 
         for table in widget.findChildren(QTableWidget):
             table.setAlternatingRowColors(True)
+            make_elastic(table)
+            make_inspectable(table)
 
     # ------------------------------------------------------------------
     # Content area background

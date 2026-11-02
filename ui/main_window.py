@@ -69,7 +69,9 @@ logger = logging.getLogger(__name__)
 # How often to run a background push/pull sync cycle, in milliseconds.
 SYNC_INTERVAL_MS = 60_000
 
-SIDEBAR_WIDTH = 256
+SIDEBAR_WIDTH = 232
+COMPACT_WIDTH = 80  # icons only, on a window narrower than COMPACT_BELOW
+COMPACT_BELOW = 1280
 LOGO_BOX = QSize(56, 76)  # the logo is 3:4; this box keeps it sharp and inside the header
 
 # What each list screen says when it has no rows (title, hint, carving set). The screens
@@ -152,7 +154,7 @@ class MainWindow(QMainWindow):
         # lose a strip to the taskbar), and centre it.
         screen = self.screen().availableGeometry()
         width, height = min(1200, screen.width()), min(750, screen.height())
-        self.setMinimumSize(min(960, screen.width()), min(600, screen.height()))
+        self.setMinimumSize(min(1024, screen.width()), min(600, screen.height()))
         self.resize(width, height)
         self.move(screen.x() + (screen.width() - width) // 2, screen.y() + (screen.height() - height) // 2)
 
@@ -182,6 +184,7 @@ class MainWindow(QMainWindow):
             "QLabel { border: none; background: transparent; }"
         )
         brand_layout = QHBoxLayout(brand_container)
+        self._brand_layout = brand_layout
         brand_layout.setContentsMargins(Spacing.MD, Spacing.MD, Spacing.MD, Spacing.MD)
         brand_layout.setSpacing(Spacing.SM + 4)
 
@@ -207,6 +210,7 @@ class MainWindow(QMainWindow):
         brand_sub = QLabel("Staff desk")
         brand_sub.setStyleSheet(f"font-size: {Fonts.CAPTION}px; color: {Colors.TEXT_MUTED};")
         brand_text.addWidget(brand_sub)
+        self._brand_words = [brand_lbl, brand_sub]
         brand_text.addStretch()
         brand_layout.addLayout(brand_text, 1)
 
@@ -216,6 +220,8 @@ class MainWindow(QMainWindow):
         sidebar_layout.addSpacing(Spacing.SM)
         self._nav_buttons: list[QPushButton] = []
         self._nav_mapping: dict[int, QPushButton] = {}
+        self._headings: list[QLabel] = []
+        self._compact = False
 
         nav_box = QWidget()
         nav_box.setStyleSheet(f"background-color: {Colors.SIDEBAR_BG};")
@@ -227,7 +233,8 @@ class MainWindow(QMainWindow):
         for icon, label, index in self._get_allowed_nav_items():
             section = section_of.get(label)
             if section and section != current_section:
-                nav_layout.addWidget(self._section_heading(section))
+                self._headings.append(self._section_heading(section))
+                nav_layout.addWidget(self._headings[-1])
             current_section = section
             btn = self._create_nav_button(icon, label, index)
             self._nav_buttons.append(btn)
@@ -254,6 +261,7 @@ class MainWindow(QMainWindow):
         pw_btn.setStyleSheet(self._footer_button_css())
         pw_btn.clicked.connect(lambda: change_my_password(self))
         sidebar_layout.addWidget(pw_btn)
+        self._pw_btn = pw_btn
 
         # Version, and a manual "check for updates"
         self.update_btn = QPushButton(f"⬆  Updates  ·  v{APP_VERSION}")
@@ -261,6 +269,7 @@ class MainWindow(QMainWindow):
         self.update_btn.setStyleSheet(self._footer_button_css())
         self.update_btn.clicked.connect(lambda: self.updater.check(manual=True))
         sidebar_layout.addWidget(self.update_btn)
+        self._footer = [(pw_btn, "🔑", "My password"), (self.update_btn, "⬆", f"Updates  ·  v{APP_VERSION}")]
 
         main_layout.addWidget(self.sidebar)
 
@@ -498,6 +507,8 @@ class MainWindow(QMainWindow):
 
     def _create_nav_button(self, icon: str, label: str, index: int) -> QPushButton:
         btn = QPushButton(f"  {icon}   {label}")
+        btn.setProperty("icon_text", icon)
+        btn.setProperty("label_text", label)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
         btn.setFixedHeight(40)
         btn.setStyleSheet(self._nav_button_css(active=False))
@@ -505,6 +516,7 @@ class MainWindow(QMainWindow):
         return btn
 
     def _nav_button_css(self, active: bool) -> str:
+        align = "center" if self._compact else "left"
         if active:
             return f"""
                 QPushButton {{
@@ -516,7 +528,7 @@ class MainWindow(QMainWindow):
                     padding: 0 12px;
                     font-size: {Fonts.BODY}px;
                     font-weight: 700;
-                    text-align: left;
+                    text-align: {align};
                 }}
             """
         return f"""
@@ -528,7 +540,7 @@ class MainWindow(QMainWindow):
                 border-radius: {Radius.MD}px;
                 padding: 0 12px;
                 font-size: {Fonts.BODY}px;
-                text-align: left;
+                text-align: {align};
             }}
             QPushButton:hover {{
                 background-color: {Colors.SIDEBAR_HOVER};
@@ -537,6 +549,7 @@ class MainWindow(QMainWindow):
         """
 
     def _footer_button_css(self) -> str:
+        align = "center" if self._compact else "left"
         return f"""
             QPushButton {{
                 background-color: transparent;
@@ -545,7 +558,7 @@ class MainWindow(QMainWindow):
                 border-top: 1px solid {Colors.CARD_BORDER};
                 padding: 12px {Spacing.MD}px;
                 font-size: {Fonts.BODY_SM}px;
-                text-align: left;
+                text-align: {align};
             }}
             QPushButton:hover {{
                 color: {Colors.SIDEBAR_ACTIVE_TEXT};
@@ -586,6 +599,31 @@ class MainWindow(QMainWindow):
 
         if refresh:
             self._refresh_current()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        compact = self.width() < COMPACT_BELOW
+        if compact != self._compact:
+            self._set_compact(compact)
+
+    def _set_compact(self, on: bool):
+        """A narrow window gives the sidebar's room to the page: icons only, labels as tooltips."""
+        self._compact = on
+        self.sidebar.setFixedWidth(COMPACT_WIDTH if on else SIDEBAR_WIDTH)
+        m = Spacing.SM + 4 if on else Spacing.MD
+        self._brand_layout.setContentsMargins(m, Spacing.MD, m, Spacing.MD)
+        for w in self._brand_words + self._headings:
+            w.setVisible(not on)
+        current = self.content_stack.currentIndex()
+        for index, btn in self._nav_mapping.items():
+            icon, label = btn.property("icon_text"), btn.property("label_text")
+            btn.setText(icon if on else f"  {icon}   {label}")
+            btn.setToolTip(label if on else "")
+            btn.setStyleSheet(self._nav_button_css(active=(index == current)))
+        for btn, icon, words in self._footer:
+            btn.setText(icon if on else f"{icon}  {words}")
+            btn.setToolTip(words if on else "")
+            btn.setStyleSheet(self._footer_button_css())
 
     def _install_shortcuts(self):
         """F5 refreshes this screen, Ctrl+F jumps to its search box, Ctrl+1..9 open the first nine
