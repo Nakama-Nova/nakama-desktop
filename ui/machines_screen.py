@@ -63,7 +63,10 @@ CONDITIONS = [("New", "new"), ("Good", "good"), ("Worn", "worn"), ("Damaged", "d
 
 
 def money(value) -> str:
-    return "" if value in (None, "") else f"₹{float(value):,.2f}"
+    if value in (None, ""):
+        return ""
+    v = float(value)
+    return f"{'-' if v < 0 else ''}₹{abs(v):,.2f}"
 
 
 def parse_date(text) -> date | None:
@@ -457,6 +460,7 @@ class MachinesScreen(QWidget):
             self.m_table = _table(["Tag", "Machine", "Status", "Worth today", "Next service", "Spent on service", ""])
             self.m_table.horizontalHeader().setSectionResizeMode(self.M_ACTIONS, QHeaderView.ResizeMode.Fixed)
             self.m_table.setColumnWidth(self.M_ACTIONS, 330)
+            self.m_table.horizontalHeader().setSectionResizeMode(self.M_DUE, QHeaderView.ResizeMode.ResizeToContents)
             self.m_table.cellDoubleClicked.connect(lambda r, _c: self._machine_detail(self._shown_machines[r]) if r < len(self._shown_machines) else None)
             mv.addWidget(self.m_table)
             self.tabs.addTab(machines, "Machines")
