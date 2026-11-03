@@ -55,6 +55,7 @@ from ui.letters_screen import LettersScreen
 from ui.places_screen import PlacesScreen
 from ui.machines_screen import MachinesScreen
 from ui.budgets_screen import BudgetsScreen
+from ui.finance_screen import FinanceScreen
 from ui.notifier import Notifier
 from ui.workers import on_busy_changed, run_async
 from ui.updater import UpdateBanner, Updater
@@ -129,6 +130,7 @@ class MainWindow(QMainWindow):
         ("💸", "Expenses", 12),
         ("💹", "Profit", 13),
         ("🎯", "Budgets", 20),
+        ("📒", "Accounts", 21),
         ("📊", "Reports", 5),
     ]
     NAV_SECTIONS = {
@@ -136,7 +138,7 @@ class MainWindow(QMainWindow):
         "Stock and buying": ["Stock", "Materials", "Purchases", "Places"],
         "Workshop": ["3D Lab", "Restoration", "Designs", "Machines and tools"],
         "People and pay": ["Attendance", "Wages", "Staff"],
-        "Money": ["Expenses", "Profit", "Budgets", "Reports"],
+        "Money": ["Expenses", "Profit", "Budgets", "Accounts", "Reports"],
     }
 
     def __init__(self):
@@ -323,6 +325,7 @@ class MainWindow(QMainWindow):
         self.places_view = PlacesScreen()
         self.machines_view = MachinesScreen()
         self.budgets_view = BudgetsScreen()
+        self.finance_view = FinanceScreen()
 
         self.content_stack.addWidget(self.dashboard_view)  # 0
         self.content_stack.addWidget(self.sales_view)  # 1
@@ -345,13 +348,15 @@ class MainWindow(QMainWindow):
         self.content_stack.addWidget(self.places_view)  # 18
         self.content_stack.addWidget(self.machines_view)  # 19
         self.content_stack.addWidget(self.budgets_view)  # 20
+        self.content_stack.addWidget(self.finance_view)  # 21
 
         Theme.stripe_tables(self)
         self._decorate_empty_states()
         self._install_shortcuts()
 
         # Show Home at once; its numbers load right after the window is on screen
-        self._switch_page(0, refresh=False)
+        allowed = self._get_allowed_nav_items()
+        self._switch_page(allowed[0][2] if allowed else 0, refresh=False)  # Home, or the first page this role has
         QTimer.singleShot(0, self._refresh_current)
 
         # ── Background sync ───────────────────────────
@@ -476,7 +481,7 @@ class MainWindow(QMainWindow):
             if role == UserRole.SALES:
                 # Sales can sell and manage buyers, but not see reports, the Lab,
                 # or the buying side (materials and purchases)
-                if label not in ["Reports", "3D Lab", "Materials", "Purchases", "Staff", "Wages", "Expenses", "Profit", "Restoration", "Designs", "Machines and tools", "Budgets"]:
+                if label not in ["Reports", "3D Lab", "Materials", "Purchases", "Staff", "Wages", "Expenses", "Profit", "Restoration", "Designs", "Machines and tools", "Budgets", "Accounts"]:
                     allowed.append((icon, label, index))
             elif role == UserRole.ACHARI:
                 # Achari focuses on stock/manufacturing and the 3D Lab, no billing/reports
@@ -485,6 +490,10 @@ class MainWindow(QMainWindow):
             elif role == UserRole.ARTISAN:
                 # Artisans: stock and the 3D Lab to look things up, their pay, and Restoration
                 if label in ["Home", "Stock", "Attendance", "Wages", "3D Lab", "Restoration", "Designs"]:
+                    allowed.append((icon, label, index))
+            elif role == UserRole.ACCOUNTANT:
+                # The CA reads the books and nothing else (the server allows no more)
+                if label == "Accounts":
                     allowed.append((icon, label, index))
             elif role == UserRole.WORKER:
                 # Worker sees home, stock, workforce and the 3D Lab (view only)
