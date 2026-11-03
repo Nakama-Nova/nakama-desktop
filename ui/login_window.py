@@ -60,7 +60,7 @@ class LoginWindow(QWidget):
         super().__init__()
         self._auth = AuthService()
 
-        self.setWindowTitle("Vriksha Studio — Staff sign in")
+        self.setWindowTitle("Vriksha Studios — Staff sign in")
         self.setObjectName("login")
         self.setStyleSheet(f"QWidget#login {{ background-color: {Colors.CARD_BG}; }}")
 
@@ -132,7 +132,7 @@ class LoginWindow(QWidget):
         col.setContentsMargins(0, 0, 0, 0)
         col.setSpacing(Spacing.MD)
 
-        brand = QLabel("Vriksha Studio")
+        brand = QLabel("Vriksha Studios")
         brand.setStyleSheet(
             f"font-family: '{Fonts.HEADING_FAMILY}', Georgia, serif; font-size: 36px;"
             f" font-weight: bold; color: {Colors.BRAND_BROWN};"

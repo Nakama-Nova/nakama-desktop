@@ -1,4 +1,4 @@
-# Vriksha Studio Desktop (NakamaDesk)
+# Vriksha Studios Desktop (NakamaDesk)
 
 The PyQt6 staff desk for **Vriksha Studios** (FurniBiz ERP): billing, stock, orders, workshop and money screens on one Windows PC. It talks to [nakamadesk-backend](https://github.com/Nakama-Nova/nakamadesk-backend) over HTTP and keeps working when the connection drops.
 

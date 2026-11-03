@@ -14,7 +14,7 @@ NAVBAR_HEIGHT = 64
 
 
 class Navbar(QFrame):
-    def __init__(self, crumb: str = "Vriksha Studio", parent: QWidget | None = None):
+    def __init__(self, crumb: str = "Vriksha Studios", parent: QWidget | None = None):
         super().__init__(parent)
         self.setObjectName("navbar")
         self.setFixedHeight(NAVBAR_HEIGHT)

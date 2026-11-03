@@ -158,7 +158,7 @@ class Updater(QObject):
         tray.messageClicked.connect(self._window.raise_)
         tray.show()
         tray.showMessage(
-            "Vriksha Studio: update available",
+            "Vriksha Studios: update available",
             f"Version {info.version} is ready to install. Open the app and press Update now.",
         )
         QTimer.singleShot(15_000, tray.hide)

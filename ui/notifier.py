@@ -100,7 +100,7 @@ class Notifier(QObject):
             if icon.isNull():
                 icon = self._window.style().standardIcon(QStyle.StandardPixmap.SP_MessageBoxInformation)
             self._tray = QSystemTrayIcon(icon, self)
-            self._tray.setToolTip("Vriksha Studio")
+            self._tray.setToolTip("Vriksha Studios")
             self._tray.messageClicked.connect(self._clicked)
             self._tray.show()
         self._tray_target = new[0]["screen"] if len(new) == 1 else None
