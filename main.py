@@ -12,8 +12,10 @@ if getattr(sys, "frozen", False):
     _home.mkdir(parents=True, exist_ok=True)
     os.chdir(_home)
 
+from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QApplication, QMessageBox
 from ui.login_window import LoginWindow
+from ui.assets import icon_path
 from ui.fonts import load_brand_fonts
 from ui.theme import Theme
 from services.api_client import APIClient, ForbiddenError, APIError, SessionExpiredError
@@ -46,7 +48,13 @@ def exception_hook(exctype, value, traceback):
 def main():
     sys.excepthook = exception_hook
 
+    if sys.platform == "win32":
+        # Without its own id Windows groups the taskbar button under python.exe and shows its icon.
+        import ctypes
+
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("NakamaNova.VrikshaDesk")
     app = QApplication(sys.argv)
+    app.setWindowIcon(QIcon(str(icon_path())))
     load_brand_fonts()
     Theme.install(app)
 
