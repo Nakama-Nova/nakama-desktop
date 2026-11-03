@@ -240,3 +240,27 @@ def test_the_adjust_dialog_sends_the_chosen_place_and_remembers_it(qapp, fake, m
     assert fake == [("item", "i1", 4, "opening count", "p-unit")]
     again = AdjustStockDialog(None, "x", "pcs", 1, places=places)  # chosen last time, so chosen again
     assert again.place_id() == "p-unit"
+
+
+def test_the_stock_column_shows_units_set_aside_for_confirmed_orders(qapp, fake, monkeypatch):
+    monkeypatch.setattr(InventoryService, "held", lambda self: {"i2": 3})
+    w = InventoryWindow()
+    w.refresh_data()
+    rows = {w.table.item(r, w.COL_NAME).text(): w.table.item(r, w.COL_STOCK) for r in range(w.table.rowCount())}
+    assert rows["Teak Armchair"].text() == "2"  # nothing held: as before
+    held = rows["Study Table"]
+    assert held.text() == "9  ·  3 held" and "6 can be sold now" in held.toolTip()
+
+
+def test_unreadable_holds_leave_the_stock_column_as_it_was(qapp, fake, monkeypatch):
+    monkeypatch.setattr(InventoryService, "held", lambda self: None)  # offline, or an older server
+    w = InventoryWindow()
+    w.refresh_data()
+    assert w.table.item(1, w.COL_STOCK).text() == "9"
+
+
+def test_held_never_shows_more_than_is_on_the_shelf(qapp, fake, monkeypatch):
+    monkeypatch.setattr(InventoryService, "held", lambda self: {"i1": 5})  # 5 promised, 2 on the shelf
+    w = InventoryWindow()
+    w.refresh_data()
+    assert w.table.item(0, w.COL_STOCK).text() == "2  ·  2 held"

@@ -432,6 +432,10 @@ class APIClient:
     # ------------------------------------------------------------------
     # 3D Lab  (furniture parts; the viewer/editor are web pages on the backend)
     # ------------------------------------------------------------------
+    def get_held_stock(self, token: str) -> dict:
+        """Units set aside for confirmed orders, {item_id: units}. Items with no hold are left out."""
+        return self._get("/items/held", token, quiet=True) or {}
+
     def get_lab_items(self, token: str) -> list | None:
         try:
             return self._get("/lab/items", token)

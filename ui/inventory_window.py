@@ -52,6 +52,7 @@ class InventoryWindow(QWidget):
         self._inventory_service = InventoryService()
         self._stock = StockService()
         self._all_items: list[dict] = []
+        self._held: dict = {}  # item id -> units set aside for confirmed orders
         # Owner and manager manage stock; everyone else reads it.
         self.can_edit = Session.is_authorized([UserRole.OWNER, UserRole.MANAGER])
         # Owner and artisans can scan a sculpture into 3D and open the model
@@ -132,11 +133,21 @@ class InventoryWindow(QWidget):
     @handle_permissions
     def refresh_data(self):
         """Auto-called on page switch or manual refresh."""
-        self._show_items(self._inventory_service.get_items())
+        items = self._inventory_service.get_items()
+        self._held = self._inventory_service.held() or {}
+        self._show_items(items)
+
+    def _fetch_stock(self):
+        return self._inventory_service.get_items(), self._inventory_service.held()
+
+    def _show_stock(self, data):
+        items, held = data
+        self._held = held or {}  # units set aside for confirmed orders; none when unreadable
+        self._show_items(items)
 
     def refresh_async(self, _checked=False):
         """Same as refresh_data, but the list is fetched in the background."""
-        load_async(self, self._inventory_service.get_items, self._show_items)
+        load_async(self, self._fetch_stock, self._show_stock)
 
     def _show_items(self, items):
         if items is None:
@@ -192,6 +203,7 @@ class InventoryWindow(QWidget):
         stock_val = int(item.get("current_stock") or 0)
         min_stock = int(item.get("min_stock") or 0)
         low = stock_val <= min_stock
+        held = min(int(self._held.get(str(item.get("id")), 0)), max(stock_val, 0))
 
         values = [
             item["name"],
@@ -199,7 +211,7 @@ class InventoryWindow(QWidget):
             item.get("sku") or "",
             f"₹{pricing.price_with_gst(item):,.2f}",
             f"{float(item.get('gst_percent') or 0):g}%" if float(item.get("gst_percent") or 0) else "-",
-            str(stock_val),
+            f"{stock_val}  ·  {held} held" if held else str(stock_val),
             "⚠️ Low" if low else "✅ OK",
         ]
         for col, text in enumerate(values):
@@ -213,6 +225,12 @@ class InventoryWindow(QWidget):
             if col == self.COL_STATUS:
                 cell.setBackground(
                     QColor(Colors.LOW_STOCK_BG if low else Colors.SUCCESS_BG)
+                )
+            if col == self.COL_STOCK and held:
+                cell.setForeground(QColor(Colors.ORANGE))
+                cell.setToolTip(
+                    f"{stock_val} on the shelf. {held} {'is' if held == 1 else 'are'} set aside for confirmed "
+                    f"orders, so {max(stock_val - held, 0)} can be sold now."
                 )
             self.table.setItem(row, col, cell)
 
