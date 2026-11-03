@@ -65,12 +65,11 @@ class StockService:
         return self._api._delete(f"/{kind}/{row_id}", self._t())
 
     # ----- manual stock change and the ledger
-    def adjust_item(self, item_id: str, quantity: int, notes: str) -> dict:
-        return self._api._patch(
-            f"/items/{item_id}/stock",
-            self._t(),
-            json={"quantity": quantity, "notes": notes},
-        )
+    def adjust_item(self, item_id: str, quantity: int, notes: str, location_id: str | None = None) -> dict:
+        body = {"quantity": quantity, "notes": notes}
+        if location_id is not None:  # the place the count or change applies to
+            body["location_id"] = location_id
+        return self._api._patch(f"/items/{item_id}/stock", self._t(), json=body)
 
     def movements(
         self,
@@ -98,12 +97,13 @@ class StockService:
     def delete_material(self, material_id: str) -> bool:
         return self._api._delete(f"/raw-materials/{material_id}", self._t())
 
-    def adjust_material(self, material_id: str, change: float, notes: str) -> dict:
-        return self._api._post(
-            f"/raw-materials/{material_id}/adjust",
-            self._t(),
-            json={"quantity_change": change, "notes": notes},
-        )
+    def adjust_material(
+        self, material_id: str, change: float, notes: str, location_id: str | None = None
+    ) -> dict:
+        body = {"quantity_change": change, "notes": notes}
+        if location_id is not None:
+            body["location_id"] = location_id
+        return self._api._post(f"/raw-materials/{material_id}/adjust", self._t(), json=body)
 
     # ----- purchases
     def purchases(self) -> list:

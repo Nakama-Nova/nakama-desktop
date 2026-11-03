@@ -25,6 +25,7 @@ from PyQt6.QtWidgets import (
 from services.enums import UserRole
 from services.session import Session
 from services.stock_service import StockService
+from ui.components.place_picker import fetch_places
 from ui.errors import handle_permissions
 from ui.stock_dialogs import AdjustStockDialog, MovementsDialog
 from ui.theme import Colors, Fonts, Theme
@@ -199,9 +200,11 @@ class MaterialsScreen(QWidget):
 
     @handle_permissions
     def _adjust(self, m: dict):
-        d = AdjustStockDialog(self, m["name"], m.get("unit") or "", f"{float(m.get('stock') or 0):g}", 2)
+        d = AdjustStockDialog(
+            self, m["name"], m.get("unit") or "", f"{float(m.get('stock') or 0):g}", 2, places=fetch_places()
+        )
         if d.exec() == QDialog.DialogCode.Accepted:
-            self._svc.adjust_material(m["id"], d.change(), d.notes())
+            self._svc.adjust_material(m["id"], d.change(), d.notes(), d.place_id())
             self.refresh_data()
 
     @handle_permissions

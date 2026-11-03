@@ -29,10 +29,10 @@ def fake(monkeypatch):
     monkeypatch.setattr(StockService, "rows", lambda self, kind: [])
     monkeypatch.setattr(StockService, "materials", lambda self: MATERIALS)
     monkeypatch.setattr(
-        StockService, "adjust_material", lambda self, mid, change, notes: calls.append(("material", mid, change, notes))
+        StockService, "adjust_material", lambda self, mid, change, notes, place=None: calls.append(("material", mid, change, notes, place))
     )
     monkeypatch.setattr(
-        StockService, "adjust_item", lambda self, iid, qty, notes: calls.append(("item", iid, qty, notes))
+        StockService, "adjust_item", lambda self, iid, qty, notes, place=None: calls.append(("item", iid, qty, notes, place))
     )
     return calls
 
@@ -116,7 +116,7 @@ def test_stock_button_sends_the_signed_change_with_the_reason(qapp, fake, monkey
 
     monkeypatch.setattr("ui.inventory_window.AdjustStockDialog", Auto)
     w.table.cellWidget(0, w.COL_ACTIONS).findChildren(QPushButton)[1].click()
-    assert fake == [("item", "i1", -2, "found broken")]
+    assert fake == [("item", "i1", -2, "found broken", None)]  # no places readable: no place sent
 
 
 def test_materials_screen_lists_and_adjusts(qapp, fake, monkeypatch):
@@ -133,7 +133,7 @@ def test_materials_screen_lists_and_adjusts(qapp, fake, monkeypatch):
 
     monkeypatch.setattr("ui.materials_screen.AdjustStockDialog", Auto)
     s.table.cellWidget(0, s.COL_ACTIONS).findChildren(QPushButton)[0].click()
-    assert fake == [("material", "m1", 1.5, "opening count")]
+    assert fake == [("material", "m1", 1.5, "opening count", None)]
 
 
 def test_only_the_owner_can_delete_a_material(qapp, fake, monkeypatch):
@@ -214,3 +214,29 @@ def test_photo_upload_sends_the_content_type_the_server_checks(monkeypatch, tmp_
     model.write_bytes(b"x")
     APIClient("http://x")._upload("/items/i1/assets", "t", str(model))
     assert sent["file"][2] == "model/gltf-binary"
+
+
+def test_the_adjust_dialog_sends_the_chosen_place_and_remembers_it(qapp, fake, monkeypatch):
+    places = [
+        {"id": "p-shop", "name": "Shop", "kind": "shop", "has_till": True, "is_active": True},
+        {"id": "p-unit", "name": "Carving unit", "kind": "plant", "has_till": False, "is_active": True},
+    ]
+    monkeypatch.setattr("ui.inventory_window.fetch_places", lambda: places)
+    seen = []
+
+    class Auto(AdjustStockDialog):
+        def exec(self):
+            seen.append([self.place.itemText(i) for i in range(self.place.count())])
+            self.place.setCurrentIndex(self.place.findData("p-unit"))
+            self.qty.setValue(4)
+            self.reason.setText("opening count")
+            return 1
+
+    monkeypatch.setattr("ui.inventory_window.AdjustStockDialog", Auto)
+    w = InventoryWindow()
+    w.refresh_data()
+    w.table.cellWidget(0, w.COL_ACTIONS).findChildren(QPushButton)[1].click()
+    assert seen == [["No particular place", "Shop", "Carving unit"]]
+    assert fake == [("item", "i1", 4, "opening count", "p-unit")]
+    again = AdjustStockDialog(None, "x", "pcs", 1, places=places)  # chosen last time, so chosen again
+    assert again.place_id() == "p-unit"

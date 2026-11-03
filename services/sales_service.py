@@ -41,9 +41,12 @@ class SalesService:
         items: list[dict],
         customer_id: str | None = None,
         client_id: str | None = None,
+        location_id: str | None = None,
     ) -> dict | None:
         """POST /sales and return the SaleResponse dict."""
-        return self._api.create_sale(self._token(), items, customer_id, client_id)
+        if location_id is None:  # the common case: one shop, which the server fills in
+            return self._api.create_sale(self._token(), items, customer_id, client_id)
+        return self._api.create_sale(self._token(), items, customer_id, client_id, location_id)
 
     def is_online(self) -> bool:
         return self._api.health_check()
@@ -54,6 +57,7 @@ class SalesService:
         customer_name: str,
         customer_phone: str,
         client_id: str | None = None,
+        location_id: str | None = None,
     ) -> str:
         """
         Save a counter sale in the local outbox; the background sync pushes it
@@ -83,6 +87,8 @@ class SalesService:
             "total_amount": sum(ln["price"] * ln["quantity"] for ln in lines),
             "payment_method": "cash",
         }
+        if location_id is not None:
+            payload["location_id"] = location_id
         OutboxRepository().add_entry(
             "sale", "create", payload, entry_id=client_id, user_id=Session.get_user_id()
         )

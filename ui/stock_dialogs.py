@@ -47,7 +47,7 @@ def _button(text: str, style: str) -> QPushButton:
 class AdjustStockDialog(QDialog):
     """Receive or remove stock. The reason is required: it goes in the ledger."""
 
-    def __init__(self, parent, name: str, unit: str, current, decimals: int = 0):
+    def __init__(self, parent, name: str, unit: str, current, decimals: int = 0, places: list | None = None):
         super().__init__(parent)
         self.setWindowTitle(f"Adjust stock: {name}")
         self.setMinimumWidth(380)
@@ -71,6 +71,14 @@ class AdjustStockDialog(QDialog):
         self.qty.setSuffix(f" {unit}")
         self.qty.setStyleSheet(Theme.input_style())
         form.addRow(QLabel("How much", styleSheet=Theme.label()), self.qty)
+
+        self.place = None
+        if places:  # which place the count or change is for, so each place keeps its own total
+            from ui.components.place_picker import PlacePicker
+
+            self.place = PlacePicker("adjust")
+            self.place.set_places(places, allow_none=True)
+            form.addRow(QLabel("Place", styleSheet=Theme.label()), self.place)
 
         self.reason = QLineEdit()
         self.reason.setPlaceholderText("Why? e.g. opening count, damaged, found in godown")
@@ -101,6 +109,9 @@ class AdjustStockDialog(QDialog):
 
     def notes(self) -> str:
         return self.reason.text().strip()
+
+    def place_id(self) -> str | None:
+        return self.place.place_id() if self.place is not None else None
 
 
 class MovementsDialog(QDialog):

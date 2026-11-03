@@ -3,6 +3,7 @@ import json
 import pytest
 import requests
 
+import services.api_client as api_client
 from database.outbox_repository import OutboxRepository
 from services.inventory_service import InventoryService
 from services.sales_service import SalesService
@@ -160,3 +161,33 @@ def test_a_finished_bill_does_not_donate_its_id_to_the_next_one(
     screen._generate_invoice()  # an identical-looking second sale is a new sale
 
     assert len(ids) == 2 and ids[0] != ids[1]
+
+
+def test_a_bill_names_its_place_online_and_in_the_offline_copy(monkeypatch):
+    sent = []
+    monkeypatch.setattr(api_client.APIClient, "_post", lambda self, path, token, json=None, **kw: sent.append((path, json)) or {})
+    SalesService().create_sale([{"item_id": "x", "quantity": 1}], "cust-1", "abc-123", "place-2")
+    assert sent[-1][1]["location_id"] == "place-2"
+    SalesService().create_sale([{"item_id": "x", "quantity": 1}], "cust-1", "abc-124")
+    assert "location_id" not in sent[-1][1]  # one shop: the server fills it in
+
+    SalesService().queue_offline_sale(LINES, "Meena", "9876543210", location_id="place-2")
+    SalesService().queue_offline_sale(LINES, "Meena", "9876543210")
+    payloads = [json.loads(e.payload) for e in OutboxRepository().get_pending()]
+    assert payloads[0]["location_id"] == "place-2" and "location_id" not in payloads[1]
+
+
+def test_the_sales_screen_asks_where_from_only_when_there_is_a_choice(qapp):
+    shop = {"id": "p-shop", "name": "Shop", "kind": "shop", "has_till": True, "is_active": True}
+    stall = {"id": "p-stall", "name": "Temple stall", "kind": "plant", "has_till": True, "is_active": True}
+    store = {"id": "p-store", "name": "Godown", "kind": "plant", "has_till": False, "is_active": True}
+    s = SalesScreen()
+    s._show_places([shop, store])  # one place can sell: nothing to ask
+    assert s.place_box.isHidden() and s._sold_from() is None
+    s._show_places([shop, stall, store])
+    assert not s.place_box.isHidden()
+    assert [s.place_pick.itemText(i) for i in range(s.place_pick.count())] == ["Shop", "Temple stall"]
+    s.place_pick.setCurrentIndex(1)
+    assert s._sold_from() == "p-stall"
+    s._show_places(None)  # places could not be read: the picker stays as it was
+    assert s._sold_from() == "p-stall"
