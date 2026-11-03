@@ -75,6 +75,7 @@ class SalesScreen(QWidget):
         self._inventory_service = InventoryService()
         self._all_items: list[dict] = []
         self._cart: list[CartItem] = []
+        self._held: dict = {}  # item id -> units set aside for confirmed orders
 
         self.setStyleSheet(Theme.content_bg())
         self._build_ui()
@@ -275,7 +276,24 @@ class SalesScreen(QWidget):
 
     def refresh_data(self):
         self._load_items()
-        load_async(self, fetch_places, self._show_places)
+        load_async(self, self._fetch_context, self._show_context)
+
+    def _fetch_context(self):
+        return fetch_places(), self._inventory_service.held()
+
+    def _show_context(self, data):
+        places, held = data
+        self._show_places(places)
+        if held is not None:  # unreadable: keep what was known
+            self._held = held
+
+    def _sellable_now(self, item_data: dict) -> int | None:
+        """What can be sold of this item now (the shelf minus what is held for confirmed orders),
+        or None when nothing is held. The server is the judge; this only explains it early."""
+        held = int(self._held.get(str(item_data["id"]), 0))
+        if not held:
+            return None
+        return int(item_data.get("current_stock") or 0) - held
 
     def _show_places(self, places):
         """Ask where a bill is sold from only when there is a choice; with one shop the server
@@ -344,6 +362,16 @@ class SalesScreen(QWidget):
 
         item_id = str(item_data["id"])
         existing = next((c for c in self._cart if c.item_id == item_id), None)
+        sellable = self._sellable_now(item_data)
+        if sellable is not None and (existing.quantity if existing else 0) + 1 > sellable:
+            held = int(self._held.get(item_id, 0))
+            QMessageBox.warning(
+                self,
+                "Stock set aside",
+                f"{item_data['name']}: {held} {'is' if held == 1 else 'are'} set aside for confirmed orders, "
+                f"so only {max(sellable, 0)} can be sold now.\n\nThe rest is promised to a customer.",
+            )
+            return
         if existing:
             existing.quantity += 1
         else:

@@ -10,7 +10,7 @@ from pathlib import Path
 
 import requests
 
-from services.api_client import APIClient
+from services.api_client import APIClient, APIError
 from services.session import Session
 
 # Last item list the backend returned. Lets the New Bill screen list items
@@ -40,6 +40,14 @@ class InventoryService:
         if items is not None and allow_cached:
             self._write_cache(items)
         return items
+
+    def held(self) -> dict | None:
+        """{item_id: units} set aside for confirmed orders, or None when it could not be read
+        (offline, or an older server without the call). Screens carry on without it."""
+        try:
+            return self._api.get_held_stock(Session.get_token())
+        except (requests.RequestException, APIError):
+            return None
 
     @staticmethod
     def _write_cache(items: list) -> None:

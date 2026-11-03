@@ -191,3 +191,28 @@ def test_the_sales_screen_asks_where_from_only_when_there_is_a_choice(qapp):
     assert s._sold_from() == "p-stall"
     s._show_places(None)  # places could not be read: the picker stays as it was
     assert s._sold_from() == "p-stall"
+
+
+def test_the_bill_will_not_add_units_set_aside_for_confirmed_orders(qapp, dialogs):
+    s = SalesScreen()
+    s._all_items = [{"id": "i-held", "name": "Teak Armchair", "selling_price": "100", "current_stock": 3}]
+    s._held = {"i-held": 2}  # 2 of the 3 are promised to an order
+    s.search_input.setText("Teak Armchair")
+    s._add_item_to_cart()
+    assert [c.quantity for c in s._cart] == [1]  # one can be sold
+    s.search_input.setText("Teak Armchair")
+    s._add_item_to_cart()
+    assert [c.quantity for c in s._cart] == [1]  # the second would eat a held unit
+    assert dialogs and "2 are set aside" in dialogs[0][2] and "only 1 can be sold now" in dialogs[0][2]
+
+    s._held = {}  # nothing held: no reason to stop, the server is the judge
+    s.search_input.setText("Teak Armchair")
+    s._add_item_to_cart()
+    assert [c.quantity for c in s._cart] == [2]
+
+
+def test_the_client_reads_the_holds_from_the_server(monkeypatch):
+    seen = []
+    monkeypatch.setattr(api_client.APIClient, "_get", lambda self, path, token, **kw: seen.append(path) or {"i1": 2})
+    assert api_client.APIClient("http://x").get_held_stock("t") == {"i1": 2}
+    assert seen == ["/items/held"]
