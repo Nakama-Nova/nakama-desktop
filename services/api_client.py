@@ -517,14 +517,18 @@ class APIClient:
         items: list,
         customer_id: str | None = None,
         client_id: str | None = None,
+        location_id: str | None = None,
     ) -> dict | None:
         """
         POST /sales
         items: [{"item_id": "<uuid>", "quantity": int}, ...]
         client_id: idempotency key; the server returns the existing sale when it
         has already recorded this id.
+        location_id: the place the bill is sold from (left out: the one shop, if there is one).
         """
         payload: dict[str, Any] = {"items": items}
+        if location_id is not None:
+            payload["location_id"] = location_id
         if customer_id is not None:
             payload["customer_id"] = customer_id
         if client_id is not None:

@@ -29,7 +29,9 @@ from PyQt6.QtCore import Qt, QStringListModel
 
 
 from ui.theme import Theme, Colors, Fonts
+from ui.components.place_picker import PlacePicker, fetch_places, selling_places
 from ui.errors import handle_permissions
+from ui.workers import load_async
 from services.sales_service import BillPdfError, SalesService
 from services.customer_service import CustomerService
 from services.inventory_service import InventoryService
@@ -122,6 +124,18 @@ class SalesScreen(QWidget):
         self.search_btn.setStyleSheet(Theme.btn_secondary())
         self.search_btn.clicked.connect(self._handle_customer_lookup)
         buyer_row.addWidget(self.search_btn, 0, Qt.AlignmentFlag.AlignBottom)
+
+        # Where the bill is sold from: shown only when more than one place can sell
+        self.place_box = QWidget()
+        place_col = QVBoxLayout(self.place_box)
+        place_col.setContentsMargins(0, 0, 0, 0)
+        place_lbl = QLabel("Sold from")
+        place_lbl.setStyleSheet(Theme.label())
+        self.place_pick = PlacePicker("sale")
+        place_col.addWidget(place_lbl)
+        place_col.addWidget(self.place_pick)
+        self.place_box.setVisible(False)
+        buyer_row.addWidget(self.place_box, 1)
 
         root.addLayout(buyer_row)
 
@@ -261,6 +275,19 @@ class SalesScreen(QWidget):
 
     def refresh_data(self):
         self._load_items()
+        load_async(self, fetch_places, self._show_places)
+
+    def _show_places(self, places):
+        """Ask where a bill is sold from only when there is a choice; with one shop the server
+        fills it in. A failed read (None) leaves the picker as it was."""
+        if places is None:
+            return
+        sellers = selling_places(places)
+        self.place_pick.set_places(sellers)
+        self.place_box.setVisible(len(sellers) >= 2)
+
+    def _sold_from(self) -> str | None:
+        return self.place_pick.place_id() if not self.place_box.isHidden() else None
 
     # ------------------------------------------------------------------
     # Customer lookup
@@ -449,7 +476,7 @@ class SalesScreen(QWidget):
             for c in self._cart
         ]
         ref = self._sales_service.queue_offline_sale(
-            lines, customer_name, phone, client_id
+            lines, customer_name, phone, client_id, self._sold_from()
         )
         QMessageBox.information(
             self,
@@ -501,8 +528,10 @@ class SalesScreen(QWidget):
             payload_items = [
                 {"item_id": c.item_id, "quantity": c.quantity} for c in self._cart
             ]
+            place = self._sold_from()
+            extra = {"location_id": place} if place else {}  # one shop: the server fills it in
             sale_data = self._sales_service.create_sale(
-                items=payload_items, customer_id=customer_id, client_id=client_id
+                items=payload_items, customer_id=customer_id, client_id=client_id, **extra
             )
         except requests.RequestException:
             # The connection dropped after the online check. The server may or

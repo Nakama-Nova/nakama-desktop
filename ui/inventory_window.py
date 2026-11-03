@@ -27,6 +27,7 @@ from services import pricing
 from services.enums import UserRole
 from services.inventory_service import InventoryService
 from services.session import Session
+from ui.components.place_picker import fetch_places
 from services.stock_service import StockService
 from ui.errors import handle_permissions
 from ui.item_form import ItemDialog
@@ -293,10 +294,13 @@ class InventoryWindow(QWidget):
     @handle_permissions
     def _adjust(self, item: dict):
         dialog = AdjustStockDialog(
-            self, item["name"], item.get("unit") or "pcs", item.get("current_stock", 0)
+            self, item["name"], item.get("unit") or "pcs", item.get("current_stock", 0),
+            places=fetch_places(),
         )
         if dialog.exec() == QDialog.DialogCode.Accepted:
-            self._stock.adjust_item(str(item["id"]), int(dialog.change()), dialog.notes())
+            self._stock.adjust_item(
+                str(item["id"]), int(dialog.change()), dialog.notes(), dialog.place_id()
+            )
             self.refresh_data()
 
     @handle_permissions
