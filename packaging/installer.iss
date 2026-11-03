@@ -23,6 +23,7 @@ OutputBaseFilename=VrikshaStudiosDesk-Setup-{#AppVersion}
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
+SetupIconFile=..\assets\icon\vriksha.ico
 UninstallDisplayIcon={app}\VrikshaDesk.exe
 
 [Tasks]

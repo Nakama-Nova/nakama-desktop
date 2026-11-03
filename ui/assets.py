@@ -21,6 +21,11 @@ def logo_path(short: bool = False) -> Path:
     return IMAGE_DIR / "brand" / ("logo-vs.png" if short else "logo.png")
 
 
+def icon_path() -> Path:
+    """The program icon (see packaging/make_icon.py), for the window and the taskbar."""
+    return IMAGE_DIR.parent / "icon" / "vriksha.ico"
+
+
 def carving_path(name: str) -> Path:
     return IMAGE_DIR / "carvings" / f"{name}.webp"
 
