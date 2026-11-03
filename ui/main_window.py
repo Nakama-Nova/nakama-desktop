@@ -145,7 +145,7 @@ class MainWindow(QMainWindow):
         self._sync_running = False
         self.session_expired.connect(self._on_session_expired)
         set_session_expired_hook(self.session_expired.emit)
-        self.setWindowTitle("Vriksha Studio — Staff desk")
+        self.setWindowTitle("Vriksha Studios — Staff desk")
         self.setStyleSheet(Theme.global_stylesheet())
         app = QApplication.instance()
         if app is not None:
@@ -200,13 +200,14 @@ class MainWindow(QMainWindow):
         brand_text = QVBoxLayout()
         brand_text.setSpacing(0)
         brand_text.addStretch()
-        brand_lbl = QLabel("Vriksha Studio")
+        brand_lbl = QLabel("Vriksha Studios")
         brand_lbl.setStyleSheet(f"""
             font-family: '{Fonts.HEADING_FAMILY}', Georgia, serif;
-            font-size: 22px;
+            font-size: 20px;
             font-weight: bold;
             color: {Colors.BRAND_BROWN};
         """)
+        brand_lbl.setWordWrap(True)  # the name wraps to two lines rather than being cut off
         brand_text.addWidget(brand_lbl)
         brand_sub = QLabel("Staff desk")
         brand_sub.setStyleSheet(f"font-size: {Fonts.CAPTION}px; color: {Colors.TEXT_MUTED};")
