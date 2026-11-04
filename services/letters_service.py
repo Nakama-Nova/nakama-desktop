@@ -65,6 +65,10 @@ class LettersService:
     def issue(self, kind: str, data: dict) -> dict:
         return self._api._post(f"/letters/{kind.replace('_', '-')}", self._t(), json=data)
 
+    def delete(self, letter_id: str) -> bool:
+        """Remove a void letter for good (owner). An issued letter must be voided first, with a reason."""
+        return bool(self._api._delete_json(f"/letters/{letter_id}", self._t()))
+
     def void(self, letter_id: str, reason: str) -> dict:
         return self._api._post(f"/letters/{letter_id}/void", self._t(), json={"reason": reason})
 

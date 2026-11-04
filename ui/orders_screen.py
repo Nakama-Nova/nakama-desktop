@@ -51,6 +51,7 @@ from services import pricing
 from services.api_client import APIError
 from services.sales_service import BillPdfError, SalesService
 from services.session import Session
+from ui.components.interactive import action_buttons
 from ui.errors import handle_permissions
 from ui.expenses_screen import METHODS, date_edit, dialog_buttons, iso, money_spin
 from ui.letters_screen import issue_letter, show_letter
@@ -137,6 +138,87 @@ class PaymentDialog(QDialog):
             "note": self.note.text().strip() or None,
             "paid_on": iso(self.paid_on),
         }
+
+
+class EditPaymentDialog(QDialog):
+    """Correct a payment that was recorded wrongly. Only what you change is sent."""
+
+    def __init__(self, parent, payment: dict):
+        super().__init__(parent)
+        self._payment = payment
+        self.setWindowTitle("Correct payment")
+        self.setMinimumWidth(400)
+        self.setStyleSheet(f"background-color: {Colors.BG};")
+        form = QFormLayout(self)
+        form.setContentsMargins(24, 20, 24, 20)
+        form.setSpacing(10)
+        self.amount = money_spin(10_000_000)
+        self.amount.setValue(float(payment.get("amount") or 0))
+        self.method = QComboBox()
+        for label, value in METHODS:
+            self.method.addItem(label, value)
+        self.method.setCurrentIndex(max(0, self.method.findData(payment.get("method"))))
+        self.method.setStyleSheet(Theme.input_style())
+        self.reference = _line(payment.get("reference") or "", "UPI or cheque number")
+        self.note = _line(payment.get("note") or "", "e.g. advance, second instalment")
+        self.paid_on = date_edit(payment.get("paid_on"))
+        for label, w in [("Amount *", self.amount), ("How paid", self.method), ("Reference", self.reference), ("Note", self.note), ("Date", self.paid_on)]:
+            form.addRow(QLabel(label, styleSheet=Theme.label()), w)
+        form.addRow(dialog_buttons(self, "Save correction"))
+
+    def _check(self):
+        if self.amount.value() <= 0:
+            QMessageBox.warning(self, "Check the form", "Enter the amount received.")
+        else:
+            self.accept()
+
+    def changes(self) -> dict:
+        p, out = self._payment, {}
+        if round(self.amount.value(), 2) != round(float(p.get("amount") or 0), 2):
+            out["amount"] = round(self.amount.value(), 2)
+        if self.method.currentData() != p.get("method"):
+            out["method"] = self.method.currentData()
+        for key, widget in (("reference", self.reference), ("note", self.note)):
+            if widget.text().strip() != (p.get(key) or ""):
+                out[key] = widget.text().strip()
+        if iso(self.paid_on) != str(p.get("paid_on") or "")[:10]:
+            out["paid_on"] = iso(self.paid_on)
+        return out
+
+
+class VoidPaymentDialog(QDialog):
+    """Take a wrong payment off the order. It stays on record, with the reason."""
+
+    def __init__(self, parent, payment: dict, order_number: str):
+        super().__init__(parent)
+        self.setWindowTitle("Take payment off")
+        self.setMinimumWidth(460)
+        self.setStyleSheet(f"background-color: {Colors.BG};")
+        v = QVBoxLayout(self)
+        v.setContentsMargins(24, 20, 24, 20)
+        v.setSpacing(12)
+        v.addWidget(QLabel(f"Take {rupees(payment.get('amount'))} off {order_number}?", styleSheet=Theme.subheading()))
+        note = QLabel(
+            "The payment stays on record, marked Void, with your reason. The order's paid total, "
+            "its bill and the books follow. To change its amount instead, use Correct."
+        )
+        note.setWordWrap(True)
+        note.setStyleSheet(Theme.alert("warning"))
+        v.addWidget(note)
+        self.reason = _line(placeholder="Why? e.g. entered twice, wrong order")
+        form = QFormLayout()
+        form.addRow(QLabel("Reason *", styleSheet=Theme.label()), self.reason)
+        v.addLayout(form)
+        v.addLayout(dialog_buttons(self, "Take it off"))
+
+    def _check(self):
+        if len(self.reason.text().strip()) < 3:
+            QMessageBox.warning(self, "Reason", "Please say why, in a few words.")
+        else:
+            self.accept()
+
+    def reason_text(self) -> str:
+        return self.reason.text().strip()
 
 
 class EditOrderDialog(QDialog):
@@ -357,6 +439,8 @@ class OrdersScreen(QWidget):
         self._rows: list[dict] = []
         self._current: dict | None = None
         self.can_manage = Session.is_authorized([UserRole.OWNER, UserRole.MANAGER])
+        self._is_owner = Session.is_authorized([UserRole.OWNER])  # corrects or voids payments
+        self._can_delete = self.can_manage  # deletes an order that never went anywhere
         self.setStyleSheet(Theme.content_bg())
         self._search_timer = QTimer(self)
         self._search_timer.setSingleShot(True)
@@ -434,13 +518,16 @@ class OrdersScreen(QWidget):
         self.pay_btn = QPushButton("💵  Record payment")
         self.edit_btn = QPushButton("✏️  Edit")
         self.cancel_btn = QPushButton("Cancel order")
+        self.delete_btn = QPushButton("🗑️  Delete order")
+        self.delete_btn.setToolTip("Only for an order with no payments, bill, jobs or letters")
         self.letter_btn = QPushButton("✉️  Confirmation letter")
         self.bill_btn = QPushButton("🧾  Create bill")
-        for b, slot in ((self.pay_btn, self._pay), (self.bill_btn, self._bill), (self.letter_btn, self._letter), (self.edit_btn, self._edit), (self.cancel_btn, self._cancel)):
+        for b, slot in ((self.pay_btn, self._pay), (self.bill_btn, self._bill), (self.letter_btn, self._letter), (self.edit_btn, self._edit), (self.cancel_btn, self._cancel), (self.delete_btn, self._delete_order)):
             b.setStyleSheet(Theme.btn_secondary())
             b.clicked.connect(lambda _c=False, s=slot: s())
-        for b in (self.next_btn, self.pay_btn, self.bill_btn, self.letter_btn, self.edit_btn, self.cancel_btn):
+        for b in (self.next_btn, self.pay_btn, self.bill_btn, self.letter_btn, self.edit_btn, self.cancel_btn, self.delete_btn):
             actions.addWidget(b)
+        self.delete_btn.setVisible(False)
         actions.addStretch()
         d.addLayout(actions)
         both = QHBoxLayout()
@@ -449,7 +536,7 @@ class OrdersScreen(QWidget):
         self.lines = _table(["Piece", "Qty", "Price (with GST)", "Note"], 0)
         left.addWidget(self.lines)
         right.addWidget(QLabel("Payments", styleSheet=Theme.subheading()))
-        self.payments = _table(["Date", "Amount", "How", "Reference"], 3)
+        self.payments = _table(["Date", "Amount", "How", "Reference", ""], 3)
         right.addWidget(self.payments)
         both.addLayout(left, 3)
         both.addLayout(right, 2)
@@ -564,8 +651,26 @@ class OrdersScreen(QWidget):
         self.payments.setRowCount(len(pays))
         for r, p in enumerate(pays):
             how = "UPI" if p["method"] == "upi" else p["method"].title()
-            for c, text in enumerate([p["paid_on"], rupees(p["amount"]), how, " · ".join(x for x in (p.get("reference"), p.get("note")) if x)]):
-                self.payments.setItem(r, c, _cell(text, right=c == 1))
+            voided = bool(p.get("voided_at"))
+            detail = " · ".join(x for x in (p.get("reference"), p.get("note")) if x)
+            if voided:
+                detail = f"VOID: {p.get('void_reason') or ''}"
+            for c, text in enumerate([p["paid_on"], rupees(p["amount"]), how, detail]):
+                cell = _cell(text, right=c == 1)
+                if voided:
+                    cell.setForeground(QColor(Colors.TEXT_MUTED))
+                    f = cell.font()
+                    f.setStrikeOut(c != 3)
+                    cell.setFont(f)
+                self.payments.setItem(r, c, cell)
+            if self._is_owner and not voided and o.get("status") != "cancelled":
+                self.payments.setCellWidget(
+                    r, 4,
+                    action_buttons([("✏️", lambda pp=p: self._correct_payment(pp), "Correct this payment"), ("🚫", lambda pp=p: self._void_payment(pp), "Take this payment off the order")]),
+                )
+            self.payments.setRowHeight(r, 40)
+        # a voided payment is still on record, so the server refuses to delete an order that has one
+        self.delete_btn.setVisible(self._can_delete and not pays and o.get("status") in ("draft", "confirmed", "cancelled"))
 
     # ---------------------------------------------------------- actions
     @handle_permissions
@@ -600,6 +705,38 @@ class OrdersScreen(QWidget):
         notes = ((o.get("notes") or "") + f"\nCancelled: {reason.strip()}").strip()
         self._svc.set_status(o["id"], "cancelled", notes)
         self.refresh_data()
+
+    @handle_permissions
+    def _correct_payment(self, payment: dict):
+        o = self._current
+        d = EditPaymentDialog(self, payment)
+        if o and d.exec() == QDialog.DialogCode.Accepted and d.changes():
+            self._svc.update_payment(o["id"], payment["id"], d.changes())
+            self.refresh_data()
+
+    @handle_permissions
+    def _void_payment(self, payment: dict):
+        o = self._current
+        d = VoidPaymentDialog(self, payment, o["order_number"] if o else "")
+        if o and d.exec() == QDialog.DialogCode.Accepted:
+            self._svc.void_payment(o["id"], payment["id"], d.reason_text())
+            self.refresh_data()
+
+    @handle_permissions
+    def _delete_order(self):
+        o = self._current
+        if not o:
+            return
+        ask = QMessageBox.question(
+            self,
+            "Delete order",
+            f"Delete {o['order_number']} for good? Any stock held for it is released.\n\n"
+            "Only an order with no payments, bill, jobs or letters can be deleted; otherwise cancel it.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if ask == QMessageBox.StandardButton.Yes and self._svc.delete_order(o["id"]):
+            self._current = None
+            self.refresh_data()
 
     @handle_permissions
     def _pay(self):

@@ -48,6 +48,14 @@ class SalesService:
             return self._api.create_sale(self._token(), items, customer_id, client_id)
         return self._api.create_sale(self._token(), items, customer_id, client_id, location_id)
 
+    def cancel_sale(self, sale_id: str, reason: str) -> dict:
+        """Delete a bill (owner): its stock comes back, it stays in the history as cancelled."""
+        return self._api._delete_json(f"/sales/{sale_id}", self._token(), {"reason": reason})
+
+    def edit_sale(self, sale_id: str, changes: dict) -> dict:
+        """Correct a bill's payment (owner, manager): {"payment_status": ..., "payment_method": ...}."""
+        return self._api._patch(f"/sales/{sale_id}", self._token(), json=changes)
+
     def is_online(self) -> bool:
         return self._api.health_check()
 

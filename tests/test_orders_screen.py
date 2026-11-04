@@ -287,3 +287,109 @@ def test_who_sees_orders_in_the_menu(qapp, monkeypatch, role, sees):
     w = MainWindow()
     w._sync_timer.stop()
     assert ("Orders" in [label for _, label, _ in w._get_allowed_nav_items()]) is sees
+
+
+# ---------------------------------------------------------------- correcting and voiding payments, deleting an order
+def _with_voided():
+    pays = [
+        {"id": "p1", "amount": "3000.00", "method": "upi", "reference": "UPI-1", "note": "advance", "paid_on": "2026-10-20"},
+        {"id": "p2", "amount": "500.00", "method": "cash", "reference": None, "note": None, "paid_on": "2026-10-21", "voided_at": "2026-10-22T10:00:00", "void_reason": "entered twice"},
+    ]
+    return order(1, "confirmed", payments=pays)
+
+
+def _payment_buttons(screen, row):
+    from PyQt6.QtWidgets import QPushButton
+
+    w = screen.payments.cellWidget(row, 4)
+    return [b.text() for b in w.findChildren(QPushButton)] if w else []
+
+
+def test_only_the_owner_corrects_or_voids_a_payment_and_a_void_one_is_marked(qapp, fake, monkeypatch):
+    monkeypatch.setattr(Session, "_role", UserRole.OWNER)
+    monkeypatch.setattr(OrdersService, "orders", lambda self, *a, **k: [_with_voided()])
+    s = OrdersScreen()
+    s.refresh_data()
+    select(s, 0)
+    assert _payment_buttons(s, 0) == ["✏️", "🚫"]  # a live payment can be corrected or taken off
+    assert _payment_buttons(s, 1) == []  # a void one is history
+    assert s.payments.item(1, 3).text() == "VOID: entered twice" and s.payments.item(1, 1).font().strikeOut()
+    monkeypatch.setattr(Session, "_role", UserRole.MANAGER)
+    m = OrdersScreen()
+    m.refresh_data()
+    select(m, 0)
+    assert _payment_buttons(m, 0) == []  # the server allows only the owner
+
+
+def test_correcting_a_payment_sends_only_what_changed(qapp, fake, monkeypatch):
+    from ui.orders_screen import EditPaymentDialog
+
+    pay = SHOP["payments"][0]
+    d = EditPaymentDialog(None, pay)
+    assert d.changes() == {}
+    d.amount.setValue(2500)
+    d.note.setText("advance, corrected")
+    assert d.changes() == {"amount": 2500.0, "note": "advance, corrected"}
+    sent = []
+    monkeypatch.setattr(Session, "_role", UserRole.OWNER)
+    monkeypatch.setattr(OrdersService, "update_payment", lambda self, oid, pid, ch: sent.append((oid, pid, ch)) or {})
+    monkeypatch.setattr(EditPaymentDialog, "exec", lambda self: (self.amount.setValue(2500), 1)[1])
+    s = OrdersScreen()
+    s.refresh_data()
+    select(s, 1)
+    s._correct_payment(pay)
+    assert sent == [("o1", "p1", {"amount": 2500.0})]
+
+
+def test_voiding_a_payment_needs_a_reason_and_sends_it(qapp, fake, monkeypatch, dialogs):
+    from ui.orders_screen import VoidPaymentDialog
+
+    d = VoidPaymentDialog(None, SHOP["payments"][0], "ORD-2026-0001")
+    d.reason.setText("ab")
+    d._check()
+    assert dialogs and d.result() == 0
+    sent = []
+    monkeypatch.setattr(Session, "_role", UserRole.OWNER)
+    monkeypatch.setattr(OrdersService, "void_payment", lambda self, oid, pid, why: sent.append((oid, pid, why)) or {})
+    monkeypatch.setattr(VoidPaymentDialog, "exec", lambda self: (self.reason.setText("entered twice"), 1)[1])
+    s = OrdersScreen()
+    s.refresh_data()
+    select(s, 1)
+    s._void_payment(SHOP["payments"][0])
+    assert sent == [("o1", "p1", "entered twice")]
+
+
+def test_delete_order_shows_only_for_an_order_with_no_live_payment(qapp, fake, monkeypatch):
+    monkeypatch.setattr(Session, "_role", UserRole.MANAGER)
+    empty = order(4, "draft", payments=[], advance_paid="0.00", balance_due="10000.00")
+    monkeypatch.setattr(OrdersService, "orders", lambda self, *a, **k: [empty, SHOP, order(5, "delivered", payments=[])])
+    s = OrdersScreen()
+    s.refresh_data()
+    select(s, 0)
+    assert not s.delete_btn.isHidden()  # nothing paid yet, not billed
+    select(s, 1)
+    assert s.delete_btn.isHidden()  # money was taken against it
+    select(s, 2)
+    assert s.delete_btn.isHidden()  # delivered: cancel or keep, never delete
+    monkeypatch.setattr(Session, "_role", UserRole.SALES)
+    t = OrdersScreen()
+    t.refresh_data()
+    select(t, 0)
+    assert t.delete_btn.isHidden()
+
+
+def test_deleting_an_order_asks_first(qapp, fake, monkeypatch):
+    monkeypatch.setattr(Session, "_role", UserRole.OWNER)
+    empty = order(4, "draft", payments=[], advance_paid="0.00", balance_due="10000.00")
+    monkeypatch.setattr(OrdersService, "orders", lambda self, *a, **k: [empty])
+    gone = []
+    monkeypatch.setattr(OrdersService, "delete_order", lambda self, oid: gone.append(oid) or True)
+    s = OrdersScreen()
+    s.refresh_data()
+    select(s, 0)
+    monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.StandardButton.No))
+    s._delete_order()
+    assert gone == []
+    monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.StandardButton.Yes))
+    s._delete_order()
+    assert gone == ["o4"]

@@ -309,3 +309,18 @@ def test_a_restored_temple_project_has_a_certificate_button_for_the_owner(qapp, 
     monkeypatch.setattr(RestorationService, "project", lambda self, i: project)
     s._load_detail("r1")
     assert s.certificate_btn.isHidden()  # the owner issues certificates
+
+
+def test_only_a_void_letter_can_be_deleted_and_it_asks_first(screen, fake, monkeypatch):
+    monkeypatch.setattr(LettersService, "delete", lambda self, i: fake.append(("delete", i)) or True)
+    pick(screen, 0)  # an issued letter: void it first
+    assert not screen.delete_btn.isEnabled()
+    screen.status_filter.setCurrentIndex(screen.status_filter.findData(None))
+    pick(screen, 2)  # the void one
+    assert screen.delete_btn.isEnabled()
+    monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.StandardButton.No))
+    screen.delete_btn.click()
+    assert not [c for c in fake if c[0] == "delete"]
+    monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.StandardButton.Yes))
+    screen.delete_btn.click()
+    assert ("delete", "l3") in fake
