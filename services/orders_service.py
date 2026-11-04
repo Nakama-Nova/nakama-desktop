@@ -71,6 +71,19 @@ class OrdersService:
     def add_payment(self, order_id: str, data: dict) -> dict:
         return self._api._post(f"/orders/{order_id}/payments", self._t(), json=data)
 
+    def update_payment(self, order_id: str, payment_id: str, changes: dict) -> dict:
+        """Correct a payment (owner): amount, method, reference, note or date. Only what is sent changes."""
+        return self._api._patch(f"/orders/{order_id}/payments/{payment_id}", self._t(), json=changes)
+
+    def void_payment(self, order_id: str, payment_id: str, reason: str) -> dict:
+        """Take a wrong payment off the order (owner). It stays on record with the reason."""
+        return self._api._post(f"/orders/{order_id}/payments/{payment_id}/void", self._t(), json={"reason": reason})
+
+    def delete_order(self, order_id: str) -> bool:
+        """Delete an order that never went anywhere (owner, manager). One with a bill, payments, jobs
+        or letters is refused (409): cancel it instead."""
+        return bool(self._api._delete_json(f"/orders/{order_id}", self._t()))
+
     def invoice(self, order_id: str, allow_negative_stock: bool = False) -> dict:
         """Make the bill for an order (or get the one it already has). Raises APIError with
         the server's reason, which the screen shows; nothing is popped up from here."""

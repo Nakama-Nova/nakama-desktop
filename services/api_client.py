@@ -313,6 +313,24 @@ class APIClient:
             raise self._fail(response)
         return response.status_code in (200, 204)
 
+    def _delete_json(self, path: str, token: str, params: dict | None = None) -> Any:
+        """DELETE that says why it failed (a 400, 404, 409 or 422 raises with the server's reason)
+        and returns what the server sent back: the cancelled record, or True when it sent nothing."""
+        response = _send(
+            "delete",
+            f"{self._base_url}{path}",
+            headers=self._headers(token),
+            params=params,
+            timeout=REQUEST_TIMEOUT,
+        )
+        if response.status_code == 403:
+            raise ForbiddenError(
+                403, "Access Denied: You don't have permission for this action."
+            )
+        if response.status_code not in (200, 204):
+            raise self._fail(response)
+        return response.json() if response.status_code == 200 else True
+
     def _patch(self, path: str, token: str, json: dict | None = None) -> Any:
         response = _send(
             "patch",

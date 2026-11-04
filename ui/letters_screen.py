@@ -468,7 +468,10 @@ class LettersScreen(QWidget):
         self.save_btn = QPushButton("💾  Save PDF…")
         self.void_btn = QPushButton("🚫  Void…")
         self.void_btn.setVisible(Session.is_authorized([UserRole.OWNER]))
-        for b, slot in ((self.open_btn, self._open), (self.save_btn, self._save), (self.void_btn, self._void)):
+        self.delete_btn = QPushButton("🗑️  Delete")
+        self.delete_btn.setToolTip("Remove a void letter for good (void it first, with a reason)")
+        self.delete_btn.setVisible(Session.is_authorized([UserRole.OWNER]))
+        for b, slot in ((self.open_btn, self._open), (self.save_btn, self._save), (self.void_btn, self._void), (self.delete_btn, self._delete)):
             b.setStyleSheet(Theme.btn_secondary())
             b.setEnabled(False)
             b.clicked.connect(lambda _c=False, s=slot: s())
@@ -517,6 +520,7 @@ class LettersScreen(QWidget):
         for b in (self.open_btn, self.save_btn):
             b.setEnabled(bool(x))
         self.void_btn.setEnabled(bool(x) and x["status"] != "void")
+        self.delete_btn.setEnabled(bool(x) and x["status"] == "void")  # only a void letter can be deleted
         if not x:
             self.detail.setText("")
         elif x["status"] == "void":
@@ -567,6 +571,20 @@ class LettersScreen(QWidget):
             return
         self._svc.void(x["id"], reason.strip())
         self.refresh_data()
+
+    @handle_permissions
+    def _delete(self):
+        x = self._current()
+        if not x or x["status"] != "void":
+            return
+        ask = QMessageBox.question(
+            self,
+            "Delete letter",
+            f"Delete the void letter {x['number']} for good?\n\nWhat it said is kept in the audit log; the number is not used again.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if ask == QMessageBox.StandardButton.Yes and self._svc.delete(x["id"]):
+            self.refresh_data()
 
     @handle_permissions
     def _letterhead(self):
