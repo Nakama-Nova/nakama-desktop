@@ -267,7 +267,9 @@ class SalesScreen(QWidget):
     # ------------------------------------------------------------------
     @handle_permissions
     def _load_items(self):
-        items = self._inventory_service.get_items(allow_cached=True)
+        self._apply_items(self._inventory_service.get_items(allow_cached=True))
+
+    def _apply_items(self, items):
         if not items:
             return
         self._all_items = items
@@ -278,11 +280,17 @@ class SalesScreen(QWidget):
         self._load_items()
         load_async(self, self._fetch_context, self._show_context)
 
+    def refresh_async(self, _checked=False):
+        """The items (the last saved list when offline), the places and the holds, all in the
+        background: the window never waits for the server."""
+        load_async(self, self._fetch_context, self._show_context)
+
     def _fetch_context(self):
-        return fetch_places(), self._inventory_service.held()
+        return self._inventory_service.get_items(allow_cached=True), fetch_places(), self._inventory_service.held()
 
     def _show_context(self, data):
-        places, held = data
+        items, places, held = data
+        self._apply_items(items)
         self._show_places(places)
         if held is not None:  # unreadable: keep what was known
             self._held = held

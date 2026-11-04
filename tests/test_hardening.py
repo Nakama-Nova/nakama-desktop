@@ -170,3 +170,46 @@ def test_a_damaged_local_database_is_set_aside_and_replaced(tmp_path):
     assert conn.execute("SELECT COUNT(*) FROM outbox").fetchone()[0] == 0
     conn.close()
     assert len(list(tmp_path.glob("nakama_local.damaged-*.db"))) == 1
+
+
+class _Paged:
+    """A server that holds N rows and answers limit/offset like the real one (a page at a time,
+    50 rows when no limit is asked for)."""
+
+    def __init__(self, n):
+        self.rows = [{"id": str(i)} for i in range(n)]
+        self.asked = []
+
+    def get(self, url, **kw):
+        p = kw.get("params") or {}
+        self.asked.append((url.rsplit("/", 2)[-2] + "/" + url.rsplit("/", 1)[-1], p.get("limit"), p.get("offset")))
+        limit, offset = int(p.get("limit", 50)), int(p.get("offset", 0))
+        return Resp(200, self.rows[offset : offset + limit])
+
+
+def test_lists_are_read_page_by_page_so_nothing_past_the_first_page_is_hidden(monkeypatch):
+    api = APIClient("http://x")
+    server = _Paged(230)
+    monkeypatch.setattr(api_client._http, "get", server.get)
+    assert len(api.get_customers("t")) == 230  # a plain call would have shown only 50
+    assert len(api.get_sales("t")) == 230
+    assert len(api.get_my_attendance("t")) == 230
+    assert [a[1:] for a in server.asked[:3]] == [(100, 0), (100, 100), (100, 200)]  # three pages of up to 100
+
+
+def test_a_huge_history_is_cut_off_rather_than_fetched_forever(monkeypatch):
+    api = APIClient("http://x")
+    monkeypatch.setattr(api_client._http, "get", _Paged(5000).get)
+    assert len(api.get_sales("t")) == 1000  # bills: the newest thousand; the date filter reaches the rest
+    assert len(api._get_all("/x", "t", max_rows=250)) == 300  # whole pages, at most one page over the cap
+
+
+def test_orders_materials_purchases_and_suppliers_are_read_in_full(monkeypatch):
+    from services.orders_service import OrdersService
+    from services.stock_service import StockService
+
+    api = APIClient("http://x")
+    monkeypatch.setattr(api_client._http, "get", _Paged(260).get)
+    assert len(OrdersService(api).orders()) == 260
+    stock = StockService(api)
+    assert len(stock.materials()) == 260 and len(stock.purchases()) == 260 and len(stock.rows("suppliers")) == 260

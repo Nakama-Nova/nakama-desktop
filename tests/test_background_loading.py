@@ -213,3 +213,56 @@ def test_a_new_list_replaces_the_old_rows_and_their_buttons(qapp):
     w._populate_table([row("X")])
     assert w.table.rowCount() == 1 and w.table.item(0, 0).text() == "X"
     assert w.table.cellWidget(0, w.COL_ACTIONS) is not None
+
+
+def test_every_page_loads_in_the_background(qapp):
+    """A screen with only refresh_data fetches on the GUI thread, so a hung server freezes the
+    whole window for as long as the request lasts (30 s each). Every page must have refresh_async."""
+    w = MainWindow()
+    w._sync_timer.stop()
+    missing = [
+        type(w.content_stack.widget(i)).__name__
+        for i in range(w.content_stack.count())
+        if hasattr(w.content_stack.widget(i), "refresh_data") and not hasattr(w.content_stack.widget(i), "refresh_async")
+    ]
+    assert missing == []
+
+
+@pytest.mark.parametrize(
+    "module,cls,service,method",
+    [
+        ("ui.staff_screen", "StaffScreen", "StaffService", "me"),
+        ("ui.materials_screen", "MaterialsScreen", "StockService", "materials"),
+        ("ui.purchases_screen", "PurchasesScreen", "StockService", "rows"),
+        ("ui.expenses_screen", "ExpensesScreen", "MoneyService", "expenses"),
+        ("ui.profit_screen", "ProfitScreen", "MoneyService", "profit"),
+        ("ui.letters_screen", "LettersScreen", "LettersService", "letters"),
+        ("ui.designs_screen", "DesignsScreen", "DesignsService", "designs"),
+        ("ui.restoration_screen", "RestorationScreen", "RestorationService", "projects"),
+        ("ui.reports_screen", "ReportsScreen", "ReportService", "get_dashboard_summary"),
+        ("ui.attendance_screen", "AttendanceScreen", "AttendanceService", "get_users"),
+        ("ui.lab_screen", "LabScreen", "LabService", "list_furniture"),
+    ],
+)
+def test_a_hung_server_does_not_freeze_a_screen_while_it_loads(qapp, monkeypatch, module, cls, service, method):
+    import importlib
+
+    mod = importlib.import_module(module)
+    svc_module = importlib.import_module(getattr(mod, service).__module__)
+    release = threading.Event()
+    on = {}
+
+    def hung(self, *a, **k):
+        on["thread"] = threading.get_ident()
+        release.wait(5)  # a request that never answers (until the test lets go)
+        raise requests.ConnectionError("hung")
+
+    monkeypatch.setattr(getattr(svc_module, service), method, hung)
+    screen = getattr(mod, cls)()
+    started = time.monotonic()
+    screen.refresh_async()
+    assert time.monotonic() - started < 0.5  # came straight back
+    wait_until(lambda: "thread" in on, 3)
+    assert on.get("thread") not in (None, MAIN)  # the fetch ran on a worker, not here
+    release.set()
+    workers.wait_for_jobs()

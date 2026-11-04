@@ -231,7 +231,7 @@ class LoginWindow(QWidget):
 
     def handle_login(self):
         username = self.username.text().strip()
-        password = self.password.text().strip()
+        password = self.password.text()  # exactly as typed: a space at either end can be part of it
 
         if not username or not password:
             self._show_error("Please enter both username and password.")

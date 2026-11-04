@@ -236,6 +236,26 @@ class APIClient:
             raise self._fail(response, quiet)
         return response.json()
 
+    def _get_all(
+        self,
+        path: str,
+        token: str,
+        params: dict | None = None,
+        page: int = 100,
+        max_rows: int = 2000,
+        quiet: bool = False,
+    ) -> list:
+        """Every row of a list, page by page. The server returns at most `page` rows a call (50 when
+        no limit is asked for), so one plain call quietly drops the rest: bills past the 50th,
+        buyers past the 50th. Stops at max_rows so a huge history cannot make a screen crawl."""
+        rows: list = []
+        while len(rows) < max_rows:
+            batch = self._get(path, token, params={**(params or {}), "limit": page, "offset": len(rows)}, quiet=quiet)
+            rows.extend(batch)
+            if len(batch) < page:
+                break
+        return rows
+
     def _post(
         self,
         path: str,
@@ -459,7 +479,7 @@ class APIClient:
     # ------------------------------------------------------------------
     def get_customers(self, token: str) -> list | None:
         try:
-            return self._get("/customers", token)
+            return self._get_all("/customers", token, max_rows=5000)
         except ForbiddenError:
             raise
         except APIError:
@@ -553,7 +573,7 @@ class APIClient:
         if date:
             params["date"] = date
         try:
-            return self._get("/sales", token, params=params or None)
+            return self._get_all("/sales", token, params, max_rows=1000)  # newest first
         except APIError:
             return None
 
@@ -642,7 +662,7 @@ class APIClient:
     def get_my_attendance(self, token: str) -> list | None:
         """GET /attendance/my"""
         try:
-            return self._get("/attendance/my", token)
+            return self._get_all("/attendance/my", token, max_rows=1000)
         except APIError:
             return None
 
@@ -662,7 +682,7 @@ class APIClient:
         if end_date:
             params["end_date"] = end_date
         try:
-            return self._get("/attendance/all", token, params=params or None)
+            return self._get_all("/attendance/all", token, params, max_rows=1000)
         except APIError:
             return None
 

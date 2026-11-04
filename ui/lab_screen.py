@@ -25,6 +25,7 @@ from services.lab_service import LabService
 from services.session import Session
 from ui.errors import handle_permissions
 from ui.theme import Colors, Fonts, Theme
+from ui.workers import load_async
 
 
 class LabScreen(QWidget):
@@ -82,6 +83,9 @@ class LabScreen(QWidget):
     @handle_permissions
     def refresh_data(self):
         self._populate(self._service.list_furniture())
+
+    def refresh_async(self, _checked=False):
+        load_async(self, self._service.list_furniture, self._populate)
 
     def _populate(self, pieces: list[dict]):
         self.table.setRowCount(len(pieces))

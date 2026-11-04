@@ -23,6 +23,7 @@ from services.money_service import PERIODS, MoneyService, period_range, rupees
 from ui.components.metric_card import MetricCard
 from ui.errors import handle_permissions
 from ui.theme import Colors, Fonts, Theme
+from ui.workers import load_async
 
 
 class ProfitScreen(QWidget):
@@ -104,7 +105,13 @@ class ProfitScreen(QWidget):
     @handle_permissions
     def refresh_data(self, _checked=False):
         start, end = period_range(self.period.currentData())
-        rep = self._svc.profit(start, end)
+        self._show(self._svc.profit(start, end))
+
+    def refresh_async(self, _checked=False):
+        start, end = period_range(self.period.currentData())
+        load_async(self, lambda: self._svc.profit(start, end), self._show)
+
+    def _show(self, rep):
         for key in ("sales", "purchases", "wages", "expenses", "profit"):
             self.cards[key].set_value(rupees(rep[key]))
         self.cards["margin"].set_value(f"{float(rep['margin_pct']):.1f}%")

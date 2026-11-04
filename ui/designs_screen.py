@@ -36,6 +36,7 @@ from ui.errors import handle_permissions
 from ui.expenses_screen import dialog_buttons, money_spin
 from ui.restoration_screen import TransferThread, _size
 from ui.theme import Colors, Fonts, Theme
+from ui.workers import load_async
 
 KIND_LABEL = {value: label for label, value in PROJECT_KINDS}
 
@@ -282,8 +283,15 @@ class DesignsScreen(QWidget):
     # ------------------------------------------------------------- data
     @handle_permissions
     def refresh_data(self, _checked=False):
+        self._show(self._svc.designs(self.status_filter.currentData(), self.search.text().strip()))
+
+    def refresh_async(self, _checked=False):
+        status, search = self.status_filter.currentData(), self.search.text().strip()  # read here, on the GUI thread
+        load_async(self, lambda: self._svc.designs(status, search), self._show)
+
+    def _show(self, rows):
         keep = self._current["id"] if self._current else None
-        self._rows = self._svc.designs(self.status_filter.currentData(), self.search.text().strip())
+        self._rows = rows
         self.table.blockSignals(True)
         self.table.setRowCount(len(self._rows))
         for r, d in enumerate(self._rows):

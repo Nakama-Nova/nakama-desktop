@@ -30,6 +30,7 @@ from services.api_client import APIError
 from services.staff_service import StaffService
 from ui.errors import handle_permissions
 from ui.theme import Colors, Fonts, Theme
+from ui.workers import load_async
 
 ROLES = [
     ("Owner", "owner"),
@@ -253,10 +254,18 @@ class StaffScreen(QWidget):
         self.table.setStyleSheet(Theme.table_style())
         layout.addWidget(self.table)
 
+    def _fetch(self):
+        return self._svc.me().get("id"), sorted(self._svc.users(), key=lambda u: (not u["is_active"], u["username"]))
+
     @handle_permissions
     def refresh_data(self, _checked=False):
-        self._me = self._svc.me().get("id")
-        self._rows = sorted(self._svc.users(), key=lambda u: (not u["is_active"], u["username"]))
+        self._show(self._fetch())
+
+    def refresh_async(self, _checked=False):
+        load_async(self, self._fetch, self._show)
+
+    def _show(self, data):
+        self._me, self._rows = data
         self.table.setRowCount(len(self._rows))
         for r, u in enumerate(self._rows):
             name = u.get("full_name") or u["username"]

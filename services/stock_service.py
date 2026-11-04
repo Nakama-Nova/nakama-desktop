@@ -54,7 +54,7 @@ class StockService:
     # ----- categories, suppliers (same shape: list / save / delete)
     def rows(self, kind: str) -> list:
         """kind: 'categories' | 'suppliers'"""
-        return self._api._get(f"/{kind}/", self._t()) or []
+        return self._api._get_all(f"/{kind}/", self._t(), page=200)
 
     def save_row(self, kind: str, data: dict, row_id: str | None = None) -> dict:
         if row_id:
@@ -86,7 +86,7 @@ class StockService:
 
     # ----- raw materials
     def materials(self) -> list:
-        return self._api._get("/raw-materials/", self._t(), params={"limit": 100}) or []
+        return self._api._get_all("/raw-materials/", self._t())
 
     def create_material(self, data: dict) -> dict:
         return self._api._post("/raw-materials/", self._t(), json=data)
@@ -107,7 +107,7 @@ class StockService:
 
     # ----- purchases
     def purchases(self) -> list:
-        return self._api._get("/purchases/", self._t(), params={"limit": 100}) or []
+        return self._api._get_all("/purchases/", self._t(), page=200)
 
     def purchase(self, purchase_id: str) -> dict:
         return self._api._get(f"/purchases/{purchase_id}", self._t())

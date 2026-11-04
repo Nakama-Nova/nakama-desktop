@@ -33,6 +33,7 @@ from services.restoration_service import RestorationService
 from services.session import Session
 from ui.errors import handle_permissions
 from ui.theme import Colors, Fonts, Theme
+from ui.workers import load_async
 
 CATEGORIES = [
     "Shop rent",
@@ -212,11 +213,19 @@ class ExpensesScreen(QWidget):
         self.table.setStyleSheet(Theme.table_style())
         layout.addWidget(self.table)
 
+    def _fetch(self, start, end):
+        return self._svc.expenses(start, end), self._svc.expense_summary(start, end)
+
     @handle_permissions
     def refresh_data(self, _checked=False):
+        self._show(self._fetch(*period_range(self.period.currentData())))
+
+    def refresh_async(self, _checked=False):
         start, end = period_range(self.period.currentData())
-        self._rows = self._svc.expenses(start, end)
-        summary = self._svc.expense_summary(start, end)
+        load_async(self, lambda: self._fetch(start, end), self._show)
+
+    def _show(self, data):
+        self._rows, summary = data
         parts = [f"{c['category']} {rupees(c['total'])}" for c in summary["by_category"]]
         self.summary.setText(
             f"Total spent {rupees(summary['total'])}" + ("   ·   " + "   ·   ".join(parts) if parts else "")

@@ -309,3 +309,13 @@ def test_remember_me_keeps_the_sign_in_and_the_username_only_when_ticked(qapp, m
     again.handle_login()
     assert kept.get("auth_token") == "tok"
     assert LoginWindow().username.text() == "asha"
+
+
+def test_the_password_is_sent_exactly_as_typed_but_the_username_is_trimmed(qapp, monkeypatch):
+    sent = []
+    monkeypatch.setattr("ui.login_window.AuthService.login", lambda self, u, p: sent.append((u, p)) or None)
+    box = LoginWindow()
+    box.username.setText("  asha ")
+    box.password.setText(" pass with spaces ")
+    box.handle_login()
+    assert sent == [("asha", " pass with spaces ")]  # a password chosen with a space at an end still signs in
