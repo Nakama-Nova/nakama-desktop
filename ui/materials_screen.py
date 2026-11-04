@@ -29,6 +29,7 @@ from ui.components.place_picker import fetch_places
 from ui.errors import handle_permissions
 from ui.stock_dialogs import AdjustStockDialog, MovementsDialog
 from ui.theme import Colors, Fonts, Theme
+from ui.workers import load_async
 
 
 class MaterialDialog(QDialog):
@@ -147,7 +148,13 @@ class MaterialsScreen(QWidget):
 
     @handle_permissions
     def refresh_data(self):
-        self._rows = self._svc.materials()
+        self._show(self._svc.materials())
+
+    def refresh_async(self, _checked=False):
+        load_async(self, self._svc.materials, self._show)
+
+    def _show(self, rows):
+        self._rows = rows
         self.table.setRowCount(len(self._rows))
         for r, m in enumerate(self._rows):
             for c, text in enumerate(

@@ -35,6 +35,7 @@ from ui.errors import handle_permissions
 from ui.item_form import GST_CHOICES
 from ui.stock_dialogs import SUPPLIER_FIELDS, ManageRowsDialog
 from ui.theme import Colors, Fonts, Theme
+from ui.workers import load_async
 
 STATUS_WORDS = {"pending": "Waiting for goods", "confirmed": "Received"}
 TYPE_CHOICES = [("Bill from the supplier", "tax_invoice"), ("Voucher (no bill)", "purchase_voucher")]
@@ -243,10 +244,18 @@ class PurchasesScreen(QWidget):
         self.table.setStyleSheet(Theme.table_style())
         layout.addWidget(self.table)
 
+    def _fetch(self):
+        return {s["id"]: s["name"] for s in self._svc.rows("suppliers")}, self._svc.purchases()
+
     @handle_permissions
     def refresh_data(self, _checked=False):
-        self._suppliers = {s["id"]: s["name"] for s in self._svc.rows("suppliers")}
-        self._rows = self._svc.purchases()
+        self._show(self._fetch())
+
+    def refresh_async(self, _checked=False):
+        load_async(self, self._fetch, self._show)
+
+    def _show(self, data):
+        self._suppliers, self._rows = data
         self.table.setRowCount(len(self._rows))
         for r, p in enumerate(self._rows):
             status = STATUS_WORDS.get(p.get("status"), p.get("status") or "")

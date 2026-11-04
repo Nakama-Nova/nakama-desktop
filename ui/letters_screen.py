@@ -52,6 +52,7 @@ from ui.errors import handle_permissions
 from ui.expenses_screen import METHODS, date_edit, dialog_buttons, iso, money_spin
 from ui.item_scan import open_file
 from ui.theme import Colors, Fonts, Theme
+from ui.workers import load_async
 
 
 def _table(headers, stretch=None) -> QTableWidget:
@@ -482,8 +483,15 @@ class LettersScreen(QWidget):
     # ------------------------------------------------------------- data
     @handle_permissions
     def refresh_data(self, _checked=False):
+        self._show(self._svc.letters(self.kind_filter.currentData(), self.status_filter.currentData(), self.search.text().strip()))
+
+    def refresh_async(self, _checked=False):
+        kind, status, search = self.kind_filter.currentData(), self.status_filter.currentData(), self.search.text().strip()
+        load_async(self, lambda: self._svc.letters(kind, status, search), self._show)
+
+    def _show(self, rows):
         keep = self._current()["id"] if self._current() else None
-        self._rows = self._svc.letters(self.kind_filter.currentData(), self.status_filter.currentData(), self.search.text().strip())
+        self._rows = rows
         self.table.blockSignals(True)
         self.table.setRowCount(len(self._rows))
         for r, x in enumerate(self._rows):

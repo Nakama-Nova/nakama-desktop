@@ -21,6 +21,7 @@ from PyQt6.QtGui import QColor
 from ui.theme import Theme, Colors, Fonts
 from ui.components.metric_card import MetricCard
 from services.report_service import ReportService
+from ui.workers import load_async
 
 
 class ReportsScreen(QWidget):
@@ -128,9 +129,19 @@ class ReportsScreen(QWidget):
             self.layout().addWidget(sub_label)
             self.layout().addStretch()
 
+    def _fetch(self):
+        svc = self._report_service
+        return svc.get_dashboard_summary(), svc.get_sales_report(), svc.get_low_stock_items()
+
     def refresh_data(self):
+        self._show(self._fetch())
+
+    def refresh_async(self, _checked=False):
+        load_async(self, self._fetch, self._show)
+
+    def _show(self, data):
+        dash, sales, low_stock = data
         # Dashboard summary (today's data)
-        dash = self._report_service.get_dashboard_summary()
         if dash:
             self.card_today_orders.set_value(dash.get("today_sales_count", 0))
             self.card_today_revenue.set_value(
@@ -139,7 +150,6 @@ class ReportsScreen(QWidget):
             self.card_low_stock.set_value(dash.get("low_stock_count", 0))
 
         # Sales report (all-time)
-        sales = self._report_service.get_sales_report()
         if sales:
             self.card_all_orders.set_value(sales.get("total_orders", 0))
             self.card_total_revenue.set_value(
@@ -148,7 +158,6 @@ class ReportsScreen(QWidget):
             self.card_total_tax.set_value(f"₹{float(sales.get('total_tax', 0)):,.2f}")
 
         # Low stock items
-        low_stock = self._report_service.get_low_stock_items()
         self.table.setRowCount(0)
         for row, item in enumerate(low_stock):
             self.table.insertRow(row)

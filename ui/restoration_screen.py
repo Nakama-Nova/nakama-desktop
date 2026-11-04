@@ -53,6 +53,7 @@ from services.session import Session
 from services.stock_service import StockService
 from ui.errors import handle_permissions
 from ui.theme import Colors, Fonts, Theme
+from ui.workers import load_async
 
 
 def _size(n) -> str:
@@ -427,8 +428,15 @@ class RestorationScreen(QWidget):
 
     @handle_permissions
     def refresh_data(self, _checked=False):
+        self._show(self._svc.projects(self.filter.currentData()))
+
+    def refresh_async(self, _checked=False):
+        which = self.filter.currentData()
+        load_async(self, lambda: self._svc.projects(which), self._show)
+
+    def _show(self, rows):
         keep = self._current["id"] if self._current else None
-        self._rows = self._svc.projects(self.filter.currentData())
+        self._rows = rows
         self.table.blockSignals(True)
         self.table.setRowCount(len(self._rows))
         for r, p in enumerate(self._rows):

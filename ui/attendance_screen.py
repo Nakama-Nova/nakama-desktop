@@ -25,6 +25,7 @@ from services.workforce_service import AttendanceService
 from services.session import Session
 from services.enums import UserRole
 from ui.errors import handle_permissions
+from ui.workers import load_async
 
 
 class AttendanceScreen(QWidget):
@@ -88,14 +89,29 @@ class AttendanceScreen(QWidget):
         # loaded when the screen is opened (the main window calls refresh_data), not
         # while the window is being built, so starting the app never waits on the server
 
+    @staticmethod
+    def _is_admin() -> bool:
+        return Session.get_role() in [UserRole.OWNER, UserRole.MANAGER, UserRole.SALES]
+
+    def _fetch(self):
+        """(people, records): everyone's for the owner, manager and sales, only your own otherwise."""
+        if self._is_admin():
+            return self._service.get_users(), self._service.get_all_attendance()
+        return [], self._service.get_my_attendance()
+
     @handle_permissions
     def refresh_data(self):
-        role = Session.get_role()
-        is_admin = role in [UserRole.OWNER, UserRole.MANAGER, UserRole.SALES]
+        self._show(self._fetch())
 
-        # 1. Load users if admin (keeping whoever was selected)
+    def refresh_async(self, _checked=False):
+        load_async(self, self._fetch, self._show)
+
+    def _show(self, data):
+        users, records = data
+        is_admin = self._is_admin()
+
+        # 1. Fill the people list if admin (keeping whoever was selected)
         if is_admin:
-            users = self._service.get_users()
             selected = self.user_combo.currentData()
             self.user_combo.blockSignals(True)
             self.user_combo.clear()
@@ -107,12 +123,7 @@ class AttendanceScreen(QWidget):
                     self.user_combo.setCurrentIndex(idx)
             self.user_combo.blockSignals(False)
 
-        # 2. Load attendance history
-        if is_admin:
-            records = self._service.get_all_attendance()
-        else:
-            records = self._service.get_my_attendance()
-
+        # 2. Show the attendance history
         self.table.setRowCount(len(records))
         open_records: dict[str, dict] = {}
 

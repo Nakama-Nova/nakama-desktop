@@ -36,6 +36,7 @@ from ui.errors import handle_permissions
 from ui.expenses_screen import METHODS, date_edit, dialog_buttons, iso, money_spin
 from ui.staff_screen import ROLE_WORDS
 from ui.theme import Colors, Fonts, Theme
+from ui.workers import load_async
 
 KINDS = [
     ("Piece or job work", "piece"),
@@ -368,15 +369,26 @@ class PayrollScreen(QWidget):
             layout.addWidget(self.my_payments)
 
     # ------------------------------------------------------------ data
+    def _fetch(self):
+        if self.can_manage:
+            return self._svc.owed(), self._svc.payments()[:20]
+        return self._svc.my_payroll()
+
     @handle_permissions
     def refresh_data(self, _checked=False):
-        if self.can_manage:
-            self._refresh_everyone()
-        else:
-            self._refresh_mine()
+        self._show(self._fetch())
 
-    def _refresh_everyone(self):
-        self._owed = self._svc.owed()
+    def refresh_async(self, _checked=False):
+        load_async(self, self._fetch, self._show)
+
+    def _show(self, data):
+        if self.can_manage:
+            self._refresh_everyone(*data)
+        else:
+            self._refresh_mine(data)
+
+    def _refresh_everyone(self, owed, payments):
+        self._owed = owed
         names = {p["user_id"]: person_name(p) for p in self._owed}
         due = sum(float(p["owed_gross"]) for p in self._owed)
         lent = sum(float(p["advance_balance"]) for p in self._owed)
@@ -395,7 +407,7 @@ class PayrollScreen(QWidget):
                 self.table.setItem(r, c, _cell(text, right=c >= self.COL_DAILY))
             self.table.setCellWidget(r, self.COL_ACTIONS, self._actions(p))
             self.table.setRowHeight(r, 52)
-        rows = self._svc.payments()[:20]
+        rows = payments
         self.payments.setRowCount(len(rows))
         for r, p in enumerate(rows):
             gross = float(p["gross_daily"]) + float(p["gross_extras"])
@@ -410,8 +422,7 @@ class PayrollScreen(QWidget):
             for c, text in enumerate(values):
                 self.payments.setItem(r, c, _cell(text, right=c in (2, 3, 4)))
 
-    def _refresh_mine(self):
-        me = self._svc.my_payroll()
+    def _refresh_mine(self, me):
         self.card_daily.set_value(rupees(me["pending_daily"]))
         self.card_extras.set_value(rupees(me["pending_extras"]))
         self.card_advance.set_value(rupees(me["advance_balance"]))

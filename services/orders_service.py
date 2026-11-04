@@ -53,9 +53,11 @@ class OrdersService:
     def _t(self) -> str:
         return Session.get_token()
 
-    def orders(self, status=None, source=None, search=None, limit=100) -> list:
-        params = {"status": status, "source": source, "search": search or None, "limit": limit}
-        return self._api._get("/orders/", self._t(), params=params) or []
+    def orders(self, status=None, source=None, search=None, limit=1000) -> list:
+        """The newest `limit` orders matching the filters, fetched a page at a time (the server
+        returns at most 100 a call)."""
+        params = {k: v for k, v in {"status": status, "source": source, "search": search or None}.items() if v}
+        return self._api._get_all("/orders/", self._t(), params, max_rows=limit)
 
     def create(self, data: dict) -> dict:
         return self._api._post("/orders/", self._t(), json=data)
