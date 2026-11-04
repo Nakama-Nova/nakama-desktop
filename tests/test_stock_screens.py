@@ -1,7 +1,7 @@
 """Stock screens: full product form, stock changes, materials, purchases, access by role."""
 
 import pytest
-from PyQt6.QtWidgets import QPushButton
+from PyQt6.QtWidgets import QMessageBox, QPushButton
 
 from services.api_client import APIClient, APIError
 from services.enums import UserRole
@@ -141,6 +141,34 @@ def test_only_the_owner_can_delete_a_material(qapp, fake, monkeypatch):
     s = MaterialsScreen()
     s.refresh_data()
     assert "🗑️" not in row_buttons(s.table, 0, s.COL_ACTIONS)
+
+
+def test_deleting_a_material_carries_the_servers_reason_and_never_fails_silently(qapp, fake, monkeypatch, dialogs):
+    s = MaterialsScreen()
+    s.refresh_data()
+    asked = {"yes": QMessageBox.StandardButton.Yes}
+    monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *a, **k: asked["yes"]))
+    gone = []
+    monkeypatch.setattr(StockService, "delete_material", lambda self, mid: gone.append(mid) or True)
+    s._delete(MATERIALS[0])
+    assert gone == ["m1"] and not dialogs  # deleted: the list just refreshes
+
+    def refuse(self, mid):
+        raise APIError(409, '{"detail": "Teak plank has stock history, purchases or a recipe, so it cannot be deleted."}')
+
+    monkeypatch.setattr(StockService, "delete_material", refuse)
+    with pytest.raises(APIError) as e:  # the app's error handler shows the server's reason
+        s._delete(MATERIALS[0])
+    assert "stock history" in str(e.value) and "cannot be deleted" in str(e.value)
+
+    dialogs.clear()
+    monkeypatch.setattr(StockService, "delete_material", lambda self, mid: False)
+    s._delete(MATERIALS[0])
+    assert dialogs and "could not be deleted" in dialogs[-1][2]
+    asked["yes"] = QMessageBox.StandardButton.No
+    dialogs.clear()
+    s._delete(MATERIALS[0])
+    assert not dialogs  # said no: nothing happens
 
 
 def test_new_purchase_builds_lines_and_total(qapp):

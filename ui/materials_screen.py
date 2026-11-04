@@ -226,5 +226,9 @@ class MaterialsScreen(QWidget):
             self, "Confirm Delete", f"Delete {m['name']}?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
-        if ask == QMessageBox.StandardButton.Yes and self._svc.delete_material(m["id"]):
+        if ask != QMessageBox.StandardButton.Yes:
+            return
+        if self._svc.delete_material(m["id"]):
             self.refresh_data()
+        else:  # never fail silently: the server said no without saying why
+            QMessageBox.warning(self, "Not deleted", f"{m['name']} could not be deleted. Try again, or refresh the list.")
