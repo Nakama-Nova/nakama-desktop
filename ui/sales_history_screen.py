@@ -236,7 +236,8 @@ class SalesHistoryScreen(QWidget):
         hdr = self.table.horizontalHeader()
         hdr.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         hdr.setSectionResizeMode(self.COL_ACTIONS, QHeaderView.ResizeMode.Fixed)
-        self.table.setColumnWidth(self.COL_ACTIONS, 300 if self._can_delete else 240 if self._can_edit else 180)
+        # room for every button with its words: View, Print, Payment, Delete
+        self.table.setColumnWidth(self.COL_ACTIONS, 420 if self._can_delete else 320 if self._can_edit else 200)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.verticalHeader().setVisible(False)
@@ -291,7 +292,7 @@ class SalesHistoryScreen(QWidget):
         self.table.setRowCount(0)
         for row, sale in enumerate(self._shown):
             self.table.insertRow(row)
-            self.table.setRowHeight(row, 46)
+            self.table.setRowHeight(row, 54)
             cancelled = is_cancelled(sale)
             created = str(sale.get("created_at") or "")
             created = created.split("T")[0] if "T" in created else created
@@ -315,6 +316,11 @@ class SalesHistoryScreen(QWidget):
             pay.setFont(f)
             self.table.setItem(row, self.COL_PAYMENT, pay)
             self.table.setCellWidget(row, self.COL_ACTIONS, self._actions(sale, cancelled))
+        # as wide as the widest row of buttons needs, in whatever font this computer uses (a fixed guess cut "Payment" to "Payme")
+        wide = max((self.table.cellWidget(r, self.COL_ACTIONS).sizeHint().width() for r in range(self.table.rowCount())), default=0)
+        floor = 420 if self._can_delete else 320 if self._can_edit else 200  # what the buttons measured on Windows (the hint is taken before the style is applied)
+        if wide:
+            self.table.setColumnWidth(self.COL_ACTIONS, max(floor, wide + 8))
 
     def _actions(self, sale: dict, cancelled: bool) -> QWidget:
         box = QWidget()
@@ -329,7 +335,7 @@ class SalesHistoryScreen(QWidget):
         for text, slot, tip in buttons:
             b = QPushButton(text)
             b.setCursor(Qt.CursorShape.PointingHandCursor)
-            b.setFixedHeight(28)
+            b.setFixedHeight(34)
             b.setToolTip(tip)
             b.setStyleSheet(Theme.btn_table_action())
             b.clicked.connect(lambda _=False, s=sale, f=slot: f(s))
