@@ -126,3 +126,14 @@ def test_a_refused_delete_raises_the_servers_reason(monkeypatch):
     with pytest.raises(api_client.APIError) as e:
         SalesService(api_client.APIClient("http://x")).cancel_sale("s9", "again")
     assert "already cancelled" in str(e.value)
+
+
+@pytest.mark.parametrize("role", [UserRole.OWNER, UserRole.MANAGER, UserRole.SALES])
+def test_the_actions_column_is_wide_enough_for_every_button_word(qapp, history, monkeypatch, role):
+    """Payment and Delete were cut to "Payme" and "Delet" when the column was too narrow."""
+    monkeypatch.setattr(Session, "_role", role)
+    s = SalesHistoryScreen()
+    s.refresh_data()
+    box = s.table.cellWidget(0, s.COL_ACTIONS)
+    needed = sum(b.sizeHint().width() for b in box.findChildren(QPushButton)) + 6 * (len(box.findChildren(QPushButton)) - 1) + 8  # buttons, gaps, margins
+    assert s.table.columnWidth(s.COL_ACTIONS) >= needed

@@ -80,6 +80,13 @@ def source_words(entry: dict) -> str:
     return SOURCE_WORDS.get(s, (s or "").replace("_", " ").capitalize()) if s else KIND_WORDS.get(entry.get("kind"), "")
 
 
+def _named(name: str) -> QTableWidgetItem:
+    """An account name; a long one is cut to fit, so the whole of it is in the tooltip."""
+    item = QTableWidgetItem(name)
+    item.setToolTip(name)
+    return item
+
+
 def _amount_cell(text: str) -> QTableWidgetItem:
     return _right(text)
 
@@ -90,7 +97,7 @@ class EntryDialog(QDialog):
     def __init__(self, parent, entry: dict):
         super().__init__(parent)
         self.setWindowTitle("Journal entry")
-        self.setMinimumWidth(640)
+        self.setMinimumWidth(780)
         self.setStyleSheet(f"background-color: {Colors.BG};")
         v = QVBoxLayout(self)
         v.setContentsMargins(24, 20, 24, 20)
@@ -105,6 +112,9 @@ class EntryDialog(QDialog):
         self.table = _table(["Account", "Debit", "Credit", "Note"])
         hh = self.table.horizontalHeader()
         hh.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        for col in (1, 2):  # the amounts keep their room; the account name and the note share the rest
+            hh.setSectionResizeMode(col, QHeaderView.ResizeMode.Fixed)
+            self.table.setColumnWidth(col, 130)
         lines = entry.get("lines") or []
         self.table.setRowCount(len(lines))
         for i, ln in enumerate(lines):
@@ -132,7 +142,7 @@ class LedgerDialog(QDialog):
     def __init__(self, parent, ledger: dict):
         super().__init__(parent)
         self.setWindowTitle(f"Ledger: {ledger.get('name', '')}")
-        self.setMinimumWidth(720)
+        self.setMinimumWidth(960)
         self.setStyleSheet(f"background-color: {Colors.BG};")
         v = QVBoxLayout(self)
         v.setContentsMargins(24, 20, 24, 20)
@@ -141,7 +151,11 @@ class LedgerDialog(QDialog):
         span = f"{when(ledger.get('date_from')) or 'the beginning'} to {when(ledger.get('date_to')) or 'today'}"
         v.addWidget(QLabel(f"{span}  ·  opening balance {money(ledger.get('opening_balance')) or '₹0.00'}", styleSheet=f"color: {Colors.TEXT_SECONDARY};"))
         self.table = _table(["Date", "What happened", "Debit", "Credit", "Balance"])
-        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        hh = self.table.horizontalHeader()
+        hh.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        for col, width in ((0, 120), (2, 140), (3, 140), (4, 150)):  # date and amounts keep their room; the words take the rest
+            hh.setSectionResizeMode(col, QHeaderView.ResizeMode.Fixed)
+            self.table.setColumnWidth(col, width)
         lines = ledger.get("lines") or []
         self.table.setRowCount(len(lines))
         for i, ln in enumerate(lines):
@@ -166,11 +180,17 @@ class LedgerDialog(QDialog):
 
 def _report_table(rows: list, headers=("Code", "Account", "Amount")) -> object:
     t = _table(list(headers))
-    t.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+    hh = t.horizontalHeader()
+    hh.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+    # three of these sit side by side on a 1366 px screen: the code and the amount keep their room
+    # (a fixed column is left alone by the elastic sizing), and a long account name gives instead
+    for col, width in ((0, 72), (2, 150)):
+        hh.setSectionResizeMode(col, QHeaderView.ResizeMode.Fixed)
+        t.setColumnWidth(col, width)
     t.setRowCount(len(rows))
     for i, r in enumerate(rows):
         t.setItem(i, 0, QTableWidgetItem(r.get("code", "")))
-        t.setItem(i, 1, QTableWidgetItem(r.get("name", "")))
+        t.setItem(i, 1, _named(r.get("name", "")))
         t.setItem(i, 2, _amount_cell(money(r.get("amount")) or "₹0.00"))
         t.setRowHeight(i, 40)
     return t
@@ -180,7 +200,7 @@ def _fill_report(table, rows: list) -> None:
     table.setRowCount(len(rows))
     for i, r in enumerate(rows):
         table.setItem(i, 0, QTableWidgetItem(r.get("code", "")))
-        table.setItem(i, 1, QTableWidgetItem(r.get("name", "")))
+        table.setItem(i, 1, _named(r.get("name", "")))
         table.setItem(i, 2, _amount_cell(money(r.get("amount")) or "₹0.00"))
         table.setRowHeight(i, 40)
 
@@ -336,6 +356,7 @@ class FinanceScreen(QWidget):
             ("What it owes", self.liab_table, self.liab_total),
             ("What it is worth", self.equity_table, self.equity_total),
         ):
+            table.setColumnHidden(0, True)  # three tables side by side: the codes are in the trial balance and the chart
             col = QVBoxLayout()
             col.addWidget(QLabel(title, styleSheet=Theme.subheading()))
             col.addWidget(table, 1)
