@@ -1,7 +1,8 @@
 """
 ui/dashboard_window.py
 
-Home dashboard — greeting, KPI metric cards, quick action buttons.
+Home dashboard — greeting, KPI metric cards, quick action buttons, and a
+"Needs attention" list (machines due for service, budgets nearly used up).
 """
 
 from datetime import datetime
@@ -24,6 +25,34 @@ from services.event_bus import EventBus, SALE_CREATED
 from services.session import Session
 from services.enums import UserRole
 from ui.workers import load_async
+
+
+def _money(value) -> str:
+    return f"₹{float(value or 0):,.0f}"
+
+
+def attention_lines(attention: dict) -> list[tuple[str, str, str]]:
+    """(text, colour role, page to open) for each thing that needs a look, worst first."""
+    rows = []
+    for m in attention.get("machines", []):
+        name = f"{m.get('name', 'Machine')} ({m.get('tag', '')})".replace(" ()", "")
+        due = m.get("service_due_on") or "soon"
+        if m.get("service_overdue"):
+            rows.append((f"{name}: service was due {due}", "danger", "machines"))
+        else:
+            rows.append((f"{name}: service due {due}", "warning", "machines"))
+    labels = {"machines": "Machines", "raw_materials": "Raw materials"}
+    periods = {"month": "this month", "financial_year": "this financial year"}
+    for b in attention.get("budgets", []):
+        what = f"{labels.get(b.get('category'), 'Budget')} budget {periods.get(b.get('period'), '')}".strip()
+        used = b.get("percent_used")
+        pct = f"{float(used):.0f}% used" if used is not None else "nearly used up"
+        if b.get("state") == "over":
+            rows.append((f"{what}: over by {_money(abs(float(b.get('remaining') or 0)))}", "danger", "budgets"))
+        else:
+            rows.append((f"{what}: {pct}, {_money(b.get('remaining'))} left", "warning", "budgets"))
+    rows.sort(key=lambda r: r[1] != "danger")
+    return rows
 
 
 class DashboardWindow(QWidget):
@@ -87,17 +116,17 @@ class DashboardWindow(QWidget):
 
         self.btn_new_bill = QPushButton("🧾  New Bill")
         self.btn_new_bill.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_new_bill.setStyleSheet(Theme.btn_quick_action("success"))
+        self.btn_new_bill.setStyleSheet(Theme.btn_quick_action("primary"))
         self.btn_new_bill.clicked.connect(lambda: self._navigate("new_bill"))
 
         self.btn_view_stock = QPushButton("📦  View Stock")
         self.btn_view_stock.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_view_stock.setStyleSheet(Theme.btn_quick_action("primary"))
+        self.btn_view_stock.setStyleSheet(Theme.btn("primary", "lg", outline=True))
         self.btn_view_stock.clicked.connect(lambda: self._navigate("stock"))
 
         self.btn_add_buyer = QPushButton("👤  Add Buyer")
         self.btn_add_buyer.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_add_buyer.setStyleSheet(Theme.btn_quick_action("secondary"))
+        self.btn_add_buyer.setStyleSheet(Theme.btn("primary", "lg", outline=True))
         self.btn_add_buyer.clicked.connect(lambda: self._navigate("buyers"))
 
         qa_row.addWidget(self.btn_new_bill)
@@ -106,6 +135,18 @@ class DashboardWindow(QWidget):
         qa_row.addStretch()
 
         layout.addWidget(self.qa_container)
+
+        # ── Needs attention (owner and manager) ──────
+        self.attention_card = Card()
+        self.attention_card.body.setSpacing(Spacing.SM)
+        self.attention_title = QLabel("Needs attention")
+        self.attention_title.setStyleSheet(Theme.subheading())
+        self.attention_card.body.addWidget(self.attention_title)
+        self.attention_list = QVBoxLayout()
+        self.attention_list.setSpacing(Spacing.XS)
+        self.attention_card.body.addLayout(self.attention_list)
+        self.attention_card.setVisible(False)  # shown only when there is something to say
+        layout.addWidget(self.attention_card)
 
         # ── Welcome card: the carving pair facing the god, from the website ──
         self.welcome_card = Card()
@@ -116,14 +157,25 @@ class DashboardWindow(QWidget):
         self.welcome_card.body.addWidget(self.carvings, 1)
         layout.addWidget(self.welcome_card, 1)
 
+    def _fetch(self):
+        return (
+            self._report_service.get_dashboard_summary(),
+            self._report_service.get_attention(),
+        )
+
+    def _show(self, result):
+        summary, attention = result
+        self._show_summary(summary)
+        self._show_attention(attention)
+
     def refresh_data(self):
         if self._prepare():
-            self._show_summary(self._report_service.get_dashboard_summary())
+            self._show(self._fetch())
 
     def refresh_async(self):
         """Same as refresh_data, but the numbers are fetched in the background."""
         if self._prepare():
-            load_async(self, self._report_service.get_dashboard_summary, self._show_summary)
+            load_async(self, self._fetch, self._show)
 
     def _prepare(self) -> bool:
         """Greeting and who sees what (no server call). True when the numbers are wanted."""
@@ -167,6 +219,21 @@ class DashboardWindow(QWidget):
             self.card_wages.set_value(
                 f"₹{float(summary.get('pending_wages_total', 0)):,.2f}"
             )
+
+    def _show_attention(self, attention):
+        """One line per machine due and per budget close to its limit; hidden when none."""
+        while self.attention_list.count():
+            item = self.attention_list.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        rows = attention_lines(attention or {})
+        for text, role, page in rows:
+            btn = QPushButton(text)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setStyleSheet(Theme.alert(role) + "text-align: left;")
+            btn.clicked.connect(lambda _=False, p=page: self._navigate(p))
+            self.attention_list.addWidget(btn)
+        self.attention_card.setVisible(bool(rows))
 
     def _navigate(self, page_name: str):
         """Navigate to another page via MainWindow."""

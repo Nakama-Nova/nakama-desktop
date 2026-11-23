@@ -150,7 +150,7 @@ class NotificationsDialog(QDialog):
         self.empty.setStyleSheet(f"color: {Colors.TEXT_SECONDARY};")
         root.addWidget(self.empty)
         self.list = QListWidget()
-        self.list.setStyleSheet(Theme.table_style())
+        Theme.style_table(self.list)
         self.list.itemActivated.connect(self._open)
         root.addWidget(self.list)
         recent = notifier.state["recent"]

@@ -128,7 +128,7 @@ class MovementsDialog(QDialog):
         self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
         self.table.verticalHeader().setVisible(False)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self.table.setStyleSheet(Theme.table_style())
+        Theme.style_table(self.table)
         for i, r in enumerate(rows):
             qty = float(r.get("quantity") or 0)
             values = [
@@ -208,7 +208,7 @@ class ManageRowsDialog(QDialog):
         self.table.verticalHeader().setVisible(False)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self.table.setStyleSheet(Theme.table_style())
+        Theme.style_table(self.table)
         lay.addWidget(self.table)
         row = QHBoxLayout()
         edit = _button("✏️ Edit", Theme.btn_secondary())
@@ -298,7 +298,7 @@ class PhotosDialog(QDialog):
         self.table.verticalHeader().setVisible(False)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self.table.setStyleSheet(Theme.table_style())
+        Theme.style_table(self.table)
         lay.addWidget(self.table)
         row = QHBoxLayout()
         add = _button("➕ Add files", Theme.btn_primary())

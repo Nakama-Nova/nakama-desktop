@@ -251,7 +251,7 @@ class StaffScreen(QWidget):
         self.table.verticalHeader().setVisible(False)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self.table.setStyleSheet(Theme.table_style())
+        Theme.style_table(self.table)
         layout.addWidget(self.table)
 
     def _fetch(self):

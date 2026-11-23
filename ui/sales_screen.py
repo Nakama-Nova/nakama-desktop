@@ -179,7 +179,7 @@ class SalesScreen(QWidget):
         self.table.setColumnWidth(5, 60)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
-        self.table.setStyleSheet(Theme.table_style())
+        Theme.style_table(self.table)
         root.addWidget(self.table)
 
         # ── Totals ────────────────────────────────────

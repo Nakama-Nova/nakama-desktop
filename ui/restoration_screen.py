@@ -294,7 +294,7 @@ def _table(headers, stretch=None) -> QTableWidget:
     t.verticalHeader().setVisible(False)
     t.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
     t.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-    t.setStyleSheet(Theme.table_style())
+    Theme.style_table(t)
     return t
 
 

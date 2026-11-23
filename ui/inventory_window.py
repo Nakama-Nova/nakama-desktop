@@ -124,7 +124,7 @@ class InventoryWindow(QWidget):
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self.table.setStyleSheet(Theme.table_style())
+        Theme.style_table(self.table)
         self.table.verticalHeader().setDefaultSectionSize(52)
         self.table.verticalScrollBar().valueChanged.connect(self._ensure_actions)
         layout.addWidget(self.table)
