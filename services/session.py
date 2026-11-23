@@ -20,9 +20,10 @@ import json
 import logging
 import time
 from datetime import datetime
+from fnmatch import fnmatchcase
 from typing import Callable
 
-from services.enums import UserRole
+from services.builtin_roles import BUILTIN_ACTIONS
 
 logger = logging.getLogger(__name__)
 
@@ -111,11 +112,11 @@ class _SessionMeta(type):
         cls._token = value
 
     @property
-    def role(cls) -> UserRole | None:
+    def role(cls) -> str | None:
         return cls._role
 
     @role.setter
-    def role(cls, value: UserRole | None) -> None:
+    def role(cls, value: str | None) -> None:
         cls._role = value
 
 
@@ -123,7 +124,9 @@ class Session(metaclass=_SessionMeta):
     """Application-wide session singleton (class-level state)."""
 
     _token: str | None = None
-    _role: UserRole | None = None
+    _role: str | None = None  # the role's key: a built-in one or any custom role
+    _allowed: list[str] | None = None  # actions from GET /iam/me; None = not known (old server)
+    _by_plant_unit: dict[str, list[str]] = {}
     _remember: bool = True  # False: the login lives only until the program closes
     _last_sync_at: datetime | None = None
 
@@ -146,22 +149,62 @@ class Session(metaclass=_SessionMeta):
             _persist_token(token)
 
     @classmethod
-    def get_role(cls) -> UserRole | None:
+    def get_role(cls) -> str | None:
         return cls._role
 
     @classmethod
-    def set_role(cls, role: str | UserRole | None) -> None:
-        if isinstance(role, str):
-            cls._role = UserRole(role)
-        else:
-            cls._role = role
+    def set_role(cls, role: str | None) -> None:
+        cls._role = getattr(role, "value", role) or None  # a UserRole member is also fine
         if cls._remember:
-            _persist_role(cls._role.value if cls._role else None)
+            _persist_role(cls._role)
+
+    @classmethod
+    def set_permissions(cls, me: dict | None) -> None:
+        """Keep what GET /iam/me said. None (an old server: 404) means "not known": can()
+        then answers from the built-in role table, as when roles were a fixed list."""
+        if me is None:
+            cls._allowed, cls._by_plant_unit = None, {}
+            return
+        cls._allowed = list(me.get("allowed") or [])
+        cls._by_plant_unit = dict(me.get("by_plant_unit") or {})
+        if me.get("role"):
+            cls.set_role(me["role"])
+
+    @classmethod
+    def refresh_permissions(cls, api=None) -> None:
+        """Ask the server what this user may do. A 404 means an old server; a server that
+        cannot be reached keeps whatever was known (or the built-in table)."""
+        from services.api_client import APIClient, APIError
+
+        try:
+            cls.set_permissions((api or APIClient()).get_my_permissions(cls._token))
+        except APIError:
+            logger.warning("Could not read /iam/me; keeping the permissions already known")
+        except Exception:
+            logger.warning("Server unreachable; keeping the permissions already known")
+
+    @classmethod
+    def can(cls, action: str, plant_unit_id: str | None = None) -> bool:
+        """May the signed-in user do `action` (e.g. "payroll:payment:create")? A wildcard on
+        either side matches ("payroll:*" asks: any payroll action). With a plant unit, what
+        was granted for that unit counts too."""
+        allowed = cls._allowed
+        if allowed is None:  # old server: the role decides
+            allowed = BUILTIN_ACTIONS.get(cls._role or "", ())
+        patterns = list(allowed)
+        if plant_unit_id is not None:
+            patterns += cls._by_plant_unit.get(str(plant_unit_id), [])
+        return any(fnmatchcase(action, p) or fnmatchcase(p, action) for p in patterns)
+
+    @classmethod
+    def can_any(cls, *actions: str) -> bool:
+        return any(cls.can(a) for a in actions)
 
     @classmethod
     def clear_token(cls) -> None:
         cls._token = None
         cls._role = None
+        cls._allowed, cls._by_plant_unit = None, {}
         _persist_token(None)
         _persist_role(None)
 
@@ -187,15 +230,6 @@ class Session(metaclass=_SessionMeta):
     @classmethod
     def set_last_sync(cls, ts: datetime) -> None:
         cls._last_sync_at = ts
-
-    @classmethod
-    def is_authorized(cls, allowed_roles: list[UserRole] | UserRole) -> bool:
-        """Check if the current user has one of the allowed roles."""
-        if not cls._role:
-            return False
-        if isinstance(allowed_roles, UserRole):
-            return cls._role == allowed_roles
-        return cls._role in allowed_roles
 
     @classmethod
     def restore(cls, allow_expired: Callable[[], bool] | None = None) -> bool:
@@ -234,12 +268,9 @@ class Session(metaclass=_SessionMeta):
         except Exception:
             logger.exception("Failed to read persisted session role from keyring")
 
-        if role:
-            try:
-                cls._role = UserRole(role)
-            except ValueError:
-                cls._role = None
+        cls._role = role or None
         if expired and cls._role is None:
             return False  # nothing to show offline without knowing what they may use
         cls._token = token
+        cls.refresh_permissions()  # server unreachable: the built-in table covers built-in roles
         return True

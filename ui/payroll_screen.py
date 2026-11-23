@@ -28,7 +28,6 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from services.enums import UserRole
 from services.money_service import MoneyService, rupees
 from services.session import Session
 from ui.components.metric_card import MetricCard
@@ -299,7 +298,7 @@ class PayrollScreen(QWidget):
         super().__init__()
         self._svc = MoneyService()
         self._owed: list[dict] = []
-        self.can_manage = Session.is_authorized([UserRole.OWNER, UserRole.MANAGER])
+        self.can_manage = Session.can("payroll:payment:create")
         self.setStyleSheet(Theme.content_bg())
         self._build_ui()
 

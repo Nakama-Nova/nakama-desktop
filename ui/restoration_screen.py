@@ -35,7 +35,6 @@ from PyQt6.QtWidgets import (
 )
 
 from services.designs_service import DesignsService
-from services.enums import UserRole
 from services.inventory_service import InventoryService
 from services.money_service import rupees
 from services.restoration_service import (
@@ -377,7 +376,7 @@ class RestorationScreen(QWidget):
         self.video_btn = QPushButton("🎥  Add video…")
         self.design_btn = QPushButton("🎨  Make a design")
         self.cost_btn = QPushButton("💰  Cost")
-        self.cost_btn.setVisible(Session.is_authorized([UserRole.OWNER]))  # money: the owner only
+        self.cost_btn.setVisible(Session.can("restoration:cost:read"))  # money: the owner only
         self.certificate_btn = QPushButton("📜  Certificate")
         self.certificate_btn.setVisible(False)  # owner, temple project marked Restored
         for b, slot in ((self.edit_btn, self._edit), (self.photos_btn, lambda: self._capture("photos")), (self.video_btn, lambda: self._capture("video")), (self.design_btn, self._make_design), (self.cost_btn, self._cost), (self.certificate_btn, self._certificate)):
@@ -480,7 +479,7 @@ class RestorationScreen(QWidget):
             self.status.addItem(label, value)
         self.status.setCurrentIndex(max(0, self.status.findData(d["status"])))
         self.status.blockSignals(False)
-        self.certificate_btn.setVisible(Session.is_authorized([UserRole.OWNER]) and kind == "temple" and d["status"] == "restored")
+        self.certificate_btn.setVisible(Session.can("letters:completion_certificate:issue") and kind == "temple" and d["status"] == "restored")
         self.scans.setRowCount(len(d["scans"]))
         for r, s in enumerate(d["scans"]):
             note = s.get("error") or s.get("note") or ""

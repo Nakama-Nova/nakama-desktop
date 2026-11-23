@@ -22,7 +22,6 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from services.enums import UserRole
 from services.registers_service import RegistersService
 from services.session import Session
 from ui.components.bootstrap import Card, Grid12
@@ -142,7 +141,7 @@ class BudgetsScreen(QWidget):
     def __init__(self):
         super().__init__()
         self._svc = RegistersService()
-        self._is_owner = Session.is_authorized([UserRole.OWNER])
+        self._is_owner = Session.can("budgets:budget:write")
         self._all: list[dict] = []
         self.setStyleSheet(Theme.content_bg())
         self._build_ui()

@@ -20,7 +20,6 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from services.enums import UserRole
 from services.lab_service import LabService
 from services.session import Session
 from ui.errors import handle_permissions
@@ -34,7 +33,7 @@ class LabScreen(QWidget):
     def __init__(self):
         super().__init__()
         self._service = LabService()
-        self._can_edit = Session.is_authorized([UserRole.OWNER, UserRole.MANAGER])
+        self._can_edit = Session.can("lab:part:edit")
         self.setStyleSheet(Theme.content_bg())
         self._build_ui()
 

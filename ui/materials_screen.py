@@ -22,7 +22,6 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from services.enums import UserRole
 from services.session import Session
 from services.stock_service import StockService
 from ui.components.place_picker import fetch_places
@@ -102,7 +101,7 @@ class MaterialsScreen(QWidget):
         super().__init__()
         self._svc = StockService()
         self._rows: list[dict] = []
-        self._is_owner = Session.is_authorized([UserRole.OWNER])
+        self._is_owner = Session.can("inventory:raw_material:delete")
         self.setStyleSheet(Theme.content_bg())
         self._build_ui()
 

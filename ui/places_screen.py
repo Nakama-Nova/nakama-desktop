@@ -28,7 +28,6 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from services.enums import UserRole
 from services.places_service import NOT_PLACED, PlacesService, place_name, thing_key
 from services.session import Session
 from ui.components.interactive import ChipBar, action_buttons
@@ -276,8 +275,8 @@ class PlacesScreen(QWidget):
         self._places: list[dict] = []
         self._levels: list[dict] = []
         self._shown: list[dict] = []
-        self._can_move = Session.is_authorized([UserRole.OWNER, UserRole.MANAGER])
-        self._is_owner = Session.is_authorized([UserRole.OWNER])
+        self._can_move = Session.can("inventory:stock_location:transfer")
+        self._is_owner = Session.can("plants:plant_unit:write")
         self.setStyleSheet(Theme.content_bg())
         self._build_ui()
 

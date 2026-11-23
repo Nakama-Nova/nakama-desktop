@@ -33,7 +33,6 @@ from PyQt6.QtWidgets import (
 )
 
 from services.customer_service import CustomerService
-from services.enums import UserRole
 from services.inventory_service import InventoryService
 from services.letters_service import (
     KIND_SHORT,
@@ -437,7 +436,7 @@ class LettersScreen(QWidget):
         head.addWidget(refresh)
         self.head_btn = QPushButton("🏷️  Letterhead")
         self.head_btn.setStyleSheet(Theme.btn_secondary())
-        self.head_btn.setVisible(Session.is_authorized([UserRole.OWNER]))
+        self.head_btn.setVisible(Session.can("letters:profile:write"))
         self.head_btn.clicked.connect(lambda _c=False: self._letterhead())
         head.addWidget(self.head_btn)
         self.new_btn = QPushButton("➕  New letter")
@@ -467,10 +466,10 @@ class LettersScreen(QWidget):
         self.open_btn = QPushButton("📄  Open PDF")
         self.save_btn = QPushButton("💾  Save PDF…")
         self.void_btn = QPushButton("🚫  Void…")
-        self.void_btn.setVisible(Session.is_authorized([UserRole.OWNER]))
+        self.void_btn.setVisible(Session.can("letters:letter:void"))
         self.delete_btn = QPushButton("🗑️  Delete")
         self.delete_btn.setToolTip("Remove a void letter for good (void it first, with a reason)")
-        self.delete_btn.setVisible(Session.is_authorized([UserRole.OWNER]))
+        self.delete_btn.setVisible(Session.can("letters:letter:delete"))
         for b, slot in ((self.open_btn, self._open), (self.save_btn, self._save), (self.void_btn, self._void), (self.delete_btn, self._delete)):
             b.setStyleSheet(Theme.btn_secondary())
             b.setEnabled(False)

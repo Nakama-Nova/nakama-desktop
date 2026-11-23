@@ -30,7 +30,6 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from services.enums import UserRole
 from services.places_service import PlacesService
 from services.registers_service import RegistersService
 from services.session import Session
@@ -409,7 +408,7 @@ class MachinesScreen(QWidget):
         self._staff: dict[str, str] = {}
         self._shown_machines: list[dict] = []
         self._shown_tools: list[dict] = []
-        self._can_manage = Session.is_authorized([UserRole.OWNER, UserRole.MANAGER])
+        self._can_manage = Session.can("machines:machine:write")
         self.setStyleSheet(Theme.content_bg())
         self._build_ui()
 

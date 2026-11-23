@@ -24,7 +24,6 @@ from PyQt6.QtWidgets import (
 )
 
 from services import pricing
-from services.enums import UserRole
 from services.inventory_service import InventoryService
 from services.session import Session
 from ui.components.place_picker import fetch_places
@@ -54,9 +53,9 @@ class InventoryWindow(QWidget):
         self._all_items: list[dict] = []
         self._held: dict = {}  # item id -> units set aside for confirmed orders
         # Owner and manager manage stock; everyone else reads it.
-        self.can_edit = Session.is_authorized([UserRole.OWNER, UserRole.MANAGER])
+        self.can_edit = Session.can("items:item:write")
         # Owner and artisans can scan a sculpture into 3D and open the model
-        self.can_scan = Session.is_authorized([UserRole.OWNER, UserRole.ARTISAN])
+        self.can_scan = Session.can("restoration:project:access")
         self.has_actions = self.can_edit or self.can_scan
 
         self.setStyleSheet(Theme.content_bg())

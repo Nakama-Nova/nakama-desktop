@@ -21,6 +21,7 @@ class AuthService:
             Session.set_token(result["access_token"])
             Session.set_role(result.get("role"))
             reset_session_expired()
+            Session.refresh_permissions(self._api)
         return result
 
     def logout(self) -> None:

@@ -133,9 +133,9 @@ def test_the_side_panel_is_grouped_under_headings(qapp):
     w = MainWindow()
     w._sync_timer.stop()
     labels = [label for _, label, _ in w._get_allowed_nav_items()]
-    assert labels == ["Home", "New Bill", "Bill History", "Orders", "Buyers", "Letters", "Stock", "Materials", "Purchases", "Places", "3D Lab", "Restoration", "Designs", "Machines and tools", "Attendance", "Wages", "Staff", "Expenses", "Profit", "Budgets", "Accounts", "Reports"]  # fmt: skip
-    assert headings(w) == ["SELLING", "STOCK AND BUYING", "WORKSHOP", "PEOPLE AND PAY", "MONEY"]
-    assert sorted(i for _, _, i in w.NAV_ITEMS) == list(range(22))  # every page is still reachable, once
+    assert labels == ["Home", "New Bill", "Bill History", "Orders", "Buyers", "Letters", "Stock", "Materials", "Purchases", "Places", "3D Lab", "Restoration", "Designs", "Machines and tools", "Attendance", "Wages", "Staff", "Expenses", "Profit", "Budgets", "Accounts", "Reports", "Roles"]  # fmt: skip
+    assert headings(w) == ["SELLING", "STOCK AND BUYING", "WORKSHOP", "PEOPLE AND PAY", "MONEY", "ACCESS"]
+    assert sorted(i for _, _, i in w.NAV_ITEMS) == list(range(23))  # every page is still reachable, once
     assert {label for names in w.NAV_SECTIONS.values() for label in names} == set(labels) - {"Home"}
 
 
@@ -145,7 +145,7 @@ def test_the_side_panel_is_grouped_under_headings(qapp):
         (UserRole.SALES, ["SELLING", "STOCK AND BUYING", "PEOPLE AND PAY"]),  # no Materials/Purchases, still Stock
         (UserRole.WORKER, ["STOCK AND BUYING", "WORKSHOP", "PEOPLE AND PAY"]),
         (UserRole.ARTISAN, ["STOCK AND BUYING", "WORKSHOP", "PEOPLE AND PAY"]),
-        (UserRole.MANAGER, ["SELLING", "STOCK AND BUYING", "WORKSHOP", "PEOPLE AND PAY", "MONEY"]),
+        (UserRole.MANAGER, ["SELLING", "STOCK AND BUYING", "WORKSHOP", "PEOPLE AND PAY", "MONEY", "ACCESS"]),
     ],
 )
 def test_a_heading_shows_only_when_the_role_has_something_under_it(qapp, monkeypatch, role, expected):
