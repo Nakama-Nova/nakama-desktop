@@ -240,7 +240,7 @@ class SalesHistoryScreen(QWidget):
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.verticalHeader().setVisible(False)
-        self.table.setStyleSheet(Theme.table_style())
+        Theme.style_table(self.table)
         self.table.cellDoubleClicked.connect(self._open_row)
         layout.addWidget(self.table)
 

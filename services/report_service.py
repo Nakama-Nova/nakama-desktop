@@ -6,6 +6,8 @@ Aligned with actual backend routes:
   - GET /reports/sales        -> SalesReportResponse
   - GET /reports/inventory    -> List[InventoryReportResponse]
   - GET /dashboard/summary    -> {today_sales_count, today_revenue, low_stock_count, ...}
+  - GET /machines/due         -> machines overdue for service or due soon
+  - GET /budgets/warnings     -> budgets that are 80% used or over
 """
 
 from services.api_client import APIClient
@@ -43,6 +45,23 @@ class ReportService:
         Returns: {today_sales_count, today_revenue, low_stock_count, pending_wages_total, top_products}
         """
         return self._api.get_dashboard_summary(self._token())
+
+    def get_attention(self, within_days: int = 14) -> dict:
+        """
+        What needs the owner's eye on Home: machines due for service and budgets close to
+        or over their limit. Each list is empty when the server refuses it (the person may
+        not hold that permission) or cannot be reached, so Home never shows an error for it.
+        """
+        out = {"machines": [], "budgets": []}
+        for key, path, params in (
+            ("machines", "/machines/due", {"within_days": within_days}),
+            ("budgets", "/budgets/warnings", None),
+        ):
+            try:
+                out[key] = self._api._get(path, self._token(), params=params, quiet=True) or []
+            except Exception:  # forbidden, offline or an older server: leave it out
+                out[key] = []
+        return out
 
     def get_low_stock_items(self) -> list:
         """Filter inventory report for low-stock items only."""

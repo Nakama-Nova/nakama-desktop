@@ -156,7 +156,7 @@ class CustomersScreen(QWidget):
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
-        self.table.setStyleSheet(Theme.table_style())
+        Theme.style_table(self.table)
 
         layout.addWidget(self.table)
 

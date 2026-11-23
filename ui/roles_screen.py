@@ -160,7 +160,7 @@ class RolesScreen(QWidget):
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.horizontalHeader().setSectionResizeMode(self.COL_NOTE, QHeaderView.ResizeMode.Stretch)
-        self.table.setStyleSheet(Theme.table_style())
+        Theme.style_table(self.table)
         layout.addWidget(self.table)
 
     def _fetch(self):

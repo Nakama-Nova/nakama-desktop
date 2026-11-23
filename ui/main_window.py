@@ -690,6 +690,8 @@ class MainWindow(QMainWindow):
             "new_bill": 1,
             "stock": 2,
             "buyers": 3,
+            "machines": 19,
+            "budgets": 20,
         }
         idx = mapping.get(page_name, 0)
         self._switch_page(idx)

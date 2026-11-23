@@ -84,7 +84,7 @@ class ProfitScreen(QWidget):
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table.verticalHeader().setVisible(False)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self.table.setStyleSheet(Theme.table_style())
+        Theme.style_table(self.table)
         layout.addWidget(self.table)
 
         note = QLabel(

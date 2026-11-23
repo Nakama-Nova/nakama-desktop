@@ -509,6 +509,16 @@ class Theme:
             }}
         """
 
+    @staticmethod
+    def style_table(table) -> None:
+        """Table look plus column titles aligned left, like the text under them (Qt centres them)."""
+        from PyQt6.QtCore import Qt
+
+        table.setStyleSheet(Theme.table_style())
+        header = getattr(table, "horizontalHeader", None)
+        if callable(header):
+            header().setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+
     # ------------------------------------------------------------------
     # Page heading
     # ------------------------------------------------------------------
