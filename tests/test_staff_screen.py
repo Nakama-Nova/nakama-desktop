@@ -44,7 +44,7 @@ def test_you_cannot_switch_yourself_off(qapp, fake):
     s = StaffScreen()
     s.refresh_data()
     assert buttons(s, 1) == ["✏️ Edit", "✉️ Email code"]  # row 1 is you
-    assert buttons(s, 0) == ["✏️ Edit", "✉️ Email code", "Switch off"]
+    assert buttons(s, 0) == ["✏️ Edit", "✉️ Email code", "🔑 Extra roles", "Switch off"]
     assert buttons(s, 2)[-1] == "Switch on"
 
 
@@ -52,10 +52,10 @@ def test_switch_off_asks_first_then_sends_only_the_flag(qapp, fake, monkeypatch)
     s = StaffScreen()
     s.refresh_data()
     monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.StandardButton.No))
-    s.table.cellWidget(0, s.COL_ACTIONS).findChildren(QPushButton)[2].click()
+    s.table.cellWidget(0, s.COL_ACTIONS).findChildren(QPushButton)[3].click()
     assert fake == []  # said no
     monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.StandardButton.Yes))
-    s.table.cellWidget(0, s.COL_ACTIONS).findChildren(QPushButton)[2].click()
+    s.table.cellWidget(0, s.COL_ACTIONS).findChildren(QPushButton)[3].click()
     assert fake == [("update", "u1", {"is_active": False})]
 
 

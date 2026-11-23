@@ -24,7 +24,6 @@ from ui.theme import Theme, Colors, Fonts
 from ui.errors import handle_permissions
 from services.customer_service import CustomerService
 from services.session import Session
-from services.enums import UserRole
 from ui.workers import load_async
 
 
@@ -126,9 +125,7 @@ class CustomersScreen(QWidget):
         header_row.addWidget(self.add_btn)
 
         # RBAC: Hide add button for unauthorized roles
-        self._can_edit = Session.is_authorized(
-            [UserRole.OWNER, UserRole.MANAGER, UserRole.SALES]
-        )
+        self._can_edit = Session.can("sales:customer:write")
         self.add_btn.setVisible(self._can_edit)
 
         layout.addLayout(header_row)

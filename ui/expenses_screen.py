@@ -27,7 +27,6 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from services.enums import UserRole
 from services.money_service import PERIODS, MoneyService, period_range, rupees
 from services.restoration_service import RestorationService
 from services.session import Session
@@ -230,7 +229,7 @@ class ExpensesScreen(QWidget):
         self.summary.setText(
             f"Total spent {rupees(summary['total'])}" + ("   ·   " + "   ·   ".join(parts) if parts else "")
         )
-        can_void = Session.is_authorized([UserRole.OWNER])
+        can_void = Session.can("expenses:expense:void")
         self.table.setRowCount(len(self._rows))
         for r, e in enumerate(self._rows):
             values = [
@@ -268,7 +267,7 @@ class ExpensesScreen(QWidget):
 
     def _projects(self):
         """Restoration and finishing projects to charge an expense to: the owner only (None hides it)."""
-        if not Session.is_authorized([UserRole.OWNER]):
+        if not Session.can("restoration:cost:read"):
             return None
         try:
             return RestorationService().projects()

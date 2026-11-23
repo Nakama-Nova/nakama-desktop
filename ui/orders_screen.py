@@ -32,7 +32,6 @@ from PyQt6.QtWidgets import (
 )
 
 from services.customer_service import CustomerService
-from services.enums import UserRole
 from services.inventory_service import InventoryService
 from services.money_service import rupees
 from services.orders_service import (
@@ -438,8 +437,8 @@ class OrdersScreen(QWidget):
         self._svc = OrdersService()
         self._rows: list[dict] = []
         self._current: dict | None = None
-        self.can_manage = Session.is_authorized([UserRole.OWNER, UserRole.MANAGER])
-        self._is_owner = Session.is_authorized([UserRole.OWNER])  # corrects or voids payments
+        self.can_manage = Session.can("sales:order:update")
+        self._is_owner = Session.can("sales:order:payment_edit")  # corrects or voids payments
         self._can_delete = self.can_manage  # deletes an order that never went anywhere
         self.setStyleSheet(Theme.content_bg())
         self._search_timer = QTimer(self)

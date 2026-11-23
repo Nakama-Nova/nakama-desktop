@@ -11,7 +11,6 @@ import tempfile
 from pathlib import Path
 
 from services.api_client import APIClient
-from services.enums import UserRole
 from services.session import Session
 
 KINDS = [
@@ -27,13 +26,6 @@ KIND_SHORT = {
     "purchase_receipt": "Purchase receipt",
     "completion_certificate": "Certificate",
 }
-ISSUERS = {
-    "quotation": [UserRole.OWNER, UserRole.MANAGER, UserRole.SALES],
-    "order_confirmation": [UserRole.OWNER, UserRole.MANAGER, UserRole.SALES],
-    "purchase_receipt": [UserRole.OWNER, UserRole.MANAGER],
-    "completion_certificate": [UserRole.OWNER],
-}
-LETTER_ROLES = [UserRole.OWNER, UserRole.MANAGER, UserRole.SALES]
 LETTERHEAD_FIELDS = [
     ("name", "Name"),
     ("tagline", "Tagline"),
@@ -48,7 +40,7 @@ LETTERHEAD_FIELDS = [
 
 
 def may_issue(kind: str) -> bool:
-    return Session.is_authorized(ISSUERS[kind])
+    return Session.can(f"letters:{kind}:issue")
 
 
 class LettersService:

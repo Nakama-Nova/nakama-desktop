@@ -141,9 +141,12 @@ class APIError(Exception):
 
 
 class ForbiddenError(APIError):
-    """Raised when the user doesn't have permission for an action (403)."""
+    """Raised when the user doesn't have permission for an action (403).
+    `reason` is what the server said, e.g. "You cannot grant what you do not hold: ..."."""
 
-    pass
+    def __init__(self, status_code: int, detail: str = "", response_text: str = ""):
+        super().__init__(status_code, detail)
+        self.reason = self._plain(response_text) if response_text else ""
 
 
 class SessionExpiredError(Exception):
@@ -230,7 +233,7 @@ class APIClient:
         )
         if response.status_code == 403:
             raise ForbiddenError(
-                403, "Access Denied: You don't have permission for this action."
+                403, "Access Denied: You don't have permission for this action.", response.text
             )
         if response.status_code != 200:
             raise self._fail(response, quiet)
@@ -276,7 +279,7 @@ class APIClient:
         )
         if response.status_code == 403:
             raise ForbiddenError(
-                403, "Access Denied: You don't have permission for this action."
+                403, "Access Denied: You don't have permission for this action.", response.text
             )
         if response.status_code not in (200, 201, 204):
             raise self._fail(response, quiet)
@@ -292,7 +295,7 @@ class APIClient:
         )
         if response.status_code == 403:
             raise ForbiddenError(
-                403, "Access Denied: You don't have permission for this action."
+                403, "Access Denied: You don't have permission for this action.", response.text
             )
         if response.status_code != 200:
             raise self._fail(response)
@@ -307,7 +310,7 @@ class APIClient:
         )
         if response.status_code == 403:
             raise ForbiddenError(
-                403, "Access Denied: You don't have permission for this action."
+                403, "Access Denied: You don't have permission for this action.", response.text
             )
         if response.status_code in (401, 409):  # expired, or "in use": tell the user why
             raise self._fail(response)
@@ -325,7 +328,7 @@ class APIClient:
         )
         if response.status_code == 403:
             raise ForbiddenError(
-                403, "Access Denied: You don't have permission for this action."
+                403, "Access Denied: You don't have permission for this action.", response.text
             )
         if response.status_code not in (200, 204):
             raise self._fail(response)
@@ -341,7 +344,7 @@ class APIClient:
         )
         if response.status_code == 403:
             raise ForbiddenError(
-                403, "Access Denied: You don't have permission for this action."
+                403, "Access Denied: You don't have permission for this action.", response.text
             )
         if response.status_code != 200:
             raise self._fail(response)
@@ -368,7 +371,7 @@ class APIClient:
             )
         if response.status_code == 403:
             raise ForbiddenError(
-                403, "Access Denied: You don't have permission for this action."
+                403, "Access Denied: You don't have permission for this action.", response.text
             )
         if response.status_code not in (200, 201):
             raise self._fail(response)
@@ -384,7 +387,7 @@ class APIClient:
         )
         if response.status_code == 403:
             raise ForbiddenError(
-                403, "Access Denied: You don't have permission for this action."
+                403, "Access Denied: You don't have permission for this action.", response.text
             )
         if response.status_code != 200:
             raise self._fail(response, quiet=True)
@@ -399,7 +402,7 @@ class APIClient:
         )
         if response.status_code == 403:
             raise ForbiddenError(
-                403, "Access Denied: You don't have permission for this action."
+                403, "Access Denied: You don't have permission for this action.", response.text
             )
         if response.status_code == 401:
             raise self._fail(response)
@@ -426,6 +429,15 @@ class APIClient:
         if response.status_code == 401:
             return None
         raise APIError(response.status_code, response.text)
+
+    def get_my_permissions(self, token: str) -> dict | None:
+        """GET /iam/me: {"role", "allowed", "by_plant_unit"}; None from a server too old to have it."""
+        try:
+            return self._get("/iam/me", token, quiet=True)
+        except APIError as err:
+            if err.status_code == 404:
+                return None
+            raise
 
     def _anonymous_post(self, path: str, body: dict) -> dict:
         """A call made before anyone is signed in (forgot password). Failures are raised as

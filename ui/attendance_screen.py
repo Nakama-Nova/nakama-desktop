@@ -23,7 +23,6 @@ from datetime import datetime
 from ui.theme import Theme, Colors, Fonts
 from services.workforce_service import AttendanceService
 from services.session import Session
-from services.enums import UserRole
 from ui.errors import handle_permissions
 from ui.workers import load_async
 
@@ -52,8 +51,7 @@ class AttendanceScreen(QWidget):
         action_layout = QHBoxLayout(self.action_card)
         action_layout.setContentsMargins(20, 20, 20, 20)
 
-        role = Session.get_role()
-        is_admin = role in [UserRole.OWNER, UserRole.MANAGER, UserRole.SALES]
+        is_admin = Session.can("attendance:record:read_all")
 
         if is_admin:
             action_layout.addWidget(QLabel("Select Worker:"))
@@ -91,7 +89,7 @@ class AttendanceScreen(QWidget):
 
     @staticmethod
     def _is_admin() -> bool:
-        return Session.get_role() in [UserRole.OWNER, UserRole.MANAGER, UserRole.SALES]
+        return Session.can("attendance:record:read_all")
 
     def _fetch(self):
         """(people, records): everyone's for the owner, manager and sales, only your own otherwise."""

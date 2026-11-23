@@ -44,6 +44,7 @@ from ui.attendance_screen import AttendanceScreen
 from ui.lab_screen import LabScreen
 from ui.materials_screen import MaterialsScreen
 from ui.purchases_screen import PurchasesScreen
+from ui.roles_screen import RolesScreen
 from ui.staff_screen import StaffScreen, change_my_password
 from ui.expenses_screen import ExpensesScreen
 from ui.payroll_screen import PayrollScreen
@@ -62,7 +63,6 @@ from ui.updater import UpdateBanner, Updater
 from services.version import APP_VERSION
 from services.api_client import SessionExpiredError, set_session_expired_hook
 from services.session import Session
-from services.enums import UserRole
 from services.sync_service import SyncService
 from services.event_bus import EventBus, SALE_CREATED
 
@@ -132,6 +132,7 @@ class MainWindow(QMainWindow):
         ("🎯", "Budgets", 20),
         ("📒", "Accounts", 21),
         ("📊", "Reports", 5),
+        ("🔑", "Roles", 22),
     ]
     NAV_SECTIONS = {
         "Selling": ["New Bill", "Bill History", "Orders", "Buyers", "Letters"],
@@ -139,6 +140,33 @@ class MainWindow(QMainWindow):
         "Workshop": ["3D Lab", "Restoration", "Designs", "Machines and tools"],
         "People and pay": ["Attendance", "Wages", "Staff"],
         "Money": ["Expenses", "Profit", "Budgets", "Accounts", "Reports"],
+        "Access": ["Roles"],
+    }
+    # A menu entry shows when the user may use its main action (any one of these).
+    NAV_ACTIONS = {
+        "Home": ("items:item:read", "attendance:record:read_own", "sales:sale:create", "reports:dashboard:read"),
+        "New Bill": ("sales:sale:create",),
+        "Bill History": ("sales:sale:read",),
+        "Orders": ("sales:order:read",),
+        "Buyers": ("sales:customer:read",),
+        "Letters": ("letters:quotation:issue", "letters:order_confirmation:issue", "letters:purchase_receipt:issue", "letters:completion_certificate:issue"),
+        "Stock": ("items:item:read",),
+        "Materials": ("inventory:raw_material:read",),
+        "Purchases": ("purchases:purchase:create",),
+        "Places": ("inventory:stock_location:view",),
+        "3D Lab": ("lab:part:read",),
+        "Restoration": ("restoration:project:access",),
+        "Designs": ("restoration:project:access",),
+        "Machines and tools": ("machines:tool:view",),
+        "Attendance": ("attendance:record:read_own", "attendance:record:read_all"),
+        "Wages": ("payroll:records:read_all",),  # plus the self-service rule in _can_see
+        "Staff": ("people:user:create", "people:user:update"),
+        "Expenses": ("expenses:expense:write",),
+        "Profit": ("items:cost:read",),
+        "Budgets": ("budgets:budget:read",),
+        "Accounts": ("finance:ledger:read",),
+        "Reports": ("reports:report:read",),
+        "Roles": ("iam:role:read",),
     }
 
     def __init__(self):
@@ -326,6 +354,7 @@ class MainWindow(QMainWindow):
         self.machines_view = MachinesScreen()
         self.budgets_view = BudgetsScreen()
         self.finance_view = FinanceScreen()
+        self.roles_view = RolesScreen()
 
         self.content_stack.addWidget(self.dashboard_view)  # 0
         self.content_stack.addWidget(self.sales_view)  # 1
@@ -349,6 +378,7 @@ class MainWindow(QMainWindow):
         self.content_stack.addWidget(self.machines_view)  # 19
         self.content_stack.addWidget(self.budgets_view)  # 20
         self.content_stack.addWidget(self.finance_view)  # 21
+        self.content_stack.addWidget(self.roles_view)  # 22
 
         Theme.stripe_tables(self)
         self._decorate_empty_states()
@@ -466,44 +496,17 @@ class MainWindow(QMainWindow):
         self._sync_running = True
         run_async(self._sync_work, done, failed)
 
+    @classmethod
+    def _can_see(cls, label: str) -> bool:
+        if Session.can_any(*cls.NAV_ACTIONS[label]):
+            return True
+        if label == "Wages":  # people who are not on the sales desk see their own pay
+            return Session.can("attendance:record:read_own") and not Session.can("attendance:record:read_all")
+        return False
+
     def _get_allowed_nav_items(self):
-        role = Session.get_role()
-
-        # OWNER sees everything; a manager sees everything except staff accounts
-        if role == UserRole.OWNER:
-            return self.NAV_ITEMS
-        if role == UserRole.MANAGER:
-            # restoration is for the owner and artisans only
-            return [i for i in self.NAV_ITEMS if i[1] not in ("Staff", "Restoration", "Designs")]
-
-        allowed = []
-        for icon, label, index in self.NAV_ITEMS:
-            if role == UserRole.SALES:
-                # Sales can sell and manage buyers, but not see reports, the Lab,
-                # or the buying side (materials and purchases)
-                if label not in ["Reports", "3D Lab", "Materials", "Purchases", "Staff", "Wages", "Expenses", "Profit", "Restoration", "Designs", "Machines and tools", "Budgets", "Accounts"]:
-                    allowed.append((icon, label, index))
-            elif role == UserRole.ACHARI:
-                # Achari focuses on stock/manufacturing and the 3D Lab, no billing/reports
-                if label in ["Home", "Stock", "Attendance", "Wages", "3D Lab", "Machines and tools"]:
-                    allowed.append((icon, label, index))
-            elif role == UserRole.ARTISAN:
-                # Artisans: stock and the 3D Lab to look things up, their pay, and Restoration
-                if label in ["Home", "Stock", "Attendance", "Wages", "3D Lab", "Restoration", "Designs"]:
-                    allowed.append((icon, label, index))
-            elif role == UserRole.ACCOUNTANT:
-                # The CA reads the books and nothing else (the server allows no more)
-                if label == "Accounts":
-                    allowed.append((icon, label, index))
-            elif role == UserRole.WORKER:
-                # Worker sees home, stock, workforce and the 3D Lab (view only)
-                if label in ["Home", "Stock", "Attendance", "Wages", "3D Lab"]:
-                    allowed.append((icon, label, index))
-            else:
-                # Default safety
-                if label == "Home":
-                    allowed.append((icon, label, index))
-        return allowed
+        """The menu entries this user may use, from what the server says they can do."""
+        return [i for i in self.NAV_ITEMS if self._can_see(i[1])]
 
     # ------------------------------------------------------------------
     # Nav button factory
