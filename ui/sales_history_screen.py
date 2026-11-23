@@ -25,7 +25,6 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from services.enums import UserRole
 from services.event_bus import SALE_CREATED, EventBus
 from services.sales_service import BillPdfError, SalesService
 from services.session import Session
@@ -172,8 +171,8 @@ class SalesHistoryScreen(QWidget):
     def __init__(self):
         super().__init__()
         self._sales_service = SalesService()
-        self._can_edit = Session.is_authorized([UserRole.OWNER, UserRole.MANAGER])
-        self._can_delete = Session.is_authorized([UserRole.OWNER])
+        self._can_edit = Session.can("sales:sale:edit")
+        self._can_delete = Session.can("sales:sale:delete")
         self._sales: list[dict] = []
         self._shown: list[dict] = []
         self.setStyleSheet(Theme.content_bg())

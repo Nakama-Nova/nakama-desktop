@@ -102,9 +102,8 @@ class ReportsScreen(QWidget):
 
     def _enforce_rbac(self):
         from services.session import Session
-        from services.enums import UserRole
 
-        if not Session.is_authorized([UserRole.OWNER, UserRole.MANAGER]):
+        if not Session.can("reports:report:read"):
             # Hide the main content and show a permission denied message
             for i in range(self.layout().count()):
                 widget = self.layout().itemAt(i).widget()

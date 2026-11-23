@@ -22,7 +22,6 @@ from ui.components.metric_card import MetricCard
 from services.report_service import ReportService
 from services.event_bus import EventBus, SALE_CREATED
 from services.session import Session
-from services.enums import UserRole
 from ui.workers import load_async
 
 
@@ -138,19 +137,17 @@ class DashboardWindow(QWidget):
         self.greeting_lbl.setText(greeting)
 
         role = Session.get_role()
-        is_admin = Session.is_authorized([UserRole.OWNER, UserRole.MANAGER])
-        can_sell = Session.is_authorized(
-            [UserRole.OWNER, UserRole.MANAGER, UserRole.SALES]
-        )
+        is_admin = Session.can("reports:dashboard:read")
+        can_sell = Session.can("sales:sale:create")
 
         # Role-based UI visibility
         self.metrics_container.setVisible(is_admin)
         self.btn_new_bill.setVisible(can_sell)
         self.btn_add_buyer.setVisible(can_sell)
 
-        if role == UserRole.ACHARI:
+        if role == "achari":
             self.subtitle_lbl.setText("Manage manufacturing and stock")
-        elif role == UserRole.WORKER:
+        elif role == "worker":
             self.subtitle_lbl.setText("Your daily attendance and basic stock")
         else:
             self.subtitle_lbl.setText("Here's your business at a glance")

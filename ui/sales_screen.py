@@ -245,12 +245,9 @@ class SalesScreen(QWidget):
 
     def _enforce_rbac(self):
         from services.session import Session
-        from services.enums import UserRole
 
         # Acharis and Workers cannot create bills
-        can_bill = Session.is_authorized(
-            [UserRole.OWNER, UserRole.MANAGER, UserRole.SALES]
-        )
+        can_bill = Session.can("sales:sale:create")
 
         # self.btn_new_bill.setEnabled(can_bill) # This button doesn't exist in SalesScreen
         self.search_btn.setEnabled(can_bill)

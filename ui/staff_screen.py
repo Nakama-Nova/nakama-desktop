@@ -26,20 +26,16 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from services.api_client import APIError
+from services.api_client import APIError, ForbiddenError
+from services.iam_service import BUILTIN_ROLES, IamService
+from services.places_service import PlacesService
+from services.session import Session
 from services.staff_service import StaffService
 from ui.errors import handle_permissions
 from ui.theme import Colors, Fonts, Theme
 from ui.workers import load_async
 
-ROLES = [
-    ("Owner", "owner"),
-    ("Manager", "manager"),
-    ("Sales", "sales"),
-    ("Achari (carpenter)", "achari"),
-    ("Worker", "worker"),
-    ("Artisan (restoration)", "artisan"),
-]
+ROLES = BUILTIN_ROLES  # the dropdown's fallback; the server's own list is used when it gives one
 ROLE_WORDS = {value: label for label, value in ROLES}
 MIN_PASSWORD = 8
 
@@ -79,7 +75,7 @@ class StaffDialog(QDialog):
     """Add a person (they are emailed a code to choose their own password) or edit one (role
     locked for yourself)."""
 
-    def __init__(self, parent, user: dict | None = None, is_me: bool = False):
+    def __init__(self, parent, user: dict | None = None, is_me: bool = False, roles=None):
         super().__init__(parent)
         self._adding = user is None
         user = user or {}
@@ -96,8 +92,10 @@ class StaffDialog(QDialog):
         self.email = _line(user.get("email"), "name@example.com")
         self.phone = _line(user.get("phone"), "optional")
         self.role = QComboBox()
-        for label, value in ROLES:
+        for label, value in roles or ROLES:
             self.role.addItem(label, value)
+        if user.get("role") and self.role.findData(user["role"]) < 0:  # a role the list did not carry
+            self.role.addItem(user["role"], user["role"])
         self.role.setCurrentIndex(
             max(0, self.role.findData(user.get("role") or "worker"))
         )
@@ -201,6 +199,67 @@ def change_my_password(parent, service: StaffService | None = None) -> bool:
     return True
 
 
+class ExtraRolesDialog(QDialog):
+    """Extra roles for one person, on top of their main role, each for everywhere or for one
+    place. Saving replaces their extra roles (the server cannot list the current ones)."""
+
+    def __init__(self, parent, user: dict, roles: list, places: list):
+        super().__init__(parent)
+        self.setWindowTitle(f"Extra roles: {user.get('full_name') or user['username']}")
+        self.setMinimumWidth(460)
+        self.setStyleSheet(f"background-color: {Colors.BG};")
+        self._roles, self._places = roles, places
+        self._rows: list[tuple[QComboBox, QComboBox]] = []
+        self._layout = QVBoxLayout(self)
+        self._layout.setContentsMargins(24, 20, 24, 20)
+        note = QLabel(
+            "Roles given here add to their main role. Saving replaces the extra roles they have now, "
+            "so add every one they should keep. Leave the list empty to remove all."
+        )
+        note.setWordWrap(True)
+        note.setStyleSheet(f"color: {Colors.TEXT_SECONDARY};")
+        self._layout.addWidget(note)
+        self._rows_box = QVBoxLayout()
+        self._layout.addLayout(self._rows_box)
+        add = QPushButton("➕  Add a role")
+        add.setStyleSheet(Theme.btn_secondary())
+        add.clicked.connect(lambda _=False: self._add_row())
+        self._layout.addWidget(add)
+        self._layout.addLayout(_buttons(self))
+
+    def _add_row(self):
+        row = QHBoxLayout()
+        role, place = QComboBox(), QComboBox()
+        for label, key in self._roles:
+            role.addItem(label, key)
+        place.addItem("Everywhere", None)
+        for p in self._places:
+            place.addItem(p.get("name") or "Place", p.get("id"))
+        for w in (role, place):
+            w.setStyleSheet(Theme.input_style())
+            row.addWidget(w, 1)
+        remove = QPushButton("✕")
+        remove.setStyleSheet(Theme.btn_table_action())
+        row.addWidget(remove)
+        self._rows.append((role, place))
+        self._rows_box.addLayout(row)
+
+        def drop():
+            self._rows.remove((role, place))
+            for w in (role, place, remove):
+                w.hide()
+                w.deleteLater()
+            self._rows_box.removeItem(row)
+
+        remove.clicked.connect(lambda _=False: drop())
+
+    def _check(self):
+        self.accept()
+
+    def assignments(self) -> list[dict]:
+        return [{"role_key": r.currentData(), "plant_unit_id": p.currentData()} for r, p in self._rows]
+
+
 class StaffScreen(QWidget):
     COL_NAME, COL_USER, COL_ROLE, COL_PHONE, COL_WAGE, COL_STATUS, COL_ACTIONS = range(7)
 
@@ -209,6 +268,8 @@ class StaffScreen(QWidget):
         self._svc = StaffService()
         self._rows: list[dict] = []
         self._me: str | None = None
+        self._roles = list(ROLES)  # (label, key), from the server when it lists roles
+        self._role_words = dict(ROLE_WORDS)
         self.setStyleSheet(Theme.content_bg())
         self._build_ui()
 
@@ -255,7 +316,9 @@ class StaffScreen(QWidget):
         layout.addWidget(self.table)
 
     def _fetch(self):
-        return self._svc.me().get("id"), sorted(self._svc.users(), key=lambda u: (not u["is_active"], u["username"]))
+        me = self._svc.me().get("id")
+        users = sorted(self._svc.users(), key=lambda u: (not u["is_active"], u["username"]))
+        return me, users, IamService().role_choices()
 
     @handle_permissions
     def refresh_data(self, _checked=False):
@@ -265,14 +328,15 @@ class StaffScreen(QWidget):
         load_async(self, self._fetch, self._show)
 
     def _show(self, data):
-        self._me, self._rows = data
+        self._me, self._rows, self._roles = data
+        self._role_words = {key: label for label, key in self._roles}
         self.table.setRowCount(len(self._rows))
         for r, u in enumerate(self._rows):
             name = u.get("full_name") or u["username"]
             values = [
                 name + ("  (you)" if u["id"] == self._me else ""),
                 u["username"],
-                ROLE_WORDS.get(u.get("role"), u.get("role") or ""),
+                self._role_words.get(u.get("role"), u.get("role") or ""),
                 u.get("phone") or "",
                 f"₹{float(u.get('base_daily_wage') or 0):,.0f}",
                 "Active" if u.get("is_active") else "Switched off",
@@ -294,6 +358,8 @@ class StaffScreen(QWidget):
         h.setSpacing(6)
         is_me = u["id"] == self._me
         buttons = [("✏️ Edit", self._edit), ("✉️ Email code", self._send_code)]
+        if not is_me and Session.can("iam:user_role:assign"):
+            buttons.append(("🔑 Extra roles", self._extra_roles))
         if not is_me:  # you cannot switch yourself off
             buttons.append(("Switch on" if not u.get("is_active") else "Switch off", self._toggle))
         for text, slot in buttons:
@@ -307,7 +373,7 @@ class StaffScreen(QWidget):
 
     @handle_permissions
     def _add(self, _checked=False):
-        d = StaffDialog(self)
+        d = StaffDialog(self, roles=self._roles)
         if d.exec() == QDialog.DialogCode.Accepted:
             data = d.get_data()
             try:
@@ -327,10 +393,25 @@ class StaffScreen(QWidget):
 
     @handle_permissions
     def _edit(self, u: dict):
-        d = StaffDialog(self, u, is_me=u["id"] == self._me)
+        d = StaffDialog(self, u, is_me=u["id"] == self._me, roles=self._roles)
         if d.exec() == QDialog.DialogCode.Accepted:
             self._svc.update(u["id"], d.get_data())
             self.refresh_data()
+
+    def _extra_roles(self, u: dict):
+        try:
+            places = PlacesService().places()
+        except Exception:  # the place list is optional: "Everywhere" still works
+            places = []
+        d = ExtraRolesDialog(self, u, self._roles, places)
+        if d.exec() != QDialog.DialogCode.Accepted:
+            return
+        try:
+            IamService().set_user_roles(u["id"], d.assignments())
+        except ForbiddenError as e:  # the server says why, e.g. "You cannot grant what you do not hold"
+            QMessageBox.warning(self, "Not allowed", e.reason or "You don't have permission for this.")
+            return
+        QMessageBox.information(self, "Roles saved", f"{u['username']} will be signed out and must sign in again.")
 
     @handle_permissions
     def _send_code(self, u: dict):

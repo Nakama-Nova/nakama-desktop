@@ -28,7 +28,6 @@ from PyQt6.QtWidgets import (
 )
 
 from services.api_client import APIError, ForbiddenError
-from services.enums import UserRole
 from services.finance_service import FinanceService
 from services.session import Session
 from ui.components.interactive import STATE_COLOURS, ChipBar, UsageBar
@@ -209,7 +208,7 @@ class FinanceScreen(QWidget):
     def __init__(self):
         super().__init__()
         self._svc = FinanceService()
-        self._can_balance = Session.is_authorized([UserRole.OWNER, UserRole.ACCOUNTANT])
+        self._can_balance = Session.can("finance:balance_sheet:read")
         self._range: tuple = period_for("month")
         self._kind: str | None = None
         self._entries: list = []
