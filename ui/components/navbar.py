@@ -93,8 +93,8 @@ class Navbar(QFrame):
     def add_right(self, widget: QWidget) -> None:
         self.right.addWidget(widget)
 
-    def make_account_button(self, role_text: str, on_password, on_sign_out) -> QToolButton:
-        """The signed-in person's menu: their role, change password, sign out."""
+    def make_account_button(self, role_text: str, on_password, on_sign_out, on_settings=None) -> QToolButton:
+        """The signed-in person's menu: their role, settings, change password, sign out."""
         btn = QToolButton()
         btn.setText(role_text)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -107,6 +107,8 @@ class Navbar(QFrame):
             "QToolButton::menu-indicator { image: none; }"
         )
         menu = QMenu(btn)
+        if on_settings is not None:
+            menu.addAction("Settings", on_settings)
         menu.addAction("Change my password", on_password)
         menu.addSeparator()
         menu.addAction("Sign out", on_sign_out)

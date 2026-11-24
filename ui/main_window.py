@@ -324,7 +324,7 @@ class MainWindow(QMainWindow):
         self.navbar.add_right(self.bell_btn)
         # Who is signed in: their role, and the menu with change password and sign out
         self.role_badge = self.navbar.make_account_button(
-            self._role_text(), lambda: change_my_password(self), self._handle_logout
+            self._role_text(), lambda: change_my_password(self), self._handle_logout, self._open_settings
         )
         self.navbar.add_right(self.role_badge)
         self.navbar.goto_requested.connect(self._open_goto)
@@ -716,7 +716,7 @@ class MainWindow(QMainWindow):
     def _install_shortcuts(self):
         """F5 refreshes this screen, Ctrl+F jumps to its search box, Ctrl+1..9 open the first nine
         sidebar entries (the ones this role can see, in the order shown)."""
-        keys = {"F5": self._refresh_current, "Ctrl+F": self._focus_search, "Ctrl+K": self._open_goto}
+        keys = {"F5": self._refresh_current, "Ctrl+F": self._focus_search, "Ctrl+K": self._open_goto, "Ctrl+,": self._open_settings}
         for n in range(1, 10):
             keys[f"Ctrl+{n}"] = lambda n=n: self._go_to_nth(n)
         self._shortcuts = []
@@ -724,6 +724,14 @@ class MainWindow(QMainWindow):
             sc = QShortcut(QKeySequence(key), self)
             sc.activated.connect(slot)
             self._shortcuts.append(sc)
+
+    def _open_settings(self):
+        """Ctrl+, or the account menu: this computer's settings."""
+        from ui.settings_dialog import SettingsDialog
+
+        dialog = SettingsDialog(self, notifier=self.notifier, updater=self.updater)
+        if dialog.exec():
+            self.sales_view.apply_settings()  # a new default for Paid by applies to the bill on screen too
 
     def _open_goto(self):
         """Ctrl+K: type a screen's name and press Enter."""
