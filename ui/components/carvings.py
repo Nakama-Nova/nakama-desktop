@@ -8,7 +8,7 @@ EmptyState puts that row, a title and a message where a table has nothing to sho
 
 from PyQt6.QtCore import QEvent, QObject, QPointF, QRectF, Qt, QTimer
 from PyQt6.QtGui import QColor, QPainter
-from PyQt6.QtWidgets import QLabel, QPushButton, QSizePolicy, QTableWidget, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QSizePolicy, QTableWidget, QVBoxLayout, QWidget
 
 from ui.assets import carving_path, load_image, scaled_pixmap
 from ui.theme import Colors, Fonts, Spacing, Theme
@@ -85,47 +85,58 @@ class CarvingRow(QWidget):
 
 
 class EmptyState(QWidget):
-    """What a screen shows when its list is empty: the carving trio, a title and a hint.
-    Under COMPACT_BELOW pixels tall it drops the carvings and keeps the words."""
+    """What a list shows when it has no rows: a small carving trio beside a title and a hint,
+    near the top of the list where the rows will appear. Home keeps the large carvings; a list
+    only needs to say what is missing and what to do. Under COMPACT_BELOW pixels tall, or with
+    show_carvings=False, it keeps just the words."""
 
-    COMPACT_BELOW = 240
-    CARVING_HEIGHT = 132
+    COMPACT_BELOW = 110
+    CARVING_HEIGHT = 84
+    CARVING_WIDTH = 150
 
     def __init__(self, title: str, message: str = "", set_name: str = "temple", action: QPushButton | None = None,
-                 parent: QWidget | None = None):
+                 parent: QWidget | None = None, show_carvings: bool = True):
         super().__init__(parent)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        root = QVBoxLayout(self)
-        root.setContentsMargins(Spacing.LG, Spacing.MD, Spacing.LG, Spacing.MD)
-        root.setSpacing(Spacing.SM)
-        root.addStretch(1)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(Spacing.LG, Spacing.LG, Spacing.LG, Spacing.MD)
+        outer.setSpacing(0)
 
-        self.carvings = CarvingRow(set_name)
-        self.carvings.setFixedHeight(self.CARVING_HEIGHT)
-        self.carvings.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        root.addWidget(self.carvings)
+        row = QHBoxLayout()
+        row.setSpacing(Spacing.LG)
+        row.addStretch(1)
 
+        self.carvings = CarvingRow(set_name, gap=Spacing.SM)
+        self.carvings.setFixedSize(self.CARVING_WIDTH, self.CARVING_HEIGHT)
+        self._show_carvings = show_carvings
+        self.carvings.setVisible(show_carvings)
+        row.addWidget(self.carvings, 0, Qt.AlignmentFlag.AlignVCenter)
+
+        words = QVBoxLayout()
+        words.setSpacing(Spacing.XS)
         self.title_lbl = QLabel(title)
-        self.title_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.title_lbl.setStyleSheet(Theme.heading(Fonts.HEADING_MD) + "background: transparent; border: none;")
-        root.addWidget(self.title_lbl)
+        words.addWidget(self.title_lbl)
 
         self.message_lbl = QLabel(message)
-        self.message_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.message_lbl.setWordWrap(True)
+        self.message_lbl.setMaximumWidth(420)
         self.message_lbl.setStyleSheet(
             f"font-size: {Fonts.BODY}px; color: {Colors.TEXT_SECONDARY}; background: transparent; border: none;"
         )
         self.message_lbl.setVisible(bool(message))
-        root.addWidget(self.message_lbl)
-
+        words.addWidget(self.message_lbl)
         if action is not None:
-            root.addWidget(action, 0, Qt.AlignmentFlag.AlignHCenter)
-        root.addStretch(1)
+            words.addSpacing(Spacing.SM)
+            words.addWidget(action, 0, Qt.AlignmentFlag.AlignLeft)
+        row.addLayout(words)
+        row.addStretch(1)
+        outer.addLayout(row)
+        outer.addStretch(1)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        self.carvings.setVisible(event.size().height() >= self.COMPACT_BELOW)
+        self.carvings.setVisible(self._show_carvings and event.size().height() >= self.COMPACT_BELOW)
 
 
 class _TableWatcher(QObject):
@@ -136,7 +147,7 @@ class _TableWatcher(QObject):
     its body is shown, resized or repainted (adding or removing rows repaints it) rather
     than listening to the model, whose signals also fire while the table is torn down."""
 
-    EMPTY_MIN_HEIGHT = 300
+    EMPTY_MIN_HEIGHT = 170  # enough for the compact empty state under a header row
 
     def __init__(self, table: QTableWidget, make_state):
         super().__init__(table)
@@ -184,11 +195,11 @@ class _TableWatcher(QObject):
 
 
 def attach_empty_state(table: QTableWidget, title: str, message: str = "", set_name: str = "temple",
-                       action: QPushButton | None = None) -> _TableWatcher:
+                       action: QPushButton | None = None, show_carvings: bool = True) -> _TableWatcher:
     """Show an EmptyState over `table` while it has no rows. Returns the watcher; its
     `state` is the EmptyState once the table has first been shown empty."""
     watcher = _TableWatcher(
-        table, lambda: EmptyState(title, message, set_name, action, parent=table.viewport())
+        table, lambda: EmptyState(title, message, set_name, action, parent=table.viewport(), show_carvings=show_carvings)
     )
     watcher.sync()
     return watcher

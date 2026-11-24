@@ -654,6 +654,11 @@ class MainWindow(QMainWindow):
                 table = tables[0] if tables else None
             if table is not None:
                 attach_empty_state(table, *spec)
+            # Any other list on the screen (a second tab, a history under the main list) says
+            # so too, in words only, instead of showing a blank box.
+            for other in view.findChildren(QTableWidget):
+                if other is not table and other.parent() is not None and not other.property("no_empty_state"):
+                    attach_empty_state(other, "Nothing here yet", "", show_carvings=False)
 
     # ------------------------------------------------------------------
     # Page switching with active state + auto-refresh
