@@ -657,8 +657,8 @@ class SalesScreen(QWidget):
             payment_method=pay.get("payment_method"), payment_status=pay["payment_status"],
         )
         paid_note = (
-            "\n\nHow it was paid is kept with it, but the server shows it as not paid until "
-            "you correct it in Bill History."
+            "\n\nHow it was paid is kept with it. A server that has not been updated yet shows it as "
+            "not paid until you correct it in Bill History."
             if pay["payment_status"] == "paid"
             else ""
         )
