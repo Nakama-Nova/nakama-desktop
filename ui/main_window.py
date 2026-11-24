@@ -415,7 +415,7 @@ class MainWindow(QMainWindow):
         )
 
         # Desktop notifications (website orders, money received, low stock, finished scans)
-        self._load_person()  # who is signed in, for the top bar (quietly skipped offline)
+        QTimer.singleShot(2500, self._load_person)  # who is signed in, for the top bar, once the window is up
         self.notifier = Notifier(self)
         self.notifier.changed.connect(self._show_unread)
         self.notifier.open_screen.connect(self._open_screen)
