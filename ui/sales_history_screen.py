@@ -26,6 +26,7 @@ from PyQt6.QtWidgets import (
 )
 
 from ui.icons import IconButton
+from ui.components.pills import PAYMENT_TONES, PillDelegate
 from services.money import inr
 from services.event_bus import SALE_CREATED, EventBus
 from services.sales_service import BillPdfError, SalesService
@@ -234,6 +235,7 @@ class SalesHistoryScreen(QWidget):
         self.table = QTableWidget()
         self.table.setColumnCount(5)
         self.table.setHorizontalHeaderLabels(["Bill No.", "Amount (₹)", "Date", "Payment", "Actions"])
+        self.table.setItemDelegateForColumn(self.COL_PAYMENT, PillDelegate(PAYMENT_TONES, self.table))
         hdr = self.table.horizontalHeader()
         hdr.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         hdr.setSectionResizeMode(self.COL_ACTIONS, QHeaderView.ResizeMode.Fixed)
@@ -310,11 +312,7 @@ class SalesHistoryScreen(QWidget):
                 self.table.setItem(row, col, item)
             status = sale.get("payment_status") or "pending"
             word, colour = ("Cancelled", Colors.DANGER) if cancelled else (PAYMENT_WORDS.get(status, status), PAYMENT_COLOURS.get(status, Colors.TEXT_PRIMARY))
-            pay = QTableWidgetItem(word)
-            pay.setForeground(QColor(colour))
-            f = pay.font()
-            f.setBold(True)
-            pay.setFont(f)
+            pay = QTableWidgetItem(word)  # drawn as a pill (see PillDelegate)
             self.table.setItem(row, self.COL_PAYMENT, pay)
             self.table.setCellWidget(row, self.COL_ACTIONS, self._actions(sale, cancelled))
         # as wide as the widest row of buttons needs, in whatever font this computer uses (a fixed guess cut "Payment" to "Payme")

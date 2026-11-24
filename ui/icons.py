@@ -115,6 +115,41 @@ def pixmap(name: str, color: str, size: int = 18, ratio: float = 2.0, gap: int =
     return out
 
 
+def initials(name: str) -> str:
+    """'Chaithanya M' -> 'CM'; one word -> its first two letters; nothing -> '?'."""
+    words = [w for w in (name or "").replace("_", " ").replace(".", " ").split() if w]
+    if not words:
+        return "?"
+    if len(words) == 1:
+        return words[0][:2].upper()
+    return (words[0][0] + words[1][0]).upper()
+
+
+@lru_cache(maxsize=None)
+def avatar_pixmap(text: str, background: str, foreground: str, size: int = 28, ratio: float = 2.0) -> QPixmap:
+    """A round avatar with initials on it."""
+    from PyQt6.QtGui import QFont
+
+    px = int(size * ratio)
+    image = QImage(px, px, QImage.Format.Format_ARGB32_Premultiplied)
+    image.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(image)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.setBrush(QColor(background))
+    painter.drawEllipse(0, 0, px, px)
+    font = QFont()
+    font.setBold(True)
+    font.setPixelSize(int(px * 0.40))
+    painter.setFont(font)
+    painter.setPen(QColor(foreground))
+    painter.drawText(QRectF(0, 0, px, px), Qt.AlignmentFlag.AlignCenter, text)
+    painter.end()
+    out = QPixmap.fromImage(image)
+    out.setDevicePixelRatio(ratio)
+    return out
+
+
 def icon(name: str, color: str, size: int = 18) -> QIcon:
     return QIcon(pixmap(name, color, size))
 

@@ -228,6 +228,8 @@ class MainWindow(QMainWindow):
         logo = scaled_pixmap(logo_path(), LOGO_BOX.height(), False, self.devicePixelRatioF())
         if not logo.isNull():
             self.logo_lbl.setPixmap(logo)
+        if Colors.DARK_MODE:  # the logo is brown and gold: give it a light plate to sit on
+            self.logo_lbl.setStyleSheet("background: #FBF6EC; border-radius: 12px;")
         brand_layout.addWidget(self.logo_lbl)
 
         brand_text = QVBoxLayout()
@@ -413,6 +415,7 @@ class MainWindow(QMainWindow):
         )
 
         # Desktop notifications (website orders, money received, low stock, finished scans)
+        self._load_person()  # who is signed in, for the top bar (quietly skipped offline)
         self.notifier = Notifier(self)
         self.notifier.changed.connect(self._show_unread)
         self.notifier.open_screen.connect(self._open_screen)
@@ -426,6 +429,17 @@ class MainWindow(QMainWindow):
         # Run one cycle shortly after startup too, rather than waiting a
         # full interval for the first sync.
         QTimer.singleShot(2000, self._sync_async)
+
+    def _load_person(self):
+        """Ask the server for this person's name in the background: it only decorates the top bar."""
+        from services.api_client import APIClient
+        from ui.workers import run_async
+
+        def apply(me):
+            if isinstance(me, dict):
+                self.navbar.set_person(me.get("full_name") or me.get("username") or "")
+
+        run_async(lambda: APIClient()._get("/auth/me", Session.get_token(), quiet=True), apply, lambda _exc: None)
 
     def _refresh_connection(self):
         """Online unless the last request found the server down; waiting = bills not yet sent."""
