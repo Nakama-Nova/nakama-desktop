@@ -24,8 +24,10 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QSpinBox,
     QCompleter,
+    QFrame,
 )
 from PyQt6.QtCore import Qt, QStringListModel
+from PyQt6.QtGui import QKeySequence, QShortcut
 
 
 from ui.theme import Theme, Colors, Fonts
@@ -36,6 +38,7 @@ from services.sales_service import BillPdfError, SalesService
 from services.customer_service import CustomerService
 from services.inventory_service import InventoryService
 from services.event_bus import EventBus, SALE_CREATED
+from services.money import inr
 
 
 class CartItem:
@@ -83,165 +86,163 @@ class SalesScreen(QWidget):
         # window is still being built, so starting the app never waits on the server
 
     def _build_ui(self):
+        """Counter layout: items on the left, the buyer and the bill's total always in view on
+        the right, so Create bill never scrolls away."""
         root = QVBoxLayout(self)
-        root.setContentsMargins(32, 28, 32, 28)
-        root.setSpacing(16)
+        root.setContentsMargins(32, 24, 32, 24)
+        root.setSpacing(12)
 
-        # ── Header ────────────────────────────────────
-        header = QLabel("🧾  New Bill")
+        header = QLabel("New bill")
         header.setStyleSheet(Theme.heading(Fonts.HEADING_LG))
         root.addWidget(header)
+        hint = QLabel("Search or scan to add items. The server numbers the bill once it is saved.")
+        hint.setStyleSheet(f"font-size: {Fonts.BODY}px; color: {Colors.TEXT_SECONDARY};")
+        root.addWidget(hint)
 
-        # ── Buyer section ─────────────────────────────
-        buyer_row = QHBoxLayout()
-        buyer_row.setSpacing(12)
+        body = QHBoxLayout()
+        body.setSpacing(16)
+        root.addLayout(body, 1)
 
-        # Phone
-        phone_col = QVBoxLayout()
-        phone_lbl = QLabel("Buyer Phone")
-        phone_lbl.setStyleSheet(Theme.label())
+        # ── Left: add items, then the lines of the bill ──
+        left = QVBoxLayout()
+        left.setSpacing(12)
+        body.addLayout(left, 1)
+
+        item_row = QHBoxLayout()
+        item_row.setSpacing(8)
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Search by item name, or scan its tag")
+        self.search_input.setStyleSheet(Theme.input_style())
+        self.search_input.setMinimumHeight(40)
+        self._completer = QCompleter()
+        self._completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        self.search_input.setCompleter(self._completer)
+        self.search_input.returnPressed.connect(self._add_item_to_cart)
+        item_row.addWidget(self.search_input, 1)
+
+        add_btn = QPushButton("Add item")
+        add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        add_btn.setMinimumHeight(40)
+        add_btn.setStyleSheet(Theme.btn("primary", "md"))
+        add_btn.clicked.connect(self._add_item_to_cart)
+        item_row.addWidget(add_btn)
+        left.addLayout(item_row)
+
+        self.table = QTableWidget()
+        self.table.setColumnCount(6)
+        self.table.setHorizontalHeaderLabels(
+            ["Item", "Price (before GST)", "Qty", "GST", "Amount (with GST)", ""]
+        )
+        header_view = self.table.horizontalHeader()
+        header_view.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        header_view.setSectionResizeMode(self.COL_NAME, QHeaderView.ResizeMode.Stretch)
+        header_view.setSectionResizeMode(self.COL_REMOVE, QHeaderView.ResizeMode.Fixed)
+        self.table.setColumnWidth(self.COL_REMOVE, 52)
+        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.table.verticalHeader().setVisible(False)
+        Theme.style_table(self.table)
+        left.addWidget(self.table, 1)
+
+        # ── Right: buyer, totals, Create bill ──
+        panel = QFrame()
+        panel.setObjectName("billpanel")
+        panel.setFixedWidth(340)
+        panel.setStyleSheet(
+            f"QFrame#billpanel {{ background: {Colors.CARD_BG}; border: 1px solid {Colors.CARD_BORDER};"
+            f" border-radius: 10px; }} QFrame#billpanel QLabel {{ border: none; background: transparent; }}"
+        )
+        col = QVBoxLayout(panel)
+        col.setContentsMargins(18, 16, 18, 16)
+        col.setSpacing(10)
+        body.addWidget(panel, 0, Qt.AlignmentFlag.AlignTop)
+
+        buyer_lbl = QLabel("Buyer")
+        buyer_lbl.setStyleSheet(Theme.subheading())
+        col.addWidget(buyer_lbl)
         self.phone_input = QLineEdit()
-        self.phone_input.setPlaceholderText("Enter phone number...")
+        self.phone_input.setPlaceholderText("Phone number")
         self.phone_input.setStyleSheet(Theme.input_style())
-        phone_col.addWidget(phone_lbl)
-        phone_col.addWidget(self.phone_input)
-        buyer_row.addLayout(phone_col, 2)
-
-        # Name
-        name_col = QVBoxLayout()
-        name_lbl = QLabel("Buyer Name")
-        name_lbl.setStyleSheet(Theme.label())
+        self.phone_input.setMinimumHeight(38)
+        col.addWidget(self.phone_input)
         self.customer_input = QLineEdit()
-        self.customer_input.setPlaceholderText("Name (auto-fills on search)")
+        self.customer_input.setPlaceholderText("Name (fills in when the phone is found)")
         self.customer_input.setStyleSheet(Theme.input_style())
-        name_col.addWidget(name_lbl)
-        name_col.addWidget(self.customer_input)
-        buyer_row.addLayout(name_col, 2)
-
-        # Search button
-        self.search_btn = QPushButton("🔍  Search")
+        self.customer_input.setMinimumHeight(38)
+        col.addWidget(self.customer_input)
+        self.search_btn = QPushButton("Find buyer by phone")
         self.search_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.search_btn.setFixedHeight(44)
-        self.search_btn.setStyleSheet(Theme.btn_secondary())
+        self.search_btn.setStyleSheet(Theme.btn("secondary", "sm", outline=True))
         self.search_btn.clicked.connect(self._handle_customer_lookup)
-        buyer_row.addWidget(self.search_btn, 0, Qt.AlignmentFlag.AlignBottom)
+        col.addWidget(self.search_btn)
 
         # Where the bill is sold from: shown only when more than one place can sell
         self.place_box = QWidget()
         place_col = QVBoxLayout(self.place_box)
         place_col.setContentsMargins(0, 0, 0, 0)
+        place_col.setSpacing(4)
         place_lbl = QLabel("Sold from")
         place_lbl.setStyleSheet(Theme.label())
         self.place_pick = PlacePicker("sale")
         place_col.addWidget(place_lbl)
         place_col.addWidget(self.place_pick)
         self.place_box.setVisible(False)
-        buyer_row.addWidget(self.place_box, 1)
+        col.addWidget(self.place_box)
 
-        root.addLayout(buyer_row)
+        col.addSpacing(6)
+        self.subtotal_lbl = self._money_row(col, "Subtotal")
+        self.cgst_lbl = self._money_row(col, "CGST")
+        self.sgst_lbl = self._money_row(col, "SGST")
 
-        # ── Item search ───────────────────────────────
-        item_row = QHBoxLayout()
-        item_row.setSpacing(12)
-
-        item_col = QVBoxLayout()
-        item_lbl = QLabel("Search Item")
-        item_lbl.setStyleSheet(Theme.label())
-        self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("Type item name to search...")
-        self.search_input.setStyleSheet(Theme.input_style())
-        self._completer = QCompleter()
-        self._completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
-        self.search_input.setCompleter(self._completer)
-        self.search_input.returnPressed.connect(self._add_item_to_cart)
-        item_col.addWidget(item_lbl)
-        item_col.addWidget(self.search_input)
-        item_row.addLayout(item_col, 1)
-
-        add_btn = QPushButton("➕  Add")
-        add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        add_btn.setFixedHeight(44)
-        add_btn.setStyleSheet(Theme.btn_primary())
-        add_btn.clicked.connect(self._add_item_to_cart)
-        item_row.addWidget(add_btn, 0, Qt.AlignmentFlag.AlignBottom)
-
-        root.addLayout(item_row)
-
-        # ── Cart table ────────────────────────────────
-        self.table = QTableWidget()
-        self.table.setColumnCount(6)
-        self.table.setHorizontalHeaderLabels(
-            ["Item Name", "Price before GST (₹)", "Qty", "GST %", "Total with GST (₹)", ""]
+        total_row = QHBoxLayout()
+        total_name = QLabel("Total")
+        total_name.setStyleSheet(f"font-size: {Fonts.BODY}px; font-weight: 600; color: {Colors.TEXT_SECONDARY};")
+        self.grandtotal_lbl = QLabel(inr(0))
+        self.grandtotal_lbl.setStyleSheet(
+            f"font-size: 30px; font-weight: 700; color: {Colors.TEXT_PRIMARY};"
         )
-        header_view = self.table.horizontalHeader()
-        header_view.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        header_view.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)
-        self.table.setColumnWidth(5, 60)
-        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self.table.verticalHeader().setVisible(False)
-        Theme.style_table(self.table)
-        root.addWidget(self.table)
+        self.grandtotal_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        total_row.addWidget(total_name)
+        total_row.addWidget(self.grandtotal_lbl, 1)
+        col.addLayout(total_row)
 
-        # ── Totals ────────────────────────────────────
-        totals_widget = QWidget()
-        totals_widget.setStyleSheet(f"""
-            QWidget {{
-                background-color: {Colors.CARD_BG};
-                border-radius: 10px;
-                border: 1px solid {Colors.CARD_BORDER};
-            }}
-            QLabel {{ border: none; background: transparent; }}
-        """)
-        totals_layout = QHBoxLayout(totals_widget)
-        totals_layout.setContentsMargins(20, 14, 20, 14)
+        self.invoice_btn = QPushButton("Create bill")
+        self.invoice_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.invoice_btn.setMinimumHeight(48)
+        self.invoice_btn.setStyleSheet(Theme.btn("primary", "lg"))
+        self.invoice_btn.clicked.connect(self._generate_invoice)
+        self.invoice_btn.setToolTip("Ctrl+Enter")
+        col.addWidget(self.invoice_btn)
 
-        self.subtotal_lbl = QLabel("Subtotal: ₹0.00")
-        self.subtotal_lbl.setStyleSheet(
-            f"font-size: {Fonts.BODY}px; color: {Colors.TEXT_SECONDARY};"
+        # Quiet on purpose: next to Create bill it must not be the easy button to hit
+        self.clear_btn = QPushButton("Clear bill")
+        self.clear_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.clear_btn.setStyleSheet(
+            f"QPushButton {{ background: transparent; border: none; color: {Colors.TEXT_SECONDARY};"
+            f" font-size: {Fonts.BODY}px; padding: 6px; }}"
+            f"QPushButton:hover {{ color: {Colors.RED}; }}"
         )
-        self.cgst_lbl = QLabel("CGST: ₹0.00")
-        self.cgst_lbl.setStyleSheet(
-            f"font-size: {Fonts.BODY}px; color: {Colors.TEXT_SECONDARY};"
-        )
-        self.sgst_lbl = QLabel("SGST: ₹0.00")
-        self.sgst_lbl.setStyleSheet(
-            f"font-size: {Fonts.BODY}px; color: {Colors.TEXT_SECONDARY};"
-        )
+        self.clear_btn.clicked.connect(self._clear_cart)
+        col.addWidget(self.clear_btn)
 
-        self.grandtotal_lbl = QLabel("Total: ₹0.00")
-        self.grandtotal_lbl.setStyleSheet(f"""
-            font-size: 18px; font-weight: bold; color: {Colors.GREEN};
-        """)
-
-        totals_layout.addWidget(self.subtotal_lbl)
-        totals_layout.addWidget(self.cgst_lbl)
-        totals_layout.addWidget(self.sgst_lbl)
-        totals_layout.addStretch()
-        totals_layout.addWidget(self.grandtotal_lbl)
-
-        root.addWidget(totals_widget)
-
-        # ── Action buttons ────────────────────────────
-        actions_row = QHBoxLayout()
-        actions_row.setSpacing(12)
-
-        clear_btn = QPushButton("🗑️  Clear")
-        clear_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        clear_btn.setStyleSheet(Theme.btn_secondary())
-        clear_btn.clicked.connect(self._clear_cart)
-
-        invoice_btn = QPushButton("✅  Create Bill")
-        invoice_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        invoice_btn.setFixedHeight(48)
-        invoice_btn.setStyleSheet(Theme.btn_primary())
-        invoice_btn.clicked.connect(self._generate_invoice)
-
-        actions_row.addWidget(clear_btn)
-        actions_row.addWidget(invoice_btn)
-        root.addLayout(actions_row)
+        self._bill_shortcut = QShortcut(QKeySequence("Ctrl+Return"), self)
+        self._bill_shortcut.activated.connect(self._generate_invoice)
 
         # ── RBAC Enforcement ──────────────────────────
         self._enforce_rbac()
+
+    @staticmethod
+    def _money_row(layout, name: str) -> QLabel:
+        """A 'Subtotal ........ amount' line; returns the amount label."""
+        row = QHBoxLayout()
+        label = QLabel(name)
+        label.setStyleSheet(f"font-size: {Fonts.BODY}px; color: {Colors.TEXT_SECONDARY};")
+        value = QLabel(inr(0))
+        value.setStyleSheet(f"font-size: {Fonts.BODY}px; color: {Colors.TEXT_PRIMARY};")
+        value.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        row.addWidget(label)
+        row.addWidget(value, 1)
+        layout.addLayout(row)
+        return value
 
     def _enforce_rbac(self):
         from services.session import Session
@@ -411,15 +412,9 @@ class SalesScreen(QWidget):
         for row, ci in enumerate(self._cart):
             self.table.setRowHeight(row, 42)
             self.table.setItem(row, self.COL_NAME, QTableWidgetItem(ci.name))
-            self.table.setItem(
-                row, self.COL_PRICE, QTableWidgetItem(f"₹{ci.price:,.2f}")
-            )
-            self.table.setItem(
-                row, self.COL_GST, QTableWidgetItem(f"{ci.gst_pct:.1f}%")
-            )
-            self.table.setItem(
-                row, self.COL_TOTAL, QTableWidgetItem(f"₹{ci.line_total:,.2f}")
-            )
+            self.table.setItem(row, self.COL_PRICE, self._number_cell(inr(ci.price)))
+            self.table.setItem(row, self.COL_GST, self._number_cell(f"{ci.gst_pct:.1f}%"))
+            self.table.setItem(row, self.COL_TOTAL, self._number_cell(inr(ci.line_total), bold=True))
 
             # Quantity spinner — compact style for table cells
             qty_spin = QSpinBox()
@@ -466,14 +461,21 @@ class SalesScreen(QWidget):
 
         self._update_totals()
 
+    @staticmethod
+    def _number_cell(text: str, bold: bool = False) -> QTableWidgetItem:
+        """A money or percent cell: right-aligned so the digits line up down the column."""
+        cell = QTableWidgetItem(text)
+        cell.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        if bold:
+            font = cell.font()
+            font.setBold(True)
+            cell.setFont(font)
+        return cell
+
     def _on_qty_changed(self, row: int, value: int):
         if row < len(self._cart):
             self._cart[row].quantity = value
-            self.table.setItem(
-                row,
-                self.COL_TOTAL,
-                QTableWidgetItem(f"₹{self._cart[row].line_total:,.2f}"),
-            )
+            self.table.setItem(row, self.COL_TOTAL, self._number_cell(inr(self._cart[row].line_total), bold=True))
             self._update_totals()
 
     # ------------------------------------------------------------------
@@ -486,10 +488,10 @@ class SalesScreen(QWidget):
         sgst = total_gst / 2
         grand_total = subtotal + total_gst
 
-        self.subtotal_lbl.setText(f"Subtotal: ₹{subtotal:,.2f}")
-        self.cgst_lbl.setText(f"CGST: ₹{cgst:,.2f}")
-        self.sgst_lbl.setText(f"SGST: ₹{sgst:,.2f}")
-        self.grandtotal_lbl.setText(f"Total: ₹{grand_total:,.2f}")
+        self.subtotal_lbl.setText(inr(subtotal))
+        self.cgst_lbl.setText(inr(cgst))
+        self.sgst_lbl.setText(inr(sgst))
+        self.grandtotal_lbl.setText(inr(grand_total))
 
     # ------------------------------------------------------------------
     # Offline billing
