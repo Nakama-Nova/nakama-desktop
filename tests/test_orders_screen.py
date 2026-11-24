@@ -72,7 +72,7 @@ def test_lists_open_orders_by_default_with_customer_and_money(qapp, fake):
     s.refresh_data()
     assert s.table.rowCount() == 2  # the delivered one is not "open"
     texts = {s.table.item(r, s.COL_NO).text(): r for r in range(2)}
-    assert "ORD-2026-0002  🌐" in texts  # website orders are marked
+    assert "ORD-2026-0002  (website)" in texts  # website orders are marked
     r = texts["ORD-2026-0001"]
     assert s.table.item(r, s.COL_CUSTOMER).text() == "Lakshmi Devi  ·  9876543210"
     assert s.table.item(r, s.COL_AMOUNT).text() == "₹10,000.00" and s.table.item(r, s.COL_DUE).text() == "₹7,000.00"

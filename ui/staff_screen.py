@@ -130,7 +130,7 @@ class StaffDialog(QDialog):
         ]:
             form.addRow(QLabel(label, styleSheet=Theme.label()), w)
         if self._adding:
-            note = QLabel("✉️  They will be emailed a code to choose their own password. You never see it.")
+            note = QLabel("They will be emailed a code to choose their own password. You never see it.")
             note.setWordWrap(True)
             note.setStyleSheet(f"color: {Colors.TEXT_SECONDARY};")
             form.addRow(note)
@@ -280,7 +280,7 @@ class StaffScreen(QWidget):
         layout.setContentsMargins(32, 28, 32, 28)
         layout.setSpacing(16)
         head = QHBoxLayout()
-        title = QLabel("👥  Staff")
+        title = QLabel("Staff")
         title.setStyleSheet(Theme.heading(Fonts.HEADING_LG))
         head.addWidget(title)
         head.addStretch()
@@ -389,7 +389,7 @@ class StaffScreen(QWidget):
                     "Added, but the email did not go",
                     f"{data['full_name'] or data['username']} was added, but the email with the code "
                     f"could not be sent ({APIError._plain(e.detail)}).\n\n"
-                    "Use ✉️ Email code on their row to try again once email works.",
+                    "Use Email code on their row to try again once email works.",
                 )
             self.refresh_data()
 

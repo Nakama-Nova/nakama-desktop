@@ -69,7 +69,7 @@ class InventoryWindow(QWidget):
         layout.setSpacing(16)
 
         header_row = QHBoxLayout()
-        header = QLabel("📦  Stock")
+        header = QLabel("Stock")
         header.setStyleSheet(Theme.heading(Fonts.HEADING_LG))
         header_row.addWidget(header)
         header_row.addStretch()
@@ -94,7 +94,7 @@ class InventoryWindow(QWidget):
 
         find_row = QHBoxLayout()
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("🔍  Search by name or code...")
+        self.search_input.setPlaceholderText("Search by name or code...")
         self.search_input.setStyleSheet(Theme.input_style())
         self.search_input.textChanged.connect(self._filter_table)
         find_row.addWidget(self.search_input, 1)

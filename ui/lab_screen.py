@@ -44,7 +44,7 @@ class LabScreen(QWidget):
         layout.setSpacing(16)
 
         header_row = QHBoxLayout()
-        header = QLabel("🧊  3D Lab")
+        header = QLabel("3D Lab")
         header.setStyleSheet(Theme.heading(Fonts.HEADING_LG))
         header_row.addWidget(header)
         header_row.addStretch()

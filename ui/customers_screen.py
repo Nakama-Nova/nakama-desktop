@@ -114,7 +114,7 @@ class CustomersScreen(QWidget):
 
         # Header row
         header_row = QHBoxLayout()
-        header = QLabel("👤  Buyers")
+        header = QLabel("Buyers")
         header.setStyleSheet(Theme.heading(Fonts.HEADING_LG))
         header_row.addWidget(header)
         header_row.addStretch()
@@ -133,7 +133,7 @@ class CustomersScreen(QWidget):
 
         # Search
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("🔍  Search buyers by name or phone...")
+        self.search_input.setPlaceholderText("Search buyers by name or phone...")
         self.search_input.setStyleSheet(Theme.input_style())
         self.search_input.textChanged.connect(self._filter_table)
         layout.addWidget(self.search_input)
@@ -239,7 +239,7 @@ class CustomersScreen(QWidget):
                 return
             result = self._customer_service.create(**data)
             if result:
-                QMessageBox.information(self, "Success ✅", "Buyer added successfully!")
+                QMessageBox.information(self, "Buyer added", "Buyer added successfully!")
                 self.refresh_data()
             else:
                 QMessageBox.critical(self, "Error", "Failed to add buyer.")
@@ -255,7 +255,7 @@ class CustomersScreen(QWidget):
             result = self._customer_service.update(str(customer["id"]), **data)
             if result:
                 QMessageBox.information(
-                    self, "Updated ✅", "Buyer updated successfully!"
+                    self, "Buyer updated", "Buyer updated successfully!"
                 )
                 self.refresh_data()
             else:
@@ -271,7 +271,7 @@ class CustomersScreen(QWidget):
         )
         if confirm == QMessageBox.StandardButton.Yes:
             if self._customer_service.delete(str(customer["id"])):
-                QMessageBox.information(self, "Deleted ✅", "Buyer deleted.")
+                QMessageBox.information(self, "Buyer deleted", "Buyer deleted.")
                 self.refresh_data()
             else:
                 QMessageBox.critical(self, "Error", "Failed to delete buyer.")

@@ -454,7 +454,7 @@ class OrdersScreen(QWidget):
         root.setContentsMargins(32, 28, 32, 28)
         root.setSpacing(14)
         head = QHBoxLayout()
-        title = QLabel("📋  Orders")
+        title = QLabel("Orders")
         title.setStyleSheet(Theme.heading(Fonts.HEADING_LG))
         head.addWidget(title)
         head.addStretch()
@@ -576,7 +576,7 @@ class OrdersScreen(QWidget):
             if o.get("customer_phone"):
                 customer += f"  ·  {o['customer_phone']}"
             values = [
-                o["order_number"] + ("  🌐" if o.get("source") == "web" else ""),
+                o["order_number"] + ("  (website)" if o.get("source") == "web" else ""),
                 str(o["order_date"])[:10],
                 customer,
                 items_summary(o),
