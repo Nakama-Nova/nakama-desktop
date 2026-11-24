@@ -58,3 +58,13 @@ def test_till_sends_discount_and_payment_and_blocks_offline_discount(qapp, monke
     monkeypatch.setattr(SalesService, "is_online", lambda self: False)
     s._generate_invoice()
     assert "cannot be saved offline" in msgs[-1] and s._cart
+
+
+def test_refund_estimate_spreads_the_bill_discount_over_the_lines():
+    from services.billing import received_total, refund_estimate
+
+    lines = [(1000, 2, 1), (500, 1, 0)]  # return 1 of 2 chairs; the lamp stays
+    assert refund_estimate(lines, 0) == 500
+    assert refund_estimate(lines, 150) == 450  # the 10 % discount (150 of 1500) comes off the refund too
+    assert refund_estimate([(1000, 2, 0)], 0) == 0
+    assert received_total(300.10, 199.90) == 500

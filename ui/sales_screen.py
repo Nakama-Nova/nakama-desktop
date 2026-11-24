@@ -44,7 +44,7 @@ from services.customer_service import CustomerService
 from services.inventory_service import InventoryService
 from services.event_bus import EventBus, SALE_CREATED
 from services.money import inr
-from services.billing import change_or_balance, discount_amount, payment_status
+from services.billing import change_or_balance, discount_amount, payment_status, received_total
 
 
 class CartItem:
@@ -255,6 +255,13 @@ class SalesScreen(QWidget):
         rrow.addWidget(rrow_lbl)
         rrow.addWidget(self.received_in, 1)
         col.addLayout(rrow)
+        self.split_box = QVBoxLayout()
+        col.addLayout(self.split_box)
+        self.split_btn = QPushButton("➕  Split payment (another method)")
+        self.split_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.split_btn.setStyleSheet(Theme.btn("secondary", "sm", outline=True))
+        self.split_btn.clicked.connect(self._add_split_row)
+        col.addWidget(self.split_btn)
         self.pay_note = QLabel("")
         self.pay_note.setStyleSheet(f"font-size: {Fonts.BODY}px; font-weight: 600;")
         self.pay_note.setAlignment(Qt.AlignmentFlag.AlignRight)
@@ -457,6 +464,7 @@ class SalesScreen(QWidget):
         self._bill_key = None
         self.pay_pick.setCurrentIndex(0)  # back to cash for the next bill
         self._cart.clear()
+        self._clear_split_rows()
         self._received_touched = False  # the next bill starts as "paid in full, cash, no discount"
         self.discount_in.setValue(0)
         self._refresh_table()
@@ -564,8 +572,45 @@ class SalesScreen(QWidget):
     _discount = 0.0
     _total = 0.0
 
+    _split_rows: list = []
+
+    def _add_split_row(self):
+        """Another payment on the same bill (part cash, part UPI...): a method and an amount."""
+        self._received_touched = True  # the cashier is now dividing the money: stop filling it in
+        row = QWidget()
+        h = QHBoxLayout(row)
+        h.setContentsMargins(0, 0, 0, 0)
+        method = QComboBox()
+        for label, value in METHODS:
+            method.addItem(label, value)
+        method.setStyleSheet(Theme.input_style())
+        amount = QDoubleSpinBox()
+        amount.setRange(0, 10_000_000)
+        amount.setDecimals(2)
+        amount.setPrefix("₹")
+        amount.setStyleSheet(Theme.input_style())
+        amount.setValue(max(0.0, round(self._total - self._received(), 2)))
+        amount.valueChanged.connect(self._received_changed)
+        h.addWidget(method)
+        h.addWidget(amount, 1)
+        self.split_box.addWidget(row)
+        self._split_rows = [*self._split_rows, (method, amount, row)]
+        self._show_pay_note()
+
+    def _clear_split_rows(self):
+        for _m, _a, row in self._split_rows:
+            row.setParent(None)
+            row.deleteLater()
+        self._split_rows = []
+
+    def _received(self) -> float:
+        """Everything handed over: the first amount plus any split rows."""
+        return received_total(self.received_in.value(), *[a.value() for _m, a, _r in self._split_rows])
+
     def _pay_pick_changed(self, _i=0):
-        self.received_in.setEnabled(self.pay_pick.currentData() is not None)  # "Not paid yet": nothing handed over
+        paying = self.pay_pick.currentData() is not None  # "Not paid yet": nothing handed over
+        self.received_in.setEnabled(paying)
+        self.split_btn.setEnabled(paying)
         self._show_pay_note()
 
     def _received_changed(self, _v=0):
@@ -573,7 +618,7 @@ class SalesScreen(QWidget):
         self._show_pay_note()
 
     def _show_pay_note(self):
-        kind, rupees = change_or_balance(self._total, self.received_in.value())
+        kind, rupees = change_or_balance(self._total, self._received())
         if not self._cart or rupees == 0 or self.pay_pick.currentData() is None:
             self.pay_note.setText("")
             return
@@ -586,7 +631,11 @@ class SalesScreen(QWidget):
         method = self.pay_pick.currentData()
         if method is None:  # "Not paid yet"
             return {"payment_status": "pending"}
-        return {"payment_method": method, "payment_status": payment_status(self._total, self.received_in.value())}
+        status = payment_status(self._total, self._received())
+        if self._split_rows:  # more than one way: the server gets each payment
+            rows = [(self.pay_pick.currentData(), self.received_in.value())] + [(m.currentData(), a.value()) for m, a, _r in self._split_rows]
+            return {"payments": [{"amount": round(v, 2), "method": m} for m, v in rows if v > 0], "payment_status": status}
+        return {"payment_method": method, "payment_status": status}
 
     # ------------------------------------------------------------------
     # Offline billing
@@ -596,19 +645,19 @@ class SalesScreen(QWidget):
         recorded it, the offline copy carries the same id and the server skips
         it instead of billing the buyer twice. Changing the cart makes a new bill."""
         pay = self._payment()
-        key = (phone, tuple((c.item_id, c.quantity) for c in self._cart), self._discount, pay.get("payment_method"), pay["payment_status"])
+        key = (phone, tuple((c.item_id, c.quantity) for c in self._cart), self._discount, pay.get("payment_method"), pay["payment_status"], str(pay.get("payments")))
         if key != self._bill_key:
             self._bill_key, self._bill_client_id = key, str(uuid.uuid4())
         return self._bill_client_id
 
     def _save_offline(self, customer_name: str, phone: str, client_id: str) -> bool:
         pay = self._payment()
-        if self._discount:  # the sync does not carry a discount yet: a bill saved now would come out at full price
+        if self._discount or "payments" in pay:  # the sync carries neither yet: a bill saved now would lose them
             QMessageBox.warning(
                 self,
-                "Discount needs a connection",
-                "There is no connection, and a discount cannot be saved offline yet.\n\n"
-                "Take the discount off to save this bill on this computer, or press Create bill again "
+                "This needs a connection",
+                "There is no connection, and a discount or a split payment cannot be saved offline yet.\n\n"
+                "Take it off to save this bill on this computer, or press Create bill again "
                 "when the connection is back (it will not be billed twice).",
             )
             return False
@@ -715,7 +764,7 @@ class SalesScreen(QWidget):
             )
 
         note = ""
-        kind, rupees = change_or_balance(self._total, self.received_in.value())
+        kind, rupees = change_or_balance(self._total, self._received())
         if pay["payment_status"] != "pending" and kind == "change" and rupees and pay.get("payment_method") == "cash":
             note = f"\n\nHand back {inr(rupees)}."
         elif kind == "balance":

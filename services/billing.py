@@ -39,3 +39,17 @@ def change_or_balance(total, received) -> tuple[str, float]:
     """("change", rupees to hand back) or ("balance", rupees still to pay)."""
     diff = _cents(_d(received)) - _cents(_d(total))
     return ("change", float(diff)) if diff >= 0 else ("balance", float(-diff))
+
+
+def received_total(*amounts) -> float:
+    """What the customer handed over across all the payment rows."""
+    return float(sum((_cents(_d(a)) for a in amounts), Decimal(0)))
+
+
+def refund_estimate(lines: list[tuple], bill_discount) -> float:
+    """What a return will refund, as the server works it out: each line's share of its total
+    (items + GST), after its share of the bill discount (spread over the lines in proportion to
+    their totals). lines: [(line_total, sold_quantity, return_quantity)] for ALL lines of the bill."""
+    gross = sum((_d(t) for t, _s, _q in lines), Decimal(0))
+    keep = 1 - (min(_d(bill_discount), gross) / gross) if gross else Decimal(1)
+    return float(sum((_cents(_d(t) * q / s * keep) for t, s, q in lines if s and q), Decimal(0)))

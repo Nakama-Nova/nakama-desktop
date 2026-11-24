@@ -56,8 +56,8 @@ def test_the_chips_count_and_filter_the_bills(qapp, history):
 @pytest.mark.parametrize(
     "role,expected",
     [
-        (UserRole.OWNER, ["View", "Print", "Payment", "Delete"]),
-        (UserRole.MANAGER, ["View", "Print", "Payment"]),  # may correct payment, never delete
+        (UserRole.OWNER, ["View", "Print", "Payment", "Return", "Delete"]),
+        (UserRole.MANAGER, ["View", "Print", "Payment", "Return"]),  # may correct payment and take returns, never delete
         (UserRole.SALES, ["View", "Print"]),
     ],
 )

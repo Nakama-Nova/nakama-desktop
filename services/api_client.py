@@ -575,9 +575,11 @@ class APIClient:
         discount: float = 0,
         payment_method: str | None = None,
         payment_status: str | None = None,
+        payments: list | None = None,
     ) -> dict | None:
         """
         POST /sales
+        payments: [{"amount", "method"}, ...] for a bill paid in more than one way.
         discount: rupees off the bill total (items + GST). payment_method / payment_status:
         how it was paid (paid, partial, pending); left out, the server records "pending".
         items: [{"item_id": "<uuid>", "quantity": int}, ...]
@@ -596,6 +598,8 @@ class APIClient:
             payload["client_id"] = client_id
         if discount:
             payload["discount"] = discount
+        if payments:
+            payload["payments"] = payments
         if payment_method is not None:
             payload["payment_method"] = payment_method
         if payment_status is not None:
