@@ -23,6 +23,8 @@ from PyQt6.QtWidgets import (
     QHeaderView,
     QMessageBox,
     QSpinBox,
+    QDoubleSpinBox,
+    QComboBox,
     QCompleter,
     QFrame,
 )
@@ -39,6 +41,7 @@ from services.customer_service import CustomerService
 from services.inventory_service import InventoryService
 from services.event_bus import EventBus, SALE_CREATED
 from services.money import inr
+from services.billing import METHODS, change_or_balance, discount_amount, payment_status
 
 
 class CartItem:
@@ -193,6 +196,26 @@ class SalesScreen(QWidget):
         self.cgst_lbl = self._money_row(col, "CGST")
         self.sgst_lbl = self._money_row(col, "SGST")
 
+        # Discount: rupees or per cent off the bill total (the server takes the rupees off items + GST)
+        drow = QHBoxLayout()
+        drow_lbl = QLabel("Give discount")
+        drow_lbl.setStyleSheet(f"font-size: {Fonts.BODY}px; color: {Colors.TEXT_SECONDARY};")
+        self.discount_in = QDoubleSpinBox()
+        self.discount_in.setRange(0, 10_000_000)
+        self.discount_in.setDecimals(2)
+        self.discount_in.setStyleSheet(Theme.input_style())
+        self.discount_in.valueChanged.connect(self._update_totals)
+        self.discount_kind = QComboBox()
+        self.discount_kind.addItem("₹", "amount")
+        self.discount_kind.addItem("%", "percent")
+        self.discount_kind.setStyleSheet(Theme.input_style())
+        self.discount_kind.currentIndexChanged.connect(self._update_totals)
+        drow.addWidget(drow_lbl)
+        drow.addWidget(self.discount_in, 1)
+        drow.addWidget(self.discount_kind)
+        col.addLayout(drow)
+        self.discount_lbl = self._money_row(col, "Discount")
+
         total_row = QHBoxLayout()
         total_name = QLabel("Total")
         total_name.setStyleSheet(f"font-size: {Fonts.BODY}px; font-weight: 600; color: {Colors.TEXT_SECONDARY};")
@@ -204,6 +227,32 @@ class SalesScreen(QWidget):
         total_row.addWidget(total_name)
         total_row.addWidget(self.grandtotal_lbl, 1)
         col.addLayout(total_row)
+
+        # Payment taken now: how, and how much the customer handed over
+        pay_title = QLabel("Payment")
+        pay_title.setStyleSheet(Theme.subheading())
+        col.addWidget(pay_title)
+        self.method_in = QComboBox()
+        for label, value in METHODS:
+            self.method_in.addItem(label, value)
+        self.method_in.setStyleSheet(Theme.input_style())
+        col.addWidget(self.method_in)
+        rrow = QHBoxLayout()
+        rrow_lbl = QLabel("Received")
+        rrow_lbl.setStyleSheet(f"font-size: {Fonts.BODY}px; color: {Colors.TEXT_SECONDARY};")
+        self.received_in = QDoubleSpinBox()
+        self.received_in.setRange(0, 10_000_000)
+        self.received_in.setDecimals(2)
+        self.received_in.setPrefix("₹")
+        self.received_in.setStyleSheet(Theme.input_style())
+        self.received_in.valueChanged.connect(self._received_changed)
+        rrow.addWidget(rrow_lbl)
+        rrow.addWidget(self.received_in, 1)
+        col.addLayout(rrow)
+        self.pay_note = QLabel("")
+        self.pay_note.setStyleSheet(f"font-size: {Fonts.BODY}px; font-weight: 600;")
+        self.pay_note.setAlignment(Qt.AlignmentFlag.AlignRight)
+        col.addWidget(self.pay_note)
 
         self.invoice_btn = QPushButton("Create bill")
         self.invoice_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -401,6 +450,9 @@ class SalesScreen(QWidget):
     def _clear_cart(self):
         self._bill_key = None
         self._cart.clear()
+        self._received_touched = False  # the next bill starts as "paid in full, cash, no discount"
+        self.discount_in.setValue(0)
+        self.method_in.setCurrentIndex(0)
         self._refresh_table()
 
     # ------------------------------------------------------------------
@@ -486,12 +538,46 @@ class SalesScreen(QWidget):
         total_gst = sum(c.price * c.quantity * c.gst_pct / 100 for c in self._cart)
         cgst = total_gst / 2
         sgst = total_gst / 2
-        grand_total = subtotal + total_gst
+        gross = subtotal + total_gst
+        discount = discount_amount(gross, self.discount_kind.currentData(), self.discount_in.value())
+        grand_total = gross - discount
+        self._discount, self._total = discount, grand_total
 
         self.subtotal_lbl.setText(inr(subtotal))
         self.cgst_lbl.setText(inr(cgst))
         self.sgst_lbl.setText(inr(sgst))
+        self.discount_lbl.setText(f"-{inr(discount)}" if discount else inr(0))
         self.grandtotal_lbl.setText(inr(grand_total))
+        if not self._received_touched:  # until the cashier types an amount, the customer pays it all
+            self.received_in.blockSignals(True)
+            self.received_in.setValue(round(grand_total, 2))
+            self.received_in.blockSignals(False)
+        self._show_pay_note()
+
+    _received_touched = False
+    _discount = 0.0
+    _total = 0.0
+
+    def _received_changed(self, _v=0):
+        self._received_touched = True
+        self._show_pay_note()
+
+    def _show_pay_note(self):
+        kind, rupees = change_or_balance(self._total, self.received_in.value())
+        if not self._cart or rupees == 0:
+            self.pay_note.setText("")
+            return
+        word, colour = ("Hand back", Colors.SUCCESS) if kind == "change" else ("Balance to pay", Colors.ORANGE)
+        self.pay_note.setStyleSheet(f"font-size: {Fonts.BODY}px; font-weight: 600; color: {colour};")
+        self.pay_note.setText(f"{word} {inr(rupees)}")
+
+    def _payment(self) -> dict:
+        """How this bill is being paid: the method and paid / part paid / not paid."""
+        return {
+            "discount": self._discount,
+            "payment_method": self.method_in.currentData(),
+            "payment_status": payment_status(self._total, self.received_in.value()),
+        }
 
     # ------------------------------------------------------------------
     # Offline billing
@@ -500,18 +586,29 @@ class SalesScreen(QWidget):
         """One id per distinct bill. If the connection drops after the server
         recorded it, the offline copy carries the same id and the server skips
         it instead of billing the buyer twice. Changing the cart makes a new bill."""
-        key = (phone, tuple((c.item_id, c.quantity) for c in self._cart))
+        pay = self._payment()
+        key = (phone, tuple((c.item_id, c.quantity) for c in self._cart), pay["discount"], pay["payment_method"], pay["payment_status"])
         if key != self._bill_key:
             self._bill_key, self._bill_client_id = key, str(uuid.uuid4())
         return self._bill_client_id
 
-    def _save_offline(self, customer_name: str, phone: str, client_id: str):
+    def _save_offline(self, customer_name: str, phone: str, client_id: str) -> bool:
+        pay = self._payment()
+        if pay["discount"]:  # the sync does not carry a discount yet: a bill saved now would come out at full price
+            QMessageBox.warning(
+                self,
+                "Discount needs a connection",
+                "There is no connection, and a discount cannot be saved offline yet.\n\n"
+                "Take the discount off to save this bill on this computer, or press Create bill again "
+                "when the connection is back (it will not be billed twice).",
+            )
+            return False
         lines = [
             {"item_id": c.item_id, "quantity": c.quantity, "price": c.price}
             for c in self._cart
         ]
         ref = self._sales_service.queue_offline_sale(
-            lines, customer_name, phone, client_id, self._sold_from()
+            lines, customer_name, phone, client_id, self._sold_from(), pay["payment_method"], pay["payment_status"]
         )
         QMessageBox.information(
             self,
@@ -524,6 +621,7 @@ class SalesScreen(QWidget):
         self._clear_cart()
         self.customer_input.clear()
         self.phone_input.clear()
+        return True
 
     # ------------------------------------------------------------------
     # Invoice generation
@@ -565,6 +663,9 @@ class SalesScreen(QWidget):
             ]
             place = self._sold_from()
             extra = {"location_id": place} if place else {}  # one shop: the server fills it in
+            pay = self._payment()
+            if pay["discount"] or pay["payment_status"] != "pending" or pay["payment_method"] != "cash":
+                extra.update(pay)
             sale_data = self._sales_service.create_sale(
                 items=payload_items, customer_id=customer_id, client_id=client_id, **extra
             )
@@ -596,10 +697,24 @@ class SalesScreen(QWidget):
                 "You can open it again from Bill History.",
             )
 
+        note = ""
+        kind, rupees = change_or_balance(self._total, self.received_in.value())
+        if pay["payment_status"] != "pending" and kind == "change" and rupees and pay["payment_method"] == "cash":
+            note = f"\n\nHand back {inr(rupees)}."
+        elif kind == "balance":
+            note = f"\n\nBalance to collect: {inr(rupees)}."
+        # An older server would ignore the discount or the payment and bill in full: say so, never silently.
+        if float(sale_data.get("discount") or 0) != pay["discount"] or (
+            sale_data.get("payment_status") and sale_data["payment_status"] != pay["payment_status"]
+        ):
+            note += (
+                "\n\n⚠️ The server did not record the discount or payment as entered. "
+                "Check this bill in Bill History and correct it."
+            )
         QMessageBox.information(
             self,
             "Bill Created ✅",
-            f"Bill {invoice_number} created successfully!",
+            f"Bill {invoice_number} created successfully!{note}",
         )
 
         EventBus.emit(SALE_CREATED)

@@ -42,11 +42,16 @@ class SalesService:
         customer_id: str | None = None,
         client_id: str | None = None,
         location_id: str | None = None,
+        discount: float = 0,
+        payment_method: str | None = None,
+        payment_status: str | None = None,
     ) -> dict | None:
-        """POST /sales and return the SaleResponse dict."""
-        if location_id is None:  # the common case: one shop, which the server fills in
-            return self._api.create_sale(self._token(), items, customer_id, client_id)
-        return self._api.create_sale(self._token(), items, customer_id, client_id, location_id)
+        """POST /sales and return the SaleResponse dict. discount is rupees off the bill total."""
+        if location_id is None and not (discount or payment_method or payment_status):
+            return self._api.create_sale(self._token(), items, customer_id, client_id)  # one shop, the server fills it in
+        return self._api.create_sale(
+            self._token(), items, customer_id, client_id, location_id, discount, payment_method, payment_status
+        )
 
     def cancel_sale(self, sale_id: str, reason: str) -> dict:
         """Delete a bill (owner): its stock comes back, it stays in the history as cancelled."""
@@ -66,6 +71,8 @@ class SalesService:
         customer_phone: str,
         client_id: str | None = None,
         location_id: str | None = None,
+        payment_method: str = "cash",
+        payment_status: str | None = None,
     ) -> str:
         """
         Save a counter sale in the local outbox; the background sync pushes it
@@ -93,8 +100,10 @@ class SalesService:
             ],
             # The server recalculates from its own prices; this is informational.
             "total_amount": sum(ln["price"] * ln["quantity"] for ln in lines),
-            "payment_method": "cash",
+            "payment_method": payment_method,
         }
+        if payment_status:  # the server does not read this yet; kept so the paid state is not lost
+            payload["payment_status"] = payment_status
         if location_id is not None:
             payload["location_id"] = location_id
         OutboxRepository().add_entry(
