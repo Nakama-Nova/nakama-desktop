@@ -152,3 +152,53 @@ def test_the_api_sends_payment_fields_only_when_chosen(monkeypatch):
     api.create_sale("t", [{"item_id": "a", "quantity": 1}], payment_method="upi", payment_status="paid")
     assert "payment_method" not in sent[0] and "payment_status" not in sent[0]  # server default: not paid
     assert sent[1]["payment_method"] == "upi" and sent[1]["payment_status"] == "paid"
+
+
+# ---------------------------------------------------------------- matching the mockup
+def test_quantity_is_a_minus_plus_stepper_that_updates_the_bill(qapp):
+    from ui.sales_screen import QtyStepper
+
+    w = SalesScreen()
+    w._cart = [CartItem("a", "Lamp", 100, 0, 1)]
+    w._refresh_table()
+    stepper = w.table.cellWidget(0, w.COL_QTY)
+    assert isinstance(stepper, QtyStepper) and stepper.value() == 1
+    stepper.plus.click()
+    stepper.plus.click()
+    assert w._cart[0].quantity == 3 and w.grandtotal_lbl.text() == "₹300.00"
+    stepper.minus.click()
+    assert w._cart[0].quantity == 2 and w.table.item(0, w.COL_TOTAL).text() == "₹200.00"
+
+
+def test_the_stepper_never_goes_below_one_or_above_its_limit(qapp):
+    from ui.sales_screen import QtyStepper
+
+    s = QtyStepper(1, maximum=3)
+    s.minus.click()
+    assert s.value() == 1
+    for _ in range(5):
+        s.plus.click()
+    assert s.value() == 3 and s.label.text() == "3"
+
+
+def test_cart_column_titles_are_short_so_none_is_cut(qapp):
+    w = SalesScreen()
+    titles = [w.table.horizontalHeaderItem(i).text() for i in range(w.table.columnCount())]
+    assert titles == ["Item", "Price", "Qty", "GST", "Amount", ""]
+    assert w.table.horizontalHeaderItem(w.COL_PRICE).toolTip() == "Price before GST"
+    assert w.table.horizontalHeaderItem(w.COL_TOTAL).toolTip() == "Amount with GST"
+
+
+def test_gst_rate_reads_12_not_12_point_0(qapp):
+    w = SalesScreen()
+    w._cart = [CartItem("a", "Lamp", 100, 12, 1), CartItem("b", "Sofa", 100, 2.5, 1)]
+    w._refresh_table()
+    assert [w.table.item(r, w.COL_GST).text() for r in (0, 1)] == ["12%", "2.5%"]
+
+
+def test_stock_keeps_the_gst_rate_out_of_the_way_and_the_buttons_whole(qapp):
+    from ui.inventory_window import InventoryWindow
+
+    w = InventoryWindow()
+    assert w.table.isColumnHidden(w.COL_GST)  # the price already includes it
+    assert w.table.columnWidth(w.COL_ACTIONS) >= 300  # room for five compact buttons
