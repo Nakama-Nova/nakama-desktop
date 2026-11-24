@@ -44,3 +44,12 @@ class StaffService:
         if result and result.get("access_token"):
             Session.set_token(result["access_token"])
         return result
+
+    # Pay type and salary history (docs/HR_CONTRACT.md, H2)
+    def wages(self, user_id: str) -> list:
+        """The pay rates a person has had, newest first."""
+        return self._api._get(f"/people/users/{user_id}/wages", self._t()) or []
+
+    def add_wage(self, user_id: str, data: dict) -> dict:
+        """A new rate from a date: {"pay_type", "amount", "effective_from", "note"?}."""
+        return self._api._post(f"/people/users/{user_id}/wages", self._t(), json=data)

@@ -132,3 +132,43 @@ def test_a_person_added_while_email_is_down_is_kept_and_the_owner_is_told(qapp, 
     s._add()
     assert dialogs and "Added, but the email did not go" in dialogs[0][1]
     assert "Email is not set up yet" in dialogs[0][2]
+
+
+# ---------------------------------------------------------------- pay types (docs/HR_CONTRACT.md, H2)
+def test_an_older_server_keeps_the_daily_wage_form(qapp):
+    d = StaffDialog(None, ASHA)
+    assert "pay_type" not in d.get_data() and "base_daily_wage" in d.get_data()
+    assert d.pay_type.parent() is None or not d.pay_type.isVisibleTo(d)  # not on the form
+
+
+def test_a_server_with_pay_types_gets_the_type_and_the_rate(qapp):
+    d = StaffDialog(None, {**ASHA, "pay_type": "monthly", "pay_amount": "18000", "employment": "part_time"}, pay_types=True)
+    assert d.pay_type.currentData() == "monthly" and d.employment.currentData() == "part_time" and d.wage.value() == 18000
+    assert d.wage.suffix() == " / month"
+    data = d.get_data()
+    assert (data["pay_type"], data["pay_amount"], data["employment"]) == ("monthly", 18000, "part_time")
+    assert "base_daily_wage" not in data  # the server works the daily figure out
+    d.pay_type.setCurrentIndex(d.pay_type.findData("daily"))
+    assert d.get_data()["base_daily_wage"] == 18000 and d.wage.suffix() == " / day"
+
+
+def test_salary_history_lists_rates_and_saves_a_new_one(qapp):
+    from ui.staff_screen import WageHistoryDialog
+
+    class Svc:
+        added = []
+
+        def wages(self, uid):
+            return [{"effective_from": "2026-04-01", "pay_type": "daily", "amount": "600", "note": "start"}]
+
+        def add_wage(self, uid, data):
+            self.added.append((uid, data))
+
+    svc = Svc()
+    d = WageHistoryDialog(None, ASHA, svc)
+    assert d.table.rowCount() == 1 and d.table.item(0, 1).text() == "Daily wage" and d.table.item(0, 2).text() == "₹600.00"
+    d.pay_type.setCurrentIndex(d.pay_type.findData("monthly"))
+    d.amount.setValue(18000)
+    d._add()
+    uid, data = svc.added[0]
+    assert uid == ASHA["id"] and data["pay_type"] == "monthly" and data["amount"] == 18000 and "effective_from" in data

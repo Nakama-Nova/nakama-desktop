@@ -8,9 +8,10 @@ person, or one who forgot theirs, is emailed a code and chooses their own. Every
 change their own password.
 """
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QDate, Qt
 from PyQt6.QtWidgets import (
     QComboBox,
+    QDateEdit,
     QDialog,
     QDoubleSpinBox,
     QFormLayout,
@@ -73,13 +74,86 @@ def password_problem(new: str, repeat: str) -> str | None:
     return None
 
 
+PAY_TYPES = [("Daily wage", "daily", " / day"), ("Weekly wage", "weekly", " / week"), ("Monthly salary", "monthly", " / month"), ("Hourly", "hourly", " / hour")]
+EMPLOYMENT = [("Full time", "full_time"), ("Part time", "part_time")]
+
+
+class WageHistoryDialog(QDialog):
+    """The pay rates a person has had, and a new rate from a date. Pay already paid out never moves."""
+
+    def __init__(self, parent, user: dict, svc: StaffService | None = None):
+        super().__init__(parent)
+        self._user, self._svc = user, svc or StaffService()
+        self.setWindowTitle(f"Salary history: {user.get('full_name') or user.get('username')}")
+        self.setMinimumSize(560, 420)
+        self.setStyleSheet(f"background-color: {Colors.BG};")
+        v = QVBoxLayout(self)
+        v.setContentsMargins(24, 20, 24, 20)
+        v.setSpacing(10)
+        self.table = QTableWidget(0, 4)
+        self.table.setHorizontalHeaderLabels(["From", "Pay type", "Amount", "Note"])
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.table.verticalHeader().setVisible(False)
+        Theme.style_table(self.table)
+        v.addWidget(self.table, 1)
+        v.addWidget(QLabel("New rate", styleSheet=Theme.subheading()))
+        row = QHBoxLayout()
+        self.pay_type = QComboBox()
+        for label, value, _suffix in PAY_TYPES:
+            self.pay_type.addItem(label, value)
+        self.amount = QDoubleSpinBox()
+        self.amount.setRange(0, 1_000_000)
+        self.amount.setPrefix("₹")
+        self.since = QDateEdit(QDate.currentDate())
+        self.since.setCalendarPopup(True)
+        self.note = QLineEdit(placeholderText="Why (optional)")
+        for w in (self.pay_type, self.amount, self.since, self.note):
+            w.setStyleSheet(Theme.input_style())
+            row.addWidget(w)
+        v.addLayout(row)
+        buttons = QHBoxLayout()
+        buttons.addStretch()
+        close = QPushButton("Close")
+        close.setStyleSheet(Theme.btn_secondary())
+        close.clicked.connect(self.accept)
+        self.add_btn = QPushButton("Save new rate")
+        self.add_btn.setStyleSheet(Theme.btn_primary())
+        self.add_btn.clicked.connect(self._add)
+        buttons.addWidget(close)
+        buttons.addWidget(self.add_btn)
+        v.addLayout(buttons)
+        self._load()
+
+    def _load(self):
+        rows = self._svc.wages(self._user["id"])
+        words = {value: label for label, value, _s in PAY_TYPES}
+        self.table.setRowCount(len(rows))
+        for r, w in enumerate(rows):
+            for c, text in enumerate([str(w.get("effective_from") or "")[:10], words.get(w.get("pay_type"), w.get("pay_type") or ""), f"₹{float(w.get('amount') or 0):,.2f}", w.get("note") or ""]):
+                self.table.setItem(r, c, QTableWidgetItem(text))
+
+    def _add(self):
+        if self.amount.value() <= 0:
+            QMessageBox.warning(self, "Salary", "Enter the new amount.")
+            return
+        data = {"pay_type": self.pay_type.currentData(), "amount": round(self.amount.value(), 2), "effective_from": self.since.date().toString("yyyy-MM-dd")}
+        if self.note.text().strip():
+            data["note"] = self.note.text().strip()
+        self._svc.add_wage(self._user["id"], data)
+        self.note.clear()
+        self._load()
+
+
 class StaffDialog(QDialog):
     """Add a person (they are emailed a code to choose their own password) or edit one (role
     locked for yourself)."""
 
-    def __init__(self, parent, user: dict | None = None, is_me: bool = False, roles=None):
+    def __init__(self, parent, user: dict | None = None, is_me: bool = False, roles=None, pay_types: bool = False):
         super().__init__(parent)
         self._adding = user is None
+        self._pay_types = pay_types  # the server knows pay types (weekly, monthly, hourly), part time, salary history
+        self._user = user or {}
         user = user or {}
         self.setWindowTitle("Add staff" if self._adding else "Edit staff")
         self.setMinimumWidth(420)
@@ -111,6 +185,23 @@ class StaffDialog(QDialog):
         self.wage.setSuffix(" / day")
         self.wage.setValue(float(user.get("base_daily_wage") or 0))
         self.wage.setStyleSheet(Theme.input_style())
+        self.pay_type, self.employment = QComboBox(), QComboBox()
+        for label, value, _suffix in PAY_TYPES:
+            self.pay_type.addItem(label, value)
+        for label, value in EMPLOYMENT:
+            self.employment.addItem(label, value)
+        for w in (self.pay_type, self.employment):
+            w.setStyleSheet(Theme.input_style())
+        if pay_types:
+            self.pay_type.setCurrentIndex(max(0, self.pay_type.findData(user.get("pay_type") or "daily")))
+            self.employment.setCurrentIndex(max(0, self.employment.findData(user.get("employment") or "full_time")))
+            self.wage.setRange(0, 1_000_000)
+            self.wage.setValue(float(user.get("pay_amount") or user.get("base_daily_wage") or 0))
+            self.pay_type.currentIndexChanged.connect(self._pay_suffix)
+            self._pay_suffix()
+        self.history_btn = QPushButton("Salary history…")
+        self.history_btn.setStyleSheet(Theme.btn_secondary())
+        self.history_btn.clicked.connect(lambda _c=False: WageHistoryDialog(self, self._user).exec())
         self.overtime = QDoubleSpinBox()
         self.overtime.setRange(0, 10000)
         self.overtime.setPrefix("₹")
@@ -125,16 +216,22 @@ class StaffDialog(QDialog):
             ("Email *", self.email),
             ("Phone", self.phone),
             ("Role", self.role),
-            ("Daily wage", self.wage),
+            *([("Pay type", self.pay_type), ("Works", self.employment)] if pay_types else []),
+            ("Pay amount" if pay_types else "Daily wage", self.wage),
             ("Overtime rate", self.overtime),
         ]:
             form.addRow(QLabel(label, styleSheet=Theme.label()), w)
+        if pay_types and not self._adding:
+            form.addRow(self.history_btn)
         if self._adding:
             note = QLabel("They will be emailed a code to choose their own password. You never see it.")
             note.setWordWrap(True)
             note.setStyleSheet(f"color: {Colors.TEXT_SECONDARY};")
             form.addRow(note)
         form.addRow(_buttons(self))
+
+    def _pay_suffix(self, _i=0):
+        self.wage.setSuffix({v: suffix for _l, v, suffix in PAY_TYPES}[self.pay_type.currentData()])
 
     def _check(self):
         problem = None
@@ -155,6 +252,12 @@ class StaffDialog(QDialog):
             "base_daily_wage": self.wage.value(),
             "overtime_rate_per_hour": self.overtime.value() or None,
         }
+        if self._pay_types:  # the server has pay types: send the type and the rate for it
+            data["pay_type"], data["employment"], data["pay_amount"] = self.pay_type.currentData(), self.employment.currentData(), self.wage.value()
+            if self.pay_type.currentData() == "daily":
+                data["base_daily_wage"] = self.wage.value()
+            else:
+                data.pop("base_daily_wage")  # the server works the daily figure out from the rate
         if self.role.isEnabled():
             data["role"] = self.role.currentData()
         if self._adding:
@@ -268,6 +371,7 @@ class StaffScreen(QWidget):
     def __init__(self):
         super().__init__()
         self._svc = StaffService()
+        self._pay_types = False
         self._rows: list[dict] = []
         self._me: str | None = None
         self._roles = list(ROLES)  # (label, key), from the server when it lists roles
@@ -320,6 +424,7 @@ class StaffScreen(QWidget):
     def _fetch(self):
         me = self._svc.me().get("id")
         users = sorted(self._svc.users(), key=lambda u: (not u["is_active"], u["username"]))
+        self._pay_types = any("pay_type" in u for u in users)  # an older server does not have them
         return me, users, IamService().role_choices()
 
     @handle_permissions
@@ -375,7 +480,7 @@ class StaffScreen(QWidget):
 
     @handle_permissions
     def _add(self, _checked=False):
-        d = StaffDialog(self, roles=self._roles)
+        d = StaffDialog(self, roles=self._roles, pay_types=self._pay_types)
         if d.exec() == QDialog.DialogCode.Accepted:
             data = d.get_data()
             try:
@@ -395,7 +500,7 @@ class StaffScreen(QWidget):
 
     @handle_permissions
     def _edit(self, u: dict):
-        d = StaffDialog(self, u, is_me=u["id"] == self._me, roles=self._roles)
+        d = StaffDialog(self, u, is_me=u["id"] == self._me, roles=self._roles, pay_types=self._pay_types)
         if d.exec() == QDialog.DialogCode.Accepted:
             self._svc.update(u["id"], d.get_data())
             self.refresh_data()
