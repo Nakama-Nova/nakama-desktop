@@ -28,6 +28,7 @@ from PyQt6.QtWidgets import (
     QCompleter,
     QComboBox,
     QFrame,
+    QScrollArea,
 )
 from PyQt6.QtCore import Qt, QStringListModel, pyqtSignal
 from PyQt6.QtGui import QKeySequence, QShortcut
@@ -210,6 +211,9 @@ class SalesScreen(QWidget):
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
         Theme.style_table(self.table)
+        # Sized by the column modes above, not by the generic column-shrinking: on a narrow window
+        # the item name gives way (it is cut with ...), the money and the quantity never are.
+        self.table.setProperty("elastic", True)
         left.addWidget(self.table, 1)
 
         # ── Right: buyer, totals, Create bill ──
@@ -220,10 +224,34 @@ class SalesScreen(QWidget):
             f"QFrame#billpanel {{ background: {Colors.CARD_BG}; border: 1px solid {Colors.CARD_BORDER};"
             f" border-radius: 10px; }} QFrame#billpanel QLabel {{ border: none; background: transparent; }}"
         )
-        col = QVBoxLayout(panel)
-        col.setContentsMargins(18, 16, 18, 16)
+        # The buyer and payment details scroll when the window is short. The total, Create bill and
+        # the quiet buttons stay pinned under them, so they are never below the bottom of the screen.
+        outer = QVBoxLayout(panel)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+        scroller = QScrollArea()
+        scroller.setWidgetResizable(True)
+        scroller.setFrameShape(QFrame.Shape.NoFrame)
+        scroller.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroller.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+        inner = QWidget()
+        inner.setStyleSheet("background: transparent;")
+        col = QVBoxLayout(inner)
+        col.setContentsMargins(18, 16, 18, 8)
         col.setSpacing(10)
-        body.addWidget(panel, 0, Qt.AlignmentFlag.AlignTop)
+        scroller.setWidget(inner)
+        outer.addWidget(scroller, 1)
+        rule = QFrame()
+        rule.setFixedHeight(1)
+        rule.setStyleSheet(f"background: {Colors.CARD_BORDER}; border: none;")
+        outer.addWidget(rule)
+        foot_box = QWidget()
+        foot_box.setStyleSheet("background: transparent;")
+        foot = QVBoxLayout(foot_box)
+        foot.setContentsMargins(18, 10, 18, 12)
+        foot.setSpacing(6)
+        outer.addWidget(foot_box)
+        body.addWidget(panel)
 
         buyer_lbl = QLabel("Buyer")
         buyer_lbl.setStyleSheet(Theme.subheading())
@@ -307,7 +335,7 @@ class SalesScreen(QWidget):
         self.grandtotal_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         total_row.addWidget(total_name)
         total_row.addWidget(self.grandtotal_lbl, 1)
-        col.addLayout(total_row)
+        foot.addLayout(total_row)
 
         # How the buyer paid. Cash is the usual counter sale; "Not paid yet" leaves the bill open.
         pay_lbl = QLabel("Paid by")
@@ -352,7 +380,7 @@ class SalesScreen(QWidget):
         self.invoice_btn.setStyleSheet(Theme.btn("primary", "lg"))
         self.invoice_btn.clicked.connect(self._generate_invoice)
         self.invoice_btn.setToolTip("Ctrl+Enter")
-        col.addWidget(self.invoice_btn)
+        foot.addWidget(self.invoice_btn)
 
         # Quiet on purpose: next to Create bill it must not be the easy button to hit
         self.clear_btn = IconButton("Clear bill")
@@ -363,7 +391,7 @@ class SalesScreen(QWidget):
             f"QPushButton:hover {{ color: {Colors.RED}; }}"
         )
         self.clear_btn.clicked.connect(self._clear_cart)
-        col.addWidget(self.clear_btn)
+        foot.addWidget(self.clear_btn)
 
         # Quiet too: a paper receipt (80 mm roll, A5, A4) of the bill just made, even a provisional one made offline
         self.receipt_btn = IconButton("🧾  Print last receipt")
@@ -371,7 +399,7 @@ class SalesScreen(QWidget):
         self.receipt_btn.setStyleSheet(self.clear_btn.styleSheet().replace(Colors.RED, Colors.TEXT_PRIMARY))
         self.receipt_btn.setEnabled(False)
         self.receipt_btn.clicked.connect(self._print_last_receipt)
-        col.addWidget(self.receipt_btn)
+        foot.addWidget(self.receipt_btn)
 
         self._bill_shortcut = QShortcut(QKeySequence("Ctrl+Return"), self)
         self._bill_shortcut.activated.connect(self._generate_invoice)

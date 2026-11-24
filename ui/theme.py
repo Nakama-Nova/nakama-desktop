@@ -244,6 +244,9 @@ class Theme:
             return  # once is enough: re-applying a style sheet re-polishes every open window
         app.setStyleSheet(Theme.global_stylesheet())
         app._bootstrap_behaviour = BootstrapBehaviour(app)
+        from ui.components.dialog_fit import install as fit_dialogs
+
+        fit_dialogs()  # every dialog stays on the screen it opens on
 
     @staticmethod
     def stripe_tables(widget) -> None:

@@ -32,6 +32,7 @@ from ui.assets import logo_path, scaled_pixmap
 from ui.components.bootstrap import Button
 from ui.components.carvings import attach_empty_state
 from ui.components.navbar import Navbar
+from ui.components.pages import ScrollingPages
 from ui.components.goto_dialog import GoToDialog
 from ui import icons
 from ui.icons import IconButton
@@ -333,7 +334,7 @@ class MainWindow(QMainWindow):
         content_layout.addWidget(self.navbar)
         on_busy_changed(self.navbar.set_busy)  # "Loading…" while a screen fetches in the background
 
-        self.content_stack = QStackedWidget()
+        self.content_stack = ScrollingPages()  # a screen too big for the window scrolls instead of being cut off
         self.update_banner = UpdateBanner()
         content_layout.addWidget(self.update_banner)
         content_layout.addWidget(self.content_stack)
