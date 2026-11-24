@@ -9,7 +9,7 @@ from ui.main_window import MainWindow
 def test_main_window_opens_without_a_server(qapp):
     w = MainWindow()
     w._sync_timer.stop()
-    assert w.content_stack.count() == 23
+    assert w.content_stack.count() == 24
 
 
 def test_opening_a_screen_offline_shows_a_notice_not_a_crash(qapp):
