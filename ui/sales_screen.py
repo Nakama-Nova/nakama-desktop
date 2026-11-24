@@ -26,6 +26,7 @@ from PyQt6.QtWidgets import (
     QDoubleSpinBox,
     QComboBox,
     QCompleter,
+    QComboBox,
     QFrame,
 )
 from PyQt6.QtCore import Qt, QStringListModel
@@ -36,13 +37,14 @@ from ui.icons import IconButton
 from ui.theme import Theme, Colors, Fonts
 from ui.components.place_picker import PlacePicker, fetch_places, selling_places
 from ui.errors import handle_permissions
+from ui.sales_history_screen import METHODS
 from ui.workers import load_async
 from services.sales_service import BillPdfError, SalesService
 from services.customer_service import CustomerService
 from services.inventory_service import InventoryService
 from services.event_bus import EventBus, SALE_CREATED
 from services.money import inr
-from services.billing import METHODS, change_or_balance, discount_amount, payment_status
+from services.billing import change_or_balance, discount_amount, payment_status
 
 
 class CartItem:
@@ -229,15 +231,17 @@ class SalesScreen(QWidget):
         total_row.addWidget(self.grandtotal_lbl, 1)
         col.addLayout(total_row)
 
-        # Payment taken now: how, and how much the customer handed over
-        pay_title = QLabel("Payment")
-        pay_title.setStyleSheet(Theme.subheading())
-        col.addWidget(pay_title)
-        self.method_in = QComboBox()
+        # How the buyer paid. Cash is the usual counter sale; "Not paid yet" leaves the bill open.
+        pay_lbl = QLabel("Paid by")
+        pay_lbl.setStyleSheet(Theme.label())
+        col.addWidget(pay_lbl)
+        self.pay_pick = QComboBox()
         for label, value in METHODS:
-            self.method_in.addItem(label, value)
-        self.method_in.setStyleSheet(Theme.input_style())
-        col.addWidget(self.method_in)
+            self.pay_pick.addItem(label, value)
+        self.pay_pick.addItem("Not paid yet", None)
+        self.pay_pick.setStyleSheet(Theme.input_style())
+        self.pay_pick.setMinimumHeight(38)
+        col.addWidget(self.pay_pick)
         rrow = QHBoxLayout()
         rrow_lbl = QLabel("Received")
         rrow_lbl.setStyleSheet(f"font-size: {Fonts.BODY}px; color: {Colors.TEXT_SECONDARY};")
@@ -247,6 +251,7 @@ class SalesScreen(QWidget):
         self.received_in.setPrefix("₹")
         self.received_in.setStyleSheet(Theme.input_style())
         self.received_in.valueChanged.connect(self._received_changed)
+        self.pay_pick.currentIndexChanged.connect(self._pay_pick_changed)
         rrow.addWidget(rrow_lbl)
         rrow.addWidget(self.received_in, 1)
         col.addLayout(rrow)
@@ -450,10 +455,10 @@ class SalesScreen(QWidget):
 
     def _clear_cart(self):
         self._bill_key = None
+        self.pay_pick.setCurrentIndex(0)  # back to cash for the next bill
         self._cart.clear()
         self._received_touched = False  # the next bill starts as "paid in full, cash, no discount"
         self.discount_in.setValue(0)
-        self.method_in.setCurrentIndex(0)
         self._refresh_table()
 
     # ------------------------------------------------------------------
@@ -559,13 +564,17 @@ class SalesScreen(QWidget):
     _discount = 0.0
     _total = 0.0
 
+    def _pay_pick_changed(self, _i=0):
+        self.received_in.setEnabled(self.pay_pick.currentData() is not None)  # "Not paid yet": nothing handed over
+        self._show_pay_note()
+
     def _received_changed(self, _v=0):
         self._received_touched = True
         self._show_pay_note()
 
     def _show_pay_note(self):
         kind, rupees = change_or_balance(self._total, self.received_in.value())
-        if not self._cart or rupees == 0:
+        if not self._cart or rupees == 0 or self.pay_pick.currentData() is None:
             self.pay_note.setText("")
             return
         word, colour = ("Hand back", Colors.SUCCESS) if kind == "change" else ("Balance to pay", Colors.ORANGE)
@@ -573,12 +582,11 @@ class SalesScreen(QWidget):
         self.pay_note.setText(f"{word} {inr(rupees)}")
 
     def _payment(self) -> dict:
-        """How this bill is being paid: the method and paid / part paid / not paid."""
-        return {
-            "discount": self._discount,
-            "payment_method": self.method_in.currentData(),
-            "payment_status": payment_status(self._total, self.received_in.value()),
-        }
+        """What to tell the server about payment: the method and paid / part paid, or just "pending"."""
+        method = self.pay_pick.currentData()
+        if method is None:  # "Not paid yet"
+            return {"payment_status": "pending"}
+        return {"payment_method": method, "payment_status": payment_status(self._total, self.received_in.value())}
 
     # ------------------------------------------------------------------
     # Offline billing
@@ -588,14 +596,14 @@ class SalesScreen(QWidget):
         recorded it, the offline copy carries the same id and the server skips
         it instead of billing the buyer twice. Changing the cart makes a new bill."""
         pay = self._payment()
-        key = (phone, tuple((c.item_id, c.quantity) for c in self._cart), pay["discount"], pay["payment_method"], pay["payment_status"])
+        key = (phone, tuple((c.item_id, c.quantity) for c in self._cart), self._discount, pay.get("payment_method"), pay["payment_status"])
         if key != self._bill_key:
             self._bill_key, self._bill_client_id = key, str(uuid.uuid4())
         return self._bill_client_id
 
     def _save_offline(self, customer_name: str, phone: str, client_id: str) -> bool:
         pay = self._payment()
-        if pay["discount"]:  # the sync does not carry a discount yet: a bill saved now would come out at full price
+        if self._discount:  # the sync does not carry a discount yet: a bill saved now would come out at full price
             QMessageBox.warning(
                 self,
                 "Discount needs a connection",
@@ -609,7 +617,14 @@ class SalesScreen(QWidget):
             for c in self._cart
         ]
         ref = self._sales_service.queue_offline_sale(
-            lines, customer_name, phone, client_id, self._sold_from(), pay["payment_method"], pay["payment_status"]
+            lines, customer_name, phone, client_id, self._sold_from(),
+            payment_method=pay.get("payment_method"), payment_status=pay["payment_status"],
+        )
+        paid_note = (
+            "\n\nHow it was paid is kept with it, but the server shows it as not paid until "
+            "you correct it in Bill History."
+            if pay["payment_status"] != "pending"
+            else ""
         )
         QMessageBox.information(
             self,
@@ -617,7 +632,7 @@ class SalesScreen(QWidget):
             f"No internet, so this bill is saved on this computer (ref {ref}).\n\n"
             "It is sent automatically when the connection is back, and the "
             "official bill number is given then. A printed bill is not "
-            "available until then.",
+            "available until then." + paid_note,
         )
         self._clear_cart()
         self.customer_input.clear()
@@ -665,8 +680,9 @@ class SalesScreen(QWidget):
             place = self._sold_from()
             extra = {"location_id": place} if place else {}  # one shop: the server fills it in
             pay = self._payment()
-            if pay["discount"] or pay["payment_status"] != "pending" or pay["payment_method"] != "cash":
-                extra.update(pay)
+            extra.update(pay)
+            if self._discount:
+                extra["discount"] = self._discount
             sale_data = self._sales_service.create_sale(
                 items=payload_items, customer_id=customer_id, client_id=client_id, **extra
             )
@@ -700,12 +716,12 @@ class SalesScreen(QWidget):
 
         note = ""
         kind, rupees = change_or_balance(self._total, self.received_in.value())
-        if pay["payment_status"] != "pending" and kind == "change" and rupees and pay["payment_method"] == "cash":
+        if pay["payment_status"] != "pending" and kind == "change" and rupees and pay.get("payment_method") == "cash":
             note = f"\n\nHand back {inr(rupees)}."
         elif kind == "balance":
             note = f"\n\nBalance to collect: {inr(rupees)}."
         # An older server would ignore the discount or the payment and bill in full: say so, never silently.
-        if float(sale_data.get("discount") or 0) != pay["discount"] or (
+        if float(sale_data.get("discount") or 0) != self._discount or (
             sale_data.get("payment_status") and sale_data["payment_status"] != pay["payment_status"]
         ):
             note += (

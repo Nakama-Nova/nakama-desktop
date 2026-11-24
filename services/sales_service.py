@@ -47,11 +47,16 @@ class SalesService:
         payment_status: str | None = None,
     ) -> dict | None:
         """POST /sales and return the SaleResponse dict. discount is rupees off the bill total."""
-        if location_id is None and not (discount or payment_method or payment_status):
-            return self._api.create_sale(self._token(), items, customer_id, client_id)  # one shop, the server fills it in
-        return self._api.create_sale(
-            self._token(), items, customer_id, client_id, location_id, discount, payment_method, payment_status
-        )
+        paid = {}  # only what was chosen: left out, the server records the bill as not paid
+        if payment_method is not None:
+            paid["payment_method"] = payment_method
+        if payment_status is not None:
+            paid["payment_status"] = payment_status
+        if discount:
+            paid["discount"] = discount
+        if location_id is None:  # the common case: one shop, which the server fills in
+            return self._api.create_sale(self._token(), items, customer_id, client_id, **paid)
+        return self._api.create_sale(self._token(), items, customer_id, client_id, location_id, **paid)
 
     def cancel_sale(self, sale_id: str, reason: str) -> dict:
         """Delete a bill (owner): its stock comes back, it stays in the history as cancelled."""
@@ -71,7 +76,7 @@ class SalesService:
         customer_phone: str,
         client_id: str | None = None,
         location_id: str | None = None,
-        payment_method: str = "cash",
+        payment_method: str | None = "cash",
         payment_status: str | None = None,
     ) -> str:
         """
@@ -102,7 +107,9 @@ class SalesService:
             "total_amount": sum(ln["price"] * ln["quantity"] for ln in lines),
             "payment_method": payment_method,
         }
-        if payment_status:  # the server does not read this yet; kept so the paid state is not lost
+        if payment_status is not None:
+            # The server's sync does not read this yet: an offline bill arrives as not paid until
+            # it is corrected in Bill History. Sent anyway so it takes effect once the server reads it.
             payload["payment_status"] = payment_status
         if location_id is not None:
             payload["location_id"] = location_id

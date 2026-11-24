@@ -49,3 +49,106 @@ def test_create_is_the_loud_button_and_clear_is_quiet(qapp):
     w._refresh_table()
     w.clear_btn.click()
     assert w._cart == [] and w.grandtotal_lbl.text() == "₹0.00"
+
+
+# ---------------------------------------------------------------- Paid by
+def test_paid_by_offers_the_methods_bill_history_knows_and_not_paid_yet(qapp):
+    from ui.sales_history_screen import METHODS
+
+    w = SalesScreen()
+    labels = [w.pay_pick.itemText(i) for i in range(w.pay_pick.count())]
+    assert labels[:-1] == [label for label, _ in METHODS] and labels[-1] == "Not paid yet"
+    assert w.pay_pick.currentText() == "Cash"  # the usual counter sale
+
+
+def test_a_method_means_paid_and_not_paid_yet_means_pending(qapp):
+    w = SalesScreen()
+    assert w._payment() == {"payment_method": "cash", "payment_status": "paid"}
+    w.pay_pick.setCurrentIndex(w.pay_pick.findText("UPI"))
+    assert w._payment() == {"payment_method": "upi", "payment_status": "paid"}
+    w.pay_pick.setCurrentIndex(w.pay_pick.findText("Not paid yet"))
+    assert w._payment() == {"payment_status": "pending"}
+
+
+def test_clearing_the_bill_goes_back_to_cash(qapp):
+    w = SalesScreen()
+    w.pay_pick.setCurrentIndex(w.pay_pick.findText("Card"))
+    w.clear_btn.click()
+    assert w.pay_pick.currentText() == "Cash"
+
+
+def test_the_online_bill_carries_how_it_was_paid(qapp, monkeypatch):
+    from services.customer_service import CustomerService
+    from services.sales_service import SalesService
+
+    w = SalesScreen()
+    w._cart = [CartItem("a", "Lamp", 100, 0, 1)]
+    w.phone_input.setText("9876543210")
+    w.customer_input.setText("Meena")
+    w.pay_pick.setCurrentIndex(w.pay_pick.findText("UPI"))
+    seen = {}
+    monkeypatch.setattr(SalesService, "is_online", lambda self: True)
+    monkeypatch.setattr(CustomerService, "ensure_customer", lambda self, n, p: "cust-1")
+
+    def create(self, items, customer_id=None, client_id=None, **kw):
+        seen.update(kw)
+        return None  # stop here: the point is what was sent
+
+    monkeypatch.setattr(SalesService, "create_sale", create)
+    monkeypatch.setattr("ui.sales_screen.QMessageBox.critical", lambda *a, **k: None)
+    w._generate_invoice()
+    assert seen == {"payment_method": "upi", "payment_status": "paid"}
+
+
+def test_an_offline_bill_keeps_the_method_and_says_the_server_shows_it_unpaid(qapp, monkeypatch):
+    import json
+
+    from database.outbox_repository import OutboxRepository
+    from services.sales_service import SalesService
+
+    w = SalesScreen()
+    w._cart = [CartItem("a", "Lamp", 100, 0, 1)]
+    w.phone_input.setText("9876543210")
+    w.customer_input.setText("Meena")
+    w.pay_pick.setCurrentIndex(w.pay_pick.findText("Card"))
+    shown = []
+    monkeypatch.setattr(SalesService, "is_online", lambda self: False)
+    monkeypatch.setattr("ui.sales_screen.QMessageBox.information", lambda *a, **k: shown.append(a[2]))
+    w._generate_invoice()
+    (entry,) = OutboxRepository().get_pending()
+    payload = json.loads(entry.payload)
+    assert payload["payment_method"] == "card" and payload["payment_status"] == "paid"
+    assert "correct it in Bill History" in shown[-1]
+
+
+def test_a_bill_not_paid_yet_is_queued_without_a_method(qapp, monkeypatch):
+    import json
+
+    from database.outbox_repository import OutboxRepository
+    from services.sales_service import SalesService
+
+    w = SalesScreen()
+    w._cart = [CartItem("a", "Lamp", 100, 0, 1)]
+    w.phone_input.setText("9876543210")
+    w.customer_input.setText("Meena")
+    w.pay_pick.setCurrentIndex(w.pay_pick.findText("Not paid yet"))
+    shown = []
+    monkeypatch.setattr(SalesService, "is_online", lambda self: False)
+    monkeypatch.setattr("ui.sales_screen.QMessageBox.information", lambda *a, **k: shown.append(a[2]))
+    w._generate_invoice()
+    (entry,) = OutboxRepository().get_pending()
+    payload = json.loads(entry.payload)
+    assert payload["payment_method"] is None and payload["payment_status"] == "pending"
+    assert "correct it" not in shown[-1]  # nothing to correct
+
+
+def test_the_api_sends_payment_fields_only_when_chosen(monkeypatch):
+    from services.api_client import APIClient
+
+    api = APIClient()
+    sent = []
+    monkeypatch.setattr(api, "_post", lambda path, token, json=None: sent.append(json) or {"invoice_number": "X"})
+    api.create_sale("t", [{"item_id": "a", "quantity": 1}])
+    api.create_sale("t", [{"item_id": "a", "quantity": 1}], payment_method="upi", payment_status="paid")
+    assert "payment_method" not in sent[0] and "payment_status" not in sent[0]  # server default: not paid
+    assert sent[1]["payment_method"] == "upi" and sent[1]["payment_status"] == "paid"

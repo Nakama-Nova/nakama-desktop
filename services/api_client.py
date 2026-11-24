@@ -581,6 +581,8 @@ class APIClient:
         discount: rupees off the bill total (items + GST). payment_method / payment_status:
         how it was paid (paid, partial, pending); left out, the server records "pending".
         items: [{"item_id": "<uuid>", "quantity": int}, ...]
+        payment_method / payment_status: how the buyer paid ("cash", "upi", ...; "paid") or
+        "pending" for a bill not paid yet. Left out, the server records the bill as not paid.
         client_id: idempotency key; the server returns the existing sale when it
         has already recorded this id.
         location_id: the place the bill is sold from (left out: the one shop, if there is one).
@@ -594,9 +596,9 @@ class APIClient:
             payload["client_id"] = client_id
         if discount:
             payload["discount"] = discount
-        if payment_method:
+        if payment_method is not None:
             payload["payment_method"] = payment_method
-        if payment_status:
+        if payment_status is not None:
             payload["payment_status"] = payment_status
         try:
             return self._post("/sales", token, json=payload)

@@ -34,8 +34,8 @@ def test_till_sends_discount_and_payment_and_blocks_offline_discount(qapp, monke
     s.discount_in.setValue(10)  # 10 % of 1180
     assert s._discount == 118 and s._total == 1062 and s.received_in.value() == 1062
     s.received_in.setValue(500)  # the cashier types an amount: part paid, then it stays put
-    s.method_in.setCurrentIndex(1)
-    assert s._payment() == {"discount": 118.0, "payment_method": "upi", "payment_status": "partial"}
+    s.pay_pick.setCurrentIndex(1)
+    assert s._payment() == {"payment_method": "upi", "payment_status": "partial"}
     assert "Balance" in s.pay_note.text()
 
     s.phone_input.setText("9876543210")
