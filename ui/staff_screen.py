@@ -28,6 +28,7 @@ from PyQt6.QtWidgets import (
 )
 
 from ui.icons import IconButton
+from ui.hr_setup import ProfileDialog
 from services.money import inr
 from services.api_client import APIError, ForbiddenError
 from services.iam_service import BUILTIN_ROLES, IamService
@@ -152,6 +153,7 @@ class StaffDialog(QDialog):
     def __init__(self, parent, user: dict | None = None, is_me: bool = False, roles=None, pay_types: bool = False):
         super().__init__(parent)
         self._adding = user is None
+        pay_types = pay_types and (user is None or user.get("pay_type") is not None)  # pay hidden (null) for me: leave it alone
         self._pay_types = pay_types  # the server knows pay types (weekly, monthly, hourly), part time, salary history
         self._user = user or {}
         user = user or {}
@@ -469,6 +471,7 @@ class StaffScreen(QWidget):
             buttons.append(("🔑 Extra roles", self._extra_roles))
         if not is_me:  # you cannot switch yourself off
             buttons.append(("Switch on" if not u.get("is_active") else "Switch off", self._toggle))
+        buttons.append(("👤 Record", self._record))  # last, so the buttons before it keep their places
         for text, slot in buttons:
             b = IconButton(text)
             b.setFixedHeight(30)
@@ -504,6 +507,10 @@ class StaffScreen(QWidget):
         if d.exec() == QDialog.DialogCode.Accepted:
             self._svc.update(u["id"], d.get_data())
             self.refresh_data()
+
+    def _record(self, u: dict):
+        ProfileDialog(self, u).exec()
+        self.refresh_data()
 
     def _extra_roles(self, u: dict):
         try:

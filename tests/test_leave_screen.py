@@ -95,3 +95,11 @@ def test_an_older_server_without_leave_says_so(qapp, monkeypatch):
     s = LeaveScreen(Fake(fail=APIError(404, "Not Found")))
     s.refresh_data()
     assert "not switched on" in s.note.text() and s.form.isHidden() and s.table.rowCount() == 0
+
+
+def test_a_leave_type_with_no_limit_does_not_break_the_balances(qapp, monkeypatch):
+    monkeypatch.setattr(Session, "can", classmethod(lambda cls, a, *x: True))
+    data = {**DATA, "balances": [{"leave_type_id": "t2", "name": "Unpaid leave", "yearly_days": None, "used": 3, "pending": 0, "left": None}]}
+    s = LeaveScreen(Fake(data))
+    s.refresh_data()
+    assert "Unpaid leave: no limit (3 taken)" in s.balances.text()

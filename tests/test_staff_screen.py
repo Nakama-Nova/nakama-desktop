@@ -43,9 +43,9 @@ def test_lists_active_people_first_and_marks_you(qapp, fake):
 def test_you_cannot_switch_yourself_off(qapp, fake):
     s = StaffScreen()
     s.refresh_data()
-    assert buttons(s, 1) == ["Edit", "Email code"]  # row 1 is you
-    assert buttons(s, 0) == ["Edit", "Email code", "Extra roles", "Switch off"]
-    assert buttons(s, 2)[-1] == "Switch on"
+    assert buttons(s, 1) == ["Edit", "Email code", "Record"]  # row 1 is you
+    assert buttons(s, 0) == ["Edit", "Email code", "Extra roles", "Switch off", "Record"]
+    assert buttons(s, 2)[-2] == "Switch on"
 
 
 def test_switch_off_asks_first_then_sends_only_the_flag(qapp, fake, monkeypatch):
@@ -172,3 +172,9 @@ def test_salary_history_lists_rates_and_saves_a_new_one(qapp):
     d._add()
     uid, data = svc.added[0]
     assert uid == ASHA["id"] and data["pay_type"] == "monthly" and data["amount"] == 18000 and "effective_from" in data
+
+
+def test_a_person_whose_pay_the_server_hid_is_not_given_pay_fields_to_overwrite(qapp):
+    d = StaffDialog(None, {**ASHA, "pay_type": None, "pay_amount": None}, pay_types=True)  # null: this user may not read pay
+    data = d.get_data()
+    assert "pay_type" not in data and "pay_amount" not in data

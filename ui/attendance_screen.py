@@ -22,6 +22,7 @@ from datetime import datetime
 
 from ui.icons import IconButton
 from ui.attendance_sheet import MonthSheetDialog
+from ui.hr_setup import HolidaysDialog, ShiftsDialog
 from ui.theme import Theme, Colors, Fonts
 from services.workforce_service import AttendanceService
 from services.session import Session
@@ -65,6 +66,14 @@ class AttendanceScreen(QWidget):
             self.btn_check_in = IconButton("✅ Check In")
             self.btn_check_in.clicked.connect(self._handle_check_in)
             action_layout.addWidget(self.btn_check_in)
+            if Session.can("shifts:shift:manage"):
+                self.btn_shifts = IconButton("🕘 Shifts")
+                self.btn_shifts.clicked.connect(lambda _c=False: ShiftsDialog(self).exec())
+                action_layout.addWidget(self.btn_shifts)
+            if Session.can("holidays:holiday:manage"):
+                self.btn_holidays = IconButton("📅 Holidays")
+                self.btn_holidays.clicked.connect(lambda _c=False: HolidaysDialog(self).exec())
+                action_layout.addWidget(self.btn_holidays)
             self.btn_sheet = IconButton("📅 Month sheet")
             self.btn_sheet.setToolTip("Everyone's month on one grid, with a CSV for the accountant")
             self.btn_sheet.clicked.connect(self._open_sheet)

@@ -139,7 +139,8 @@ class LeaveScreen(QWidget):
         if current is not None:
             self.kind.setCurrentIndex(max(0, self.kind.findData(current)))
         self.balances.setText("   ·   ".join(
-            f"{b['name']}: {b['left']:g} left" + (f" of {b['yearly_days']:g}" if b.get("yearly_days") else "") for b in data["balances"]
+            (f"{b['name']}: {b['left']:g} left" + (f" of {b['yearly_days']:g}" if b.get("yearly_days") else "")) if b.get("left") is not None else f"{b['name']}: no limit ({b.get('used') or 0:g} taken)"
+            for b in data["balances"]
         ))
         self._rows = sorted(data["requests"], key=lambda r: (r.get("status") != "pending", str(r.get("from_date") or "")), reverse=False)
         kinds = {t["id"]: t["name"] for t in data["types"]}
