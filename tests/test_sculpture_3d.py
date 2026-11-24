@@ -26,7 +26,7 @@ def stock(monkeypatch):
 
 
 def buttons(table, row, col):
-    return [b.text() for b in table.cellWidget(row, col).findChildren(QPushButton)]
+    return [b.text() or b.toolTip() for b in table.cellWidget(row, col).findChildren(QPushButton)]
 
 
 def rows_by_sku(w):
@@ -38,9 +38,9 @@ def test_the_owner_gets_the_3d_buttons_on_sculptures_only(qapp, stock):
     w = InventoryWindow()
     w.refresh_data()
     rows = rows_by_sku(w)
-    assert buttons(w.table, rows["SCU-0001"], w.COL_ACTIONS)[-2:] == ["📷 3D scan", "🧊 View 3D"]
-    assert "✏️ Edit" in buttons(w.table, rows["SCU-0001"], w.COL_ACTIONS)  # the usual tools stay
-    assert buttons(w.table, rows["FUR-0001"], w.COL_ACTIONS) == ["✏️ Edit", "± Stock", "🕘", "🖼️ Photos", "🗑️"]
+    assert buttons(w.table, rows["SCU-0001"], w.COL_ACTIONS)[-2:] == ["3D scan", "View 3D"]
+    assert "Edit" in buttons(w.table, rows["SCU-0001"], w.COL_ACTIONS)  # the usual tools stay
+    assert buttons(w.table, rows["FUR-0001"], w.COL_ACTIONS) == ["Edit", "± Stock", "Stock history", "Photos", "Delete"]
 
 
 def test_an_artisan_gets_only_the_3d_buttons_on_sculptures(qapp, stock, monkeypatch):
@@ -48,7 +48,7 @@ def test_an_artisan_gets_only_the_3d_buttons_on_sculptures(qapp, stock, monkeypa
     w = InventoryWindow()
     w.refresh_data()
     rows = rows_by_sku(w)
-    assert buttons(w.table, rows["SCU-0001"], w.COL_ACTIONS) == ["📷 3D scan", "🧊 View 3D"]  # no edit, no stock changes
+    assert buttons(w.table, rows["SCU-0001"], w.COL_ACTIONS) == ["3D scan", "View 3D"]  # no edit, no stock changes
     assert buttons(w.table, rows["FUR-0001"], w.COL_ACTIONS) == []
     assert not w.add_btn.isVisible() and not w.can_edit
 
@@ -65,7 +65,7 @@ def test_a_manager_manages_stock_but_does_not_scan_carvings(qapp, stock, monkeyp
     monkeypatch.setattr(Session, "_role", UserRole.MANAGER)
     w = InventoryWindow()
     w.refresh_data()
-    assert "📷 3D scan" not in buttons(w.table, rows_by_sku(w)["SCU-0001"], w.COL_ACTIONS)
+    assert "3D scan" not in buttons(w.table, rows_by_sku(w)["SCU-0001"], w.COL_ACTIONS)
 
 
 # --------------------------------------------------------------- sending photos

@@ -43,8 +43,8 @@ def test_lists_active_people_first_and_marks_you(qapp, fake):
 def test_you_cannot_switch_yourself_off(qapp, fake):
     s = StaffScreen()
     s.refresh_data()
-    assert buttons(s, 1) == ["✏️ Edit", "✉️ Email code"]  # row 1 is you
-    assert buttons(s, 0) == ["✏️ Edit", "✉️ Email code", "🔑 Extra roles", "Switch off"]
+    assert buttons(s, 1) == ["Edit", "Email code"]  # row 1 is you
+    assert buttons(s, 0) == ["Edit", "Email code", "Extra roles", "Switch off"]
     assert buttons(s, 2)[-1] == "Switch on"
 
 

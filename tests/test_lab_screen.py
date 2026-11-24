@@ -51,7 +51,7 @@ def test_owner_can_open_and_edit(qapp, opened):
     urls, asked = opened
     s = LabScreen()  # logged in as owner (conftest)
     s.refresh_data()
-    assert buttons(s, 0) == ["🧊 Open", "✏️ Edit parts"]
+    assert buttons(s, 0) == ["Open", "Edit parts"]
     assert s.setup_btn.isHidden() is False
     s.table.cellWidget(0, s.COL_ACTIONS).findChildren(QPushButton)[0].click()
     s.table.cellWidget(0, s.COL_ACTIONS).findChildren(QPushButton)[1].click()
@@ -63,7 +63,7 @@ def test_achari_can_only_view(qapp, opened, monkeypatch):
     monkeypatch.setattr(Session, "_role", UserRole.ACHARI)
     s = LabScreen()
     s.refresh_data()
-    assert buttons(s, 0) == ["🧊 Open"]
+    assert buttons(s, 0) == ["Open"]
     assert s.setup_btn.isHidden() is True  # not shown: only owner/manager set pieces up
 
 

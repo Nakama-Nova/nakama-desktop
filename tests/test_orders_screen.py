@@ -302,7 +302,7 @@ def _payment_buttons(screen, row):
     from PyQt6.QtWidgets import QPushButton
 
     w = screen.payments.cellWidget(row, 4)
-    return [b.text() for b in w.findChildren(QPushButton)] if w else []
+    return [b.text() or b.toolTip() for b in w.findChildren(QPushButton)] if w else []
 
 
 def test_only_the_owner_corrects_or_voids_a_payment_and_a_void_one_is_marked(qapp, fake, monkeypatch):
@@ -311,7 +311,7 @@ def test_only_the_owner_corrects_or_voids_a_payment_and_a_void_one_is_marked(qap
     s = OrdersScreen()
     s.refresh_data()
     select(s, 0)
-    assert _payment_buttons(s, 0) == ["✏️", "🚫"]  # a live payment can be corrected or taken off
+    assert _payment_buttons(s, 0) == ["Correct this payment", "Take this payment off the order"]  # a live payment can be corrected or taken off
     assert _payment_buttons(s, 1) == []  # a void one is history
     assert s.payments.item(1, 3).text() == "VOID: entered twice" and s.payments.item(1, 1).font().strikeOut()
     monkeypatch.setattr(Session, "_role", UserRole.MANAGER)

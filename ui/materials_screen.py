@@ -187,6 +187,7 @@ class MaterialsScreen(QWidget):
             b.setCursor(Qt.CursorShape.PointingHandCursor)
             if text in ("🕘", "🗑️"):
                 b.setFixedWidth(40)
+                b.setToolTip({"🕘": "Stock history", "🗑️": "Delete"}[text])  # icon-only: name it
             b.clicked.connect(lambda _=False, mm=m, s=slot: s(mm))
             h.addWidget(b)
         return box
