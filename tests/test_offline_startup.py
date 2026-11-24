@@ -28,7 +28,7 @@ def test_keyboard_shortcuts_move_around_and_find_the_search_box(qapp):
     w = MainWindow()
     w._sync_timer.stop()
     w.show()
-    assert len(w._shortcuts) == 11  # F5, Ctrl+F, Ctrl+1..9
+    assert len(w._shortcuts) == 12  # F5, Ctrl+F, Ctrl+K, Ctrl+1..9
     second = next(i for i, b in w._nav_mapping.items() if b is w._nav_buttons[1])
     w._go_to_nth(2)
     assert w.content_stack.currentIndex() == second
