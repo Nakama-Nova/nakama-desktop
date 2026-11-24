@@ -104,6 +104,11 @@ class Colors:
     TABLE_HOVER = "#F7E7C2"
     LOW_STOCK_BG = "#F7E7C2"
 
+    # Glass (see GlassCard): "r,g,b,alpha" strings
+    GLASS_FILL = "255,255,255,0.86"
+    GLASS_EDGE = "90,42,6,0.12"
+    GLASS_SHEEN = "255,255,255,0.55"
+
     # Status
     SUCCESS_BG = "#DDEFE4"
     WARNING_BG = "#F7E7C2"
@@ -650,6 +655,7 @@ class Theme:
 # Light and dark: one palette applied before any screen is built
 # ----------------------------------------------------------------------
 Colors.DARK_MODE = False
+Colors.THEME = "light"
 LIGHT_PALETTE = {k: v for k, v in vars(Colors).items() if k.isupper() and isinstance(v, str)}
 
 # Warm, not blue-grey: the same teak and gold, with the lights turned down. Text colours are the
@@ -716,15 +722,100 @@ def _build_roles() -> dict:
 
 
 def apply_theme(name: str) -> None:
-    """Switch the whole palette to "light" or "dark". Call it before any screen is built (the
+    """Switch the whole palette to "light", "dark" or "glass" (Heritage glass: the dark palette
+    with the charred-teak and burnished-gold tokens on top). Call it before any screen is built (the
     program does at start-up, from the saved setting): screens read the colours as they are built."""
-    dark = name == "dark"
+    glass = name == "glass"
+    dark = name in ("dark", "glass")
     for key, value in LIGHT_PALETTE.items():
-        setattr(Colors, key, DARK_PALETTE.get(key, value) if dark else value)
+        if not dark:
+            setattr(Colors, key, value)
+            continue
+        chosen = DARK_PALETTE.get(key, value)
+        setattr(Colors, key, GLASS_PALETTE.get(key, chosen) if glass else chosen)
     Colors.DARK_MODE = dark
+    Colors.THEME = name if name in THEMES else "light"
     ROLES.clear()
     ROLES.update(_build_roles())
     Theme.btn.cache_clear()
+
+
+# ----------------------------------------------------------------------
+# Heritage glass: charred teak canvas, frosted walnut cards, burnished gold
+# ----------------------------------------------------------------------
+# Applied on top of the dark palette (apply_theme("glass")). The "glass" tokens (GLASS_FILL,
+# GLASS_EDGE, GLASS_SHEEN) are "r,g,b,alpha" strings: GlassCard paints them translucent over the
+# canvas, while QSS-styled widgets use the opaque CARD_BG, which is the same colour pre-blended.
+GLASS_PALETTE = {
+    "BG": "#15110E",  # the canvas, between #120F0D and #1A1512
+    "CARD_BG": "#221B16",
+    "CARD_BORDER": "#352C24",
+    "BORDER": "#352C24",
+    "SIDEBAR_BG": "#17120F",
+    "NAVBAR_BG": "#17120F",
+    "SIDEBAR_HOVER": "#241D18",
+    "SIDEBAR_ACTIVE": "#3A2C17",
+    "SIDEBAR_TEXT": "#BDB3A8",
+    "SIDEBAR_ACTIVE_TEXT": "#F5D9A4",
+    "SIDEBAR_ACCENT": "#E0B46C",
+    "SIDEBAR_HEADING": "#968D83",
+    "TEXT_PRIMARY": "#F7F3EE",  # warm ivory
+    "TEXT_SECONDARY": "#A89F96",  # sandstone
+    "TEXT_MUTED": "#988F85",
+    "PRIMARY": "#D4A359",  # burnished gold
+    "SECONDARY": "#E0B46C",
+    "WARNING": "#E0B46C",
+    "BRAND_BROWN": "#E0B46C",
+    "INFO": "#C99556",
+    "LIGHT": "#2B231C",
+    "DARK": "#0F0C0A",
+    "INPUT_BORDER": "#4A3E32",
+    "INPUT_FOCUS": "#E0B46C",
+    "INPUT_FOCUS_RING": "#6B4F1E",
+    "INPUT_DISABLED_BG": "#201A15",
+    "TABLE_HEADER_BG": "#2B231C",
+    "TABLE_ALT_ROW": "#1D1814",
+    "TABLE_HOVER": "#33271A",
+    "GREEN": "#74C69D",
+    "ORANGE": "#EBB75B",
+    "RED": "#F28B82",
+    "PURPLE": "#D6A86F",
+    "BLUE": "#D6A86F",
+    "TEAL": "#74C69D",
+    "GLASS_FILL": "36,29,24,0.78",  # rgba(36, 29, 24, 0.78): frosted warm walnut
+    "GLASS_EDGE": "218,185,138,0.14",  # rgba(218, 185, 138, 0.14): a hairline of bronze
+    "GLASS_SHEEN": "255,255,255,0.05",
+}
+DARK_PALETTE.update(
+    {"GLASS_FILL": "38,27,18,0.82", "GLASS_EDGE": "218,185,138,0.14", "GLASS_SHEEN": "255,243,220,0.04"}
+)
+THEMES = ("light", "dark", "glass")
+
+
+def rgba(token: str, alpha: float | None = None):
+    """A QColor from a "r,g,b,alpha" token (alpha 0..1), optionally with another alpha."""
+    from PyQt6.QtGui import QColor
+
+    r, g, b, a = (float(x) for x in token.split(","))
+    return QColor(int(r), int(g), int(b), int(round((a if alpha is None else alpha) * 255)))
+
+
+def tabular_font(font):
+    """The same font with fixed-width figures, so amounts, SKUs and GST lines align in columns."""
+    from PyQt6.QtGui import QFont
+
+    out = QFont(font)
+    try:
+        out.setFeature(QFont.Tag("tnum"), 1)
+    except Exception:  # an older Qt: the figures simply stay proportional
+        pass
+    return out
+
+
+def tabular(widget):
+    """Give a label (or any widget with text) tabular figures. Returns the widget."""
+    widget.setFont(tabular_font(widget.font()))
+    return widget
 
 
 def soft(color: str, light: float = 0.88, dark: float = 0.80) -> str:
