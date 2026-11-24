@@ -24,9 +24,11 @@ def test_every_sidebar_entry_has_its_own_line_icon(qapp):
 
 
 def test_an_icon_is_drawn_in_the_colour_asked(qapp):
-    px = icons.pixmap("home", "#5A2A06", 18, 1.0)
-    colours = {px.toImage().pixelColor(x, y).name() for x in range(px.width()) for y in range(px.height()) if px.toImage().pixelColor(x, y).alpha() > 200}
-    assert colours == {"#5a2a06"}
+    image = icons.pixmap("home", "#5A2A06", 18, 1.0).toImage()
+    solid = [image.pixelColor(x, y) for x in range(image.width()) for y in range(image.height()) if image.pixelColor(x, y).alpha() > 200]
+    assert solid
+    for c in solid:  # within 2 per channel: the renderer's alpha rounding can shift one
+        assert abs(c.red() - 0x5A) <= 2 and abs(c.green() - 0x2A) <= 2 and abs(c.blue() - 0x06) <= 2
 
 
 def test_the_arrows_the_input_style_points_at_exist(qapp):
