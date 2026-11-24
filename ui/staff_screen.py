@@ -26,6 +26,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ui.icons import IconButton
 from services.money import inr
 from services.api_client import APIError, ForbiddenError
 from services.iam_service import BUILTIN_ROLES, IamService
@@ -53,10 +54,10 @@ def _line(text="", placeholder="", password=False) -> QLineEdit:
 def _buttons(dialog, ok_text="Save"):
     row = QHBoxLayout()
     row.addStretch()
-    cancel = QPushButton("Cancel")
+    cancel = IconButton("Cancel")
     cancel.setStyleSheet(Theme.btn_secondary())
     cancel.clicked.connect(dialog.reject)
-    ok = QPushButton(ok_text)
+    ok = IconButton(ok_text)
     ok.setStyleSheet(Theme.btn_primary())
     ok.clicked.connect(dialog._check)
     row.addWidget(cancel)
@@ -222,7 +223,7 @@ class ExtraRolesDialog(QDialog):
         self._layout.addWidget(note)
         self._rows_box = QVBoxLayout()
         self._layout.addLayout(self._rows_box)
-        add = QPushButton("➕  Add a role")
+        add = IconButton("➕  Add a role")
         add.setStyleSheet(Theme.btn_secondary())
         add.clicked.connect(lambda _=False: self._add_row())
         self._layout.addWidget(add)
@@ -239,7 +240,7 @@ class ExtraRolesDialog(QDialog):
         for w in (role, place):
             w.setStyleSheet(Theme.input_style())
             row.addWidget(w, 1)
-        remove = QPushButton("✕")
+        remove = IconButton("✕")
         remove.setStyleSheet(Theme.btn_table_action())
         row.addWidget(remove)
         self._rows.append((role, place))
@@ -283,11 +284,11 @@ class StaffScreen(QWidget):
         title.setStyleSheet(Theme.heading(Fonts.HEADING_LG))
         head.addWidget(title)
         head.addStretch()
-        refresh = QPushButton("🔄  Refresh")
+        refresh = IconButton("🔄  Refresh")
         refresh.setStyleSheet(Theme.btn_secondary())
         refresh.clicked.connect(self.refresh_data)
         head.addWidget(refresh)
-        self.add_btn = QPushButton("➕  Add staff")
+        self.add_btn = IconButton("➕  Add staff")
         self.add_btn.setStyleSheet(Theme.btn_primary())
         self.add_btn.clicked.connect(self._add)
         head.addWidget(self.add_btn)
@@ -364,7 +365,7 @@ class StaffScreen(QWidget):
         if not is_me:  # you cannot switch yourself off
             buttons.append(("Switch on" if not u.get("is_active") else "Switch off", self._toggle))
         for text, slot in buttons:
-            b = QPushButton(text)
+            b = IconButton(text)
             b.setFixedHeight(30)
             b.setStyleSheet(Theme.btn_table_action())
             b.setCursor(Qt.CursorShape.PointingHandCursor)

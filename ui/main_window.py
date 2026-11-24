@@ -34,6 +34,7 @@ from ui.components.carvings import attach_empty_state
 from ui.components.navbar import Navbar
 from ui.components.goto_dialog import GoToDialog
 from ui import icons
+from ui.icons import IconButton
 from ui.theme import Theme, Colors, Fonts, Radius, Spacing
 
 from ui.dashboard_window import DashboardWindow
@@ -296,7 +297,7 @@ class MainWindow(QMainWindow):
         sidebar_layout.addWidget(nav_scroll, 1)
 
         # Version, and a manual "check for updates"
-        self.update_btn = QPushButton(f"⬆  Updates  ·  v{APP_VERSION}")
+        self.update_btn = IconButton(f"⬆  Updates  ·  v{APP_VERSION}")
         self.update_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.update_btn.setStyleSheet(self._footer_button_css())
         self.update_btn.clicked.connect(lambda: self.updater.check(manual=True))
@@ -540,7 +541,7 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
     def _section_heading(self, text: str) -> QPushButton:
         """A section title that folds its entries away when clicked."""
-        heading = QPushButton(text)
+        heading = IconButton(text)
         heading.setProperty("section", text)
         heading.setCursor(Qt.CursorShape.PointingHandCursor)
         heading.setStyleSheet(
@@ -569,7 +570,7 @@ class MainWindow(QMainWindow):
                 btn.setVisible(self._compact or name not in self._collapsed)
 
     def _create_nav_button(self, icon: str, label: str, index: int) -> QPushButton:
-        btn = QPushButton(f"  {label}")
+        btn = IconButton(f"  {label}")
         btn.setProperty("icon_text", icon)
         btn.setProperty("label_text", label)
         btn.setIconSize(QSize(18, 18))

@@ -23,13 +23,14 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ui.icons import IconButton
 from ui.theme import Colors, Fonts, Radius, Spacing, Theme
 
 
 def Button(text: str, role: str = "primary", size: str = "md", outline: bool = False) -> QPushButton:
     """A Bootstrap button: role is primary/secondary/success/danger/warning/info/light/dark,
     size is sm/md/lg."""
-    btn = QPushButton(text)
+    btn = IconButton(text)
     btn.setCursor(Qt.CursorShape.PointingHandCursor)
     btn.setStyleSheet(Theme.btn(role, size, outline))
     return btn

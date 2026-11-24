@@ -27,6 +27,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ui.icons import IconButton
 from services.money_service import PERIODS, MoneyService, period_range, rupees
 from services.restoration_service import RestorationService
 from services.session import Session
@@ -73,10 +74,10 @@ def money_spin(maximum: float = 10_000_000) -> QDoubleSpinBox:
 def dialog_buttons(dialog, ok_text="Save"):
     row = QHBoxLayout()
     row.addStretch()
-    cancel = QPushButton("Cancel")
+    cancel = IconButton("Cancel")
     cancel.setStyleSheet(Theme.btn_secondary())
     cancel.clicked.connect(dialog.reject)
-    ok = QPushButton(ok_text)
+    ok = IconButton(ok_text)
     ok.setStyleSheet(Theme.btn_primary())
     ok.clicked.connect(dialog._check)
     row.addWidget(cancel)
@@ -180,7 +181,7 @@ class ExpensesScreen(QWidget):
         self.period.setStyleSheet(Theme.input_style())
         self.period.currentIndexChanged.connect(lambda _i: self.refresh_data())
         head.addWidget(self.period)
-        self.add_btn = QPushButton("➕  Add expense")
+        self.add_btn = IconButton("➕  Add expense")
         self.add_btn.setStyleSheet(Theme.btn_primary())
         self.add_btn.clicked.connect(self._add)
         head.addWidget(self.add_btn)
@@ -257,7 +258,7 @@ class ExpensesScreen(QWidget):
         if can_void:
             buttons.append(("Cancel entry", self._void))
         for text, slot in buttons:
-            b = QPushButton(text)
+            b = IconButton(text)
             b.setFixedHeight(30)
             b.setStyleSheet(Theme.btn_table_action())
             b.setCursor(Qt.CursorShape.PointingHandCursor)

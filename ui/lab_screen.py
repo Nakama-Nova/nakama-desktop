@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ui.icons import IconButton
 from services.lab_service import LabService
 from services.session import Session
 from ui.errors import handle_permissions
@@ -47,7 +48,7 @@ class LabScreen(QWidget):
         header.setStyleSheet(Theme.heading(Fonts.HEADING_LG))
         header_row.addWidget(header)
         header_row.addStretch()
-        self.setup_btn = QPushButton("➕  Set up a piece")
+        self.setup_btn = IconButton("➕  Set up a piece")
         self.setup_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setup_btn.setStyleSheet(Theme.btn_primary())
         self.setup_btn.clicked.connect(self._setup_piece)
@@ -101,14 +102,14 @@ class LabScreen(QWidget):
             box = QWidget()
             h = QHBoxLayout(box)
             h.setContentsMargins(4, 2, 4, 2)
-            open_btn = QPushButton("🧊 Open")
+            open_btn = IconButton("🧊 Open")
             open_btn.setFixedHeight(30)
             open_btn.setStyleSheet(Theme.btn_table_action())
             open_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             open_btn.clicked.connect(lambda _, pid=p["id"]: self._open(pid, False))
             h.addWidget(open_btn)
             if self._can_edit:
-                edit_btn = QPushButton("✏️ Edit parts")
+                edit_btn = IconButton("✏️ Edit parts")
                 edit_btn.setFixedHeight(30)
                 edit_btn.setStyleSheet(Theme.btn_table_action())
                 edit_btn.setCursor(Qt.CursorShape.PointingHandCursor)

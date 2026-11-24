@@ -25,6 +25,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
 )
 
+from ui.icons import IconButton
 from services.stock_service import AssetUploadError
 from ui.theme import Colors, Theme
 
@@ -38,7 +39,7 @@ MOVEMENT_WORDS = {
 
 
 def _button(text: str, style: str) -> QPushButton:
-    b = QPushButton(text)
+    b = IconButton(text)
     b.setCursor(Qt.CursorShape.PointingHandCursor)
     b.setStyleSheet(style)
     return b

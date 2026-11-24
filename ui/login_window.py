@@ -23,6 +23,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import QSize, Qt
 
+from ui.icons import IconButton
 from ui.assets import logo_path, scaled_pixmap
 from ui.components.bootstrap import Alert, Card
 from ui.components.carvings import CarvingRow
@@ -177,7 +178,7 @@ class LoginWindow(QWidget):
         self.error_lbl.hide()
 
         # Sign In button
-        self.button = QPushButton("Sign In")
+        self.button = IconButton("Sign In")
         self.button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.button.setStyleSheet(Theme.btn("primary", "lg"))
         self.button.clicked.connect(self.handle_login)
@@ -196,7 +197,7 @@ class LoginWindow(QWidget):
         row = QHBoxLayout()
         row.addWidget(self.remember)
         row.addStretch()
-        self.forgot = QPushButton("Forgot password?")
+        self.forgot = IconButton("Forgot password?")
         self.forgot.setFlat(True)
         self.forgot.setCursor(Qt.CursorShape.PointingHandCursor)
         self.forgot.setStyleSheet(

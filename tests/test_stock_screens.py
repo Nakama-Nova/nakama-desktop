@@ -38,7 +38,7 @@ def fake(monkeypatch):
 
 
 def row_buttons(table, row, col):
-    return [b.text() for b in table.cellWidget(row, col).findChildren(QPushButton)]
+    return [b.text() or b.toolTip() for b in table.cellWidget(row, col).findChildren(QPushButton)]
 
 
 def test_owner_sees_the_stock_tools_and_can_search_by_code(qapp, fake):
@@ -47,7 +47,7 @@ def test_owner_sees_the_stock_tools_and_can_search_by_code(qapp, fake):
     assert w.table.rowCount() == 2
     assert w.table.item(0, w.COL_STATUS).text() == "Running low"  # 2 left, warn at 5
     assert w.table.item(1, w.COL_STATUS).text() == "In stock"
-    assert row_buttons(w.table, 0, w.COL_ACTIONS) == ["✏️ Edit", "± Stock", "🕘", "🖼️ Photos", "🗑️"]
+    assert row_buttons(w.table, 0, w.COL_ACTIONS) == ["Edit", "± Stock", "Stock history", "Photos", "Delete"]
     w.search_input.setText("tb-2")  # by code, any case
     assert w.table.rowCount() == 1 and w.table.item(0, w.COL_NAME).text() == "Study Table"
 
@@ -123,7 +123,7 @@ def test_materials_screen_lists_and_adjusts(qapp, fake, monkeypatch):
     s = MaterialsScreen()
     s.refresh_data()
     assert s.table.item(0, 0).text() == "Teak plank" and s.table.item(0, 3).text() == "12.5"
-    assert "🗑️" in row_buttons(s.table, 0, s.COL_ACTIONS)
+    assert "Delete" in row_buttons(s.table, 0, s.COL_ACTIONS)
 
     class Auto(AdjustStockDialog):
         def exec(self):
@@ -140,7 +140,7 @@ def test_only_the_owner_can_delete_a_material(qapp, fake, monkeypatch):
     monkeypatch.setattr(Session, "_role", UserRole.MANAGER)
     s = MaterialsScreen()
     s.refresh_data()
-    assert "🗑️" not in row_buttons(s.table, 0, s.COL_ACTIONS)
+    assert "Delete" not in row_buttons(s.table, 0, s.COL_ACTIONS)
 
 
 def test_deleting_a_material_carries_the_servers_reason_and_never_fails_silently(qapp, fake, monkeypatch, dialogs):

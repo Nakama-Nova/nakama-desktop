@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 
+from ui.icons import IconButton
 from ui.theme import Theme, Colors, Fonts, Spacing
 from ui.components.bootstrap import Card, Grid12
 from ui.components.carvings import CarvingRow
@@ -114,17 +115,17 @@ class DashboardWindow(QWidget):
         qa_row.setContentsMargins(0, 0, 0, 0)
         qa_row.setSpacing(Spacing.MD)
 
-        self.btn_new_bill = QPushButton("🧾  New Bill")
+        self.btn_new_bill = IconButton("🧾  New Bill")
         self.btn_new_bill.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_new_bill.setStyleSheet(Theme.btn_quick_action("primary"))
         self.btn_new_bill.clicked.connect(lambda: self._navigate("new_bill"))
 
-        self.btn_view_stock = QPushButton("📦  View Stock")
+        self.btn_view_stock = IconButton("📦  View Stock")
         self.btn_view_stock.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_view_stock.setStyleSheet(Theme.btn("primary", "lg", outline=True))
         self.btn_view_stock.clicked.connect(lambda: self._navigate("stock"))
 
-        self.btn_add_buyer = QPushButton("👤  Add Buyer")
+        self.btn_add_buyer = IconButton("👤  Add Buyer")
         self.btn_add_buyer.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_add_buyer.setStyleSheet(Theme.btn("primary", "lg", outline=True))
         self.btn_add_buyer.clicked.connect(lambda: self._navigate("buyers"))
@@ -226,7 +227,7 @@ class DashboardWindow(QWidget):
                 item.widget().deleteLater()
         rows = attention_lines(attention or {})
         for text, role, page in rows:
-            btn = QPushButton(text)
+            btn = IconButton(text)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.setStyleSheet(Theme.alert(role) + "text-align: left;")
             btn.clicked.connect(lambda _=False, p=page: self._navigate(p))

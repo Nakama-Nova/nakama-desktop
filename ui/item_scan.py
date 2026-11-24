@@ -21,6 +21,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
 )
 
+from ui.icons import IconButton
 from services.restoration_service import RestorationService, check_capture
 from services.sculpture_service import SculptureService
 from ui.restoration_screen import ScanOptionsDialog, TransferThread
@@ -54,8 +55,8 @@ class ItemScanDialog(QDialog):
         )
         info.setWordWrap(True)
         root.addWidget(info)
-        self.photos_btn = QPushButton("📷  Choose photos…")
-        self.video_btn = QPushButton("🎥  Choose a video…")
+        self.photos_btn = IconButton("📷  Choose photos…")
+        self.video_btn = IconButton("🎥  Choose a video…")
         for b, kind in ((self.photos_btn, "photos"), (self.video_btn, "video")):
             b.setStyleSheet(Theme.btn_primary())
             b.clicked.connect(lambda _c=False, k=kind: self._pick(k))
@@ -64,7 +65,7 @@ class ItemScanDialog(QDialog):
         self.bar.setRange(0, 100)
         self.bar.setVisible(False)
         root.addWidget(self.bar)
-        close = QPushButton("Close")
+        close = IconButton("Close")
         close.setStyleSheet(Theme.btn_secondary())
         close.clicked.connect(self.reject)
         root.addWidget(close)

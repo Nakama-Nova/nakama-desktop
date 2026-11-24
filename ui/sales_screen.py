@@ -30,6 +30,7 @@ from PyQt6.QtCore import Qt, QStringListModel
 from PyQt6.QtGui import QKeySequence, QShortcut
 
 
+from ui.icons import IconButton
 from ui.theme import Theme, Colors, Fonts
 from ui.components.place_picker import PlacePicker, fetch_places, selling_places
 from ui.errors import handle_permissions
@@ -120,7 +121,7 @@ class SalesScreen(QWidget):
         self.search_input.returnPressed.connect(self._add_item_to_cart)
         item_row.addWidget(self.search_input, 1)
 
-        add_btn = QPushButton("Add item")
+        add_btn = IconButton("Add item")
         add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         add_btn.setMinimumHeight(40)
         add_btn.setStyleSheet(Theme.btn("primary", "md"))
@@ -169,7 +170,7 @@ class SalesScreen(QWidget):
         self.customer_input.setStyleSheet(Theme.input_style())
         self.customer_input.setMinimumHeight(38)
         col.addWidget(self.customer_input)
-        self.search_btn = QPushButton("Find buyer by phone")
+        self.search_btn = IconButton("Find buyer by phone")
         self.search_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.search_btn.setStyleSheet(Theme.btn("secondary", "sm", outline=True))
         self.search_btn.clicked.connect(self._handle_customer_lookup)
@@ -205,7 +206,7 @@ class SalesScreen(QWidget):
         total_row.addWidget(self.grandtotal_lbl, 1)
         col.addLayout(total_row)
 
-        self.invoice_btn = QPushButton("Create bill")
+        self.invoice_btn = IconButton("Create bill")
         self.invoice_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.invoice_btn.setMinimumHeight(48)
         self.invoice_btn.setStyleSheet(Theme.btn("primary", "lg"))
@@ -214,7 +215,7 @@ class SalesScreen(QWidget):
         col.addWidget(self.invoice_btn)
 
         # Quiet on purpose: next to Create bill it must not be the easy button to hit
-        self.clear_btn = QPushButton("Clear bill")
+        self.clear_btn = IconButton("Clear bill")
         self.clear_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.clear_btn.setStyleSheet(
             f"QPushButton {{ background: transparent; border: none; color: {Colors.TEXT_SECONDARY};"
@@ -439,7 +440,7 @@ class SalesScreen(QWidget):
             self.table.setCellWidget(row, self.COL_QTY, qty_spin)
 
             # Remove button — visible with border
-            rm_btn = QPushButton("✕")
+            rm_btn = IconButton("✕")
             rm_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             rm_btn.setFixedSize(32, 30)
             rm_btn.setStyleSheet(f"""

@@ -26,7 +26,7 @@ def history(monkeypatch):
 
 
 def buttons(screen, row):
-    return [b.text() for b in screen.table.cellWidget(row, screen.COL_ACTIONS).findChildren(QPushButton)]
+    return [b.text() or b.toolTip() for b in screen.table.cellWidget(row, screen.COL_ACTIONS).findChildren(QPushButton)]
 
 
 def test_each_bill_says_how_it_was_paid_and_cancelled_ones_are_marked(qapp, history):
@@ -56,9 +56,9 @@ def test_the_chips_count_and_filter_the_bills(qapp, history):
 @pytest.mark.parametrize(
     "role,expected",
     [
-        (UserRole.OWNER, ["👁️ View", "🖨️ Print", "✏️ Payment", "🗑️ Delete"]),
-        (UserRole.MANAGER, ["👁️ View", "🖨️ Print", "✏️ Payment"]),  # may correct payment, never delete
-        (UserRole.SALES, ["👁️ View", "🖨️ Print"]),
+        (UserRole.OWNER, ["View", "Print", "Payment", "Delete"]),
+        (UserRole.MANAGER, ["View", "Print", "Payment"]),  # may correct payment, never delete
+        (UserRole.SALES, ["View", "Print"]),
     ],
 )
 def test_who_gets_which_buttons(qapp, history, monkeypatch, role, expected):
@@ -66,7 +66,7 @@ def test_who_gets_which_buttons(qapp, history, monkeypatch, role, expected):
     s = SalesHistoryScreen()
     s.refresh_data()
     assert buttons(s, 0) == expected
-    assert buttons(s, 2) == ["👁️ View", "🖨️ Print"]  # nothing more to do to a deleted bill
+    assert buttons(s, 2) == ["View", "Print"]  # nothing more to do to a deleted bill
 
 
 def test_deleting_a_bill_asks_why_and_sends_the_reason(qapp, history, monkeypatch, dialogs):

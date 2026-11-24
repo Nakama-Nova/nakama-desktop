@@ -24,6 +24,7 @@ from PyQt6.QtWidgets import (
 )
 
 from services import notifications_service as ns
+from ui.icons import IconButton
 from ui.theme import Colors, Theme
 
 POLL_EVERY_MS = 60_000
@@ -163,7 +164,7 @@ class NotificationsDialog(QDialog):
         self.popups.setChecked(notifier.state["popups"])
         self.popups.toggled.connect(notifier.set_popups)
         root.addWidget(self.popups)
-        close = QPushButton("Close")
+        close = IconButton("Close")
         close.setStyleSheet(Theme.btn_secondary())
         close.clicked.connect(self.accept)
         root.addWidget(close)

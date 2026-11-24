@@ -25,6 +25,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ui.icons import IconButton
 from ui.theme import Colors, Fonts, Theme
 
 
@@ -66,12 +67,12 @@ class RowDetails(QDialog):
         outer.addWidget(self._scroll, 1)
 
         buttons = QHBoxLayout()
-        self.prev_btn = QPushButton("◀  Previous")
-        self.next_btn = QPushButton("Next  ▶")
+        self.prev_btn = IconButton("◀  Previous")
+        self.next_btn = IconButton("Next  ▶")
         self.position = QLabel()
         self.position.setStyleSheet(f"color: {Colors.TEXT_SECONDARY};")
-        copy_btn = QPushButton("Copy")
-        close_btn = QPushButton("Close")
+        copy_btn = IconButton("Copy")
+        close_btn = IconButton("Close")
         for b in (self.prev_btn, self.next_btn, copy_btn):
             b.setStyleSheet(Theme.btn_secondary())
             b.setCursor(Qt.CursorShape.PointingHandCursor)

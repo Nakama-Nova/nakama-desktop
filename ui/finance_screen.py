@@ -27,6 +27,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ui.icons import IconButton
 from services.api_client import APIError, ForbiddenError
 from services.finance_service import FinanceService
 from services.session import Session
@@ -126,7 +127,7 @@ class EntryDialog(QDialog):
         self.table.setMinimumHeight(min(60 + 40 * len(lines), 360))
         v.addWidget(self.table)
         v.addWidget(QLabel(f"Amount moved: {money(entry.get('total')) or '₹0.00'}", styleSheet=f"font-weight: 700; color: {Colors.TEXT_PRIMARY};"))
-        close = QPushButton("Close")
+        close = IconButton("Close")
         close.setStyleSheet(Theme.btn_primary())
         close.clicked.connect(self.accept)
         row = QHBoxLayout()
@@ -168,7 +169,7 @@ class LedgerDialog(QDialog):
         self.table.setMinimumHeight(260)
         v.addWidget(self.table, 1)
         v.addWidget(QLabel(f"Closing balance: {money(ledger.get('closing_balance')) or '₹0.00'}", styleSheet=f"font-weight: 700; color: {Colors.TEXT_PRIMARY};"))
-        close = QPushButton("Close")
+        close = IconButton("Close")
         close.setStyleSheet(Theme.btn_primary())
         close.clicked.connect(self.accept)
         row = QHBoxLayout()
@@ -231,7 +232,7 @@ class FinanceScreen(QWidget):
         self.from_edit, self.to_edit = self._date_box(), self._date_box()
         for w in (QLabel("From", styleSheet=Theme.label()), self.from_edit, QLabel("to", styleSheet=Theme.label()), self.to_edit):
             head.addWidget(w)
-        refresh = QPushButton("🔄  Refresh")
+        refresh = IconButton("🔄  Refresh")
         refresh.setStyleSheet(Theme.btn_secondary())
         refresh.clicked.connect(self.refresh_async)
         head.addWidget(refresh)
@@ -399,7 +400,7 @@ class FinanceScreen(QWidget):
         self.entries_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self.entries_table.cellDoubleClicked.connect(self._open_entry)
         v.addWidget(self.entries_table, 1)
-        self.more_btn = QPushButton("Show more entries")
+        self.more_btn = IconButton("Show more entries")
         self.more_btn.setStyleSheet(Theme.btn_secondary())
         self.more_btn.clicked.connect(self._load_more)
         self.more_btn.setVisible(False)
