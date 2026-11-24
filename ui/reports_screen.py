@@ -41,7 +41,7 @@ class ReportsScreen(QWidget):
 
         # Header
         header_row = QHBoxLayout()
-        header = QLabel("📊  Reports")
+        header = QLabel("Reports")
         header.setStyleSheet(Theme.heading(Fonts.HEADING_LG))
         header_row.addWidget(header)
         header_row.addStretch()
@@ -80,7 +80,7 @@ class ReportsScreen(QWidget):
         layout.addLayout(cards_grid)
 
         # Low stock alerts
-        alert_header = QLabel("⚠️  Low Stock Alerts")
+        alert_header = QLabel("Low Stock Alerts")
         alert_header.setStyleSheet(Theme.subheading())
         layout.addWidget(alert_header)
 
@@ -113,7 +113,7 @@ class ReportsScreen(QWidget):
                     widget.hide()
 
             # Show lock icon and message
-            lock_label = QLabel("🛡️ Permission Denied")
+            lock_label = QLabel("Permission Denied")
             lock_label.setStyleSheet(Theme.heading(Fonts.HEADING_XL))
             lock_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 

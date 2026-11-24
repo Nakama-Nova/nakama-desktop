@@ -146,7 +146,7 @@ class LoginWindow(QWidget):
 
         if insecure_remote(BASE_URL):
             warn = Alert(
-                "⚠ This server address is not encrypted (http://). Passwords and bills could be seen on "
+                "This server address is not encrypted (http://). Passwords and bills could be seen on "
                 "the network. Ask for an https:// address.",
                 "danger",
             )

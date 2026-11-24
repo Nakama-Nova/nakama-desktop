@@ -255,7 +255,7 @@ class SalesScreen(QWidget):
         self.search_btn.setEnabled(can_bill)
 
         if not can_bill:
-            self.subtitle_lbl = QLabel("⚠️ You do not have permission to create bills.")
+            self.subtitle_lbl = QLabel("You do not have permission to create bills.")
             self.subtitle_lbl.setStyleSheet(
                 f"color: {Colors.RED}; font-size: {Fonts.BODY}px;"
             )
@@ -338,7 +338,7 @@ class SalesScreen(QWidget):
         if customer:
             self.customer_input.setText(customer.get("name", ""))
             QMessageBox.information(
-                self, "Found ✅", f"Buyer found: {customer.get('name')}"
+                self, "Buyer found", f"Buyer found: {customer.get('name')}"
             )
         else:
             QMessageBox.information(
@@ -516,7 +516,7 @@ class SalesScreen(QWidget):
         )
         QMessageBox.information(
             self,
-            "Saved offline 📴",
+            "Saved offline",
             f"No internet, so this bill is saved on this computer (ref {ref}).\n\n"
             "It is sent automatically when the connection is back, and the "
             "official bill number is given then. A printed bill is not "
@@ -599,7 +599,7 @@ class SalesScreen(QWidget):
 
         QMessageBox.information(
             self,
-            "Bill Created ✅",
+            "Bill created",
             f"Bill {invoice_number} created successfully!",
         )
 

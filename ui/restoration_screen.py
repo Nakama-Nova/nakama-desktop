@@ -320,7 +320,7 @@ class RestorationScreen(QWidget):
         root.setContentsMargins(32, 28, 32, 28)
         root.setSpacing(14)
         head = QHBoxLayout()
-        title = QLabel("🏛️  Restoration")
+        title = QLabel("Restoration")
         title.setStyleSheet(Theme.heading(Fonts.HEADING_LG))
         head.addWidget(title)
         head.addStretch()

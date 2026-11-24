@@ -188,7 +188,7 @@ class SalesHistoryScreen(QWidget):
         layout.setSpacing(16)
 
         header_row = QHBoxLayout()
-        header = QLabel("📜  Bill History")
+        header = QLabel("Bill History")
         header.setStyleSheet(Theme.heading(Fonts.HEADING_LG))
         header_row.addWidget(header)
         header_row.addStretch()
@@ -206,7 +206,7 @@ class SalesHistoryScreen(QWidget):
         filter_row = QHBoxLayout()
         filter_row.setSpacing(10)
         self.search = QLineEdit()
-        self.search.setPlaceholderText("🔍  Search by bill number...")
+        self.search.setPlaceholderText("Search by bill number...")
         self.search.setStyleSheet(Theme.input_style())
         self.search.textChanged.connect(lambda _t: self._show())
         filter_row.addWidget(self.search, 1)
@@ -357,7 +357,7 @@ class SalesHistoryScreen(QWidget):
         if not items:
             QMessageBox.information(self, "No Items", "No items found for this bill.")
             return
-        QMessageBox.information(self, "📋 Bill Details", bill_text(sale, items) + ("\n\nThis bill was deleted (cancelled)." if is_cancelled(sale) else ""))
+        QMessageBox.information(self, "Bill details", bill_text(sale, items) + ("\n\nThis bill was deleted (cancelled)." if is_cancelled(sale) else ""))
 
     def _reprint_invoice(self, sale):
         inv_num = sale.get("invoice_number")

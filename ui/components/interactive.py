@@ -56,6 +56,7 @@ class ChipBar(QScrollArea):
         self._group.setExclusive(True)
         self._buttons: dict[str, QPushButton] = {}
         self._current = ""
+        self.hide()  # shown by set_chips() once there is something to choose
 
     @staticmethod
     def _css() -> str:
@@ -101,6 +102,7 @@ class ChipBar(QScrollArea):
             self._buttons[key] = b
             self._row.addWidget(b)
         self._row.addStretch()
+        self.setVisible(bool(chips))  # no chips yet (the data has not arrived): no empty strip
 
     def choose(self, key: str) -> None:
         if key not in self._buttons:

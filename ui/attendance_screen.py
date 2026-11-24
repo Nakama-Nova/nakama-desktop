@@ -42,7 +42,7 @@ class AttendanceScreen(QWidget):
         layout.setSpacing(20)
 
         # Header
-        header = QLabel("👷 Attendance")
+        header = QLabel("Attendance")
         header.setStyleSheet(f"font-size: 24px; font-weight: bold; color: {Colors.TEXT_PRIMARY};")
         layout.addWidget(header)
 
@@ -166,11 +166,11 @@ class AttendanceScreen(QWidget):
         the owner to review), or without a position (a check-in at the desk)."""
         status = record.get("location_status")
         if status == "off_site":
-            cell = QTableWidgetItem("⚠️ Off site")
+            cell = QTableWidgetItem("Off site")
             cell.setToolTip("Marked from a phone that was outside every plant unit. The owner reviews these.")
             cell.setForeground(QColor(Colors.DANGER))
         elif status == "on_site":
-            cell = QTableWidgetItem("📍 On site")
+            cell = QTableWidgetItem("On site")
         else:
             cell = QTableWidgetItem("-")
         return cell

@@ -183,11 +183,11 @@ class DashboardWindow(QWidget):
         # Update greeting dynamically
         hour = datetime.now().hour
         if hour < 12:
-            greeting = "Good Morning! ☀️"
+            greeting = "Good morning"
         elif hour < 17:
-            greeting = "Good Afternoon! 👋"
+            greeting = "Good afternoon"
         else:
-            greeting = "Good Evening! 🌙"
+            greeting = "Good evening"
         self.greeting_lbl.setText(greeting)
 
         role = Session.get_role()

@@ -5,7 +5,8 @@ Reusable MetricCard widget for displaying KPI values: a Bootstrap-style card wit
 coloured accent on its left edge, a small title and a large value.
 """
 
-from PyQt6.QtWidgets import QFrame, QVBoxLayout, QLabel
+from PyQt6.QtWidgets import QFrame, QHBoxLayout, QVBoxLayout, QLabel
+from ui.icons import EMOJI, pixmap as icon_pixmap
 from ui.theme import Colors, Fonts, Radius, Spacing
 
 
@@ -39,9 +40,14 @@ class MetricCard(QFrame):
         layout.setContentsMargins(Spacing.MD + 4, Spacing.MD, Spacing.MD, Spacing.MD)
         layout.setSpacing(Spacing.XS)
 
-        # Title row (with optional emoji icon)
-        display_title = f"{icon}  {title}" if icon else title
-        self.title_lbl = QLabel(display_title)
+        # Title row: a small line icon in the card's colour (the icon is given as an emoji, see
+        # ui/icons.EMOJI) and the title
+        self.icon_lbl = None
+        name = EMOJI.get(icon.lstrip()[:1]) if icon else None
+        if name:
+            self.icon_lbl = QLabel()
+            self.icon_lbl.setPixmap(icon_pixmap(name, color, 16))
+        self.title_lbl = QLabel(title)
         self.title_lbl.setStyleSheet(f"""
             font-size: {Fonts.BODY_SM}px;
             color: {Colors.TEXT_SECONDARY};
@@ -55,7 +61,12 @@ class MetricCard(QFrame):
             color: {color};
         """)
 
-        layout.addWidget(self.title_lbl)
+        row = QHBoxLayout()
+        row.setSpacing(Spacing.SM)
+        if self.icon_lbl is not None:
+            row.addWidget(self.icon_lbl)
+        row.addWidget(self.title_lbl, 1)
+        layout.addLayout(row)
         layout.addWidget(self.value_lbl)
 
     def set_value(self, value) -> None:
