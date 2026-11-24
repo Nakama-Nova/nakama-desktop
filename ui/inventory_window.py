@@ -25,6 +25,9 @@ from PyQt6.QtWidgets import (
 
 from services import pricing
 from ui.icons import IconButton
+from ui.components.bootstrap import Grid12
+from ui.components.metric_card import MetricCard
+from ui.components.pills import STOCK_TONES, PillDelegate
 from services.money import inr
 from services.inventory_service import InventoryService
 from services.session import Session
@@ -40,7 +43,7 @@ from ui.stock_dialogs import (
     PhotosDialog,
 )
 from ui.item_scan import ItemScanDialog, view_3d
-from ui.theme import Colors, Fonts, Theme
+from ui.theme import Colors, Fonts, Spacing, Theme
 from ui.workers import load_async
 
 
@@ -92,6 +95,17 @@ class InventoryWindow(QWidget):
         )
         layout.addLayout(header_row)
 
+        # The shop's stock at a glance, before the list
+        cards = Grid12(gap=Spacing.MD)
+        self.card_products = MetricCard("Products", "0", Colors.BRAND_BROWN, icon="\U0001F4E6")
+        self.card_low = MetricCard("Running low", "0", Colors.ORANGE, icon="\u26a0\ufe0f")
+        self.card_out = MetricCard("Out of stock", "0", Colors.RED, icon="\U0001F6AB")
+        self.card_value = MetricCard("Stock value", "\u20b90", Colors.GREEN, icon="\U0001F4B0")
+        self.card_value.setToolTip("What the stock on the shelves would sell for, before GST")
+        for card in (self.card_products, self.card_low, self.card_out, self.card_value):
+            cards.add(card, lg=3, md=6, sm=12)
+        layout.addWidget(cards)
+
         find_row = QHBoxLayout()
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Search by name or code...")
@@ -127,6 +141,7 @@ class InventoryWindow(QWidget):
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         Theme.style_table(self.table)
         self.table.horizontalHeaderItem(self.COL_PRICE).setToolTip("Price with GST")
+        self.table.setItemDelegateForColumn(self.COL_STATUS, PillDelegate(STOCK_TONES, self.table))
         self.table.setColumnHidden(self.COL_GST, True)  # the price already includes it; the rate is in the product's form
         self.table.verticalHeader().setDefaultSectionSize(52)
         self.table.verticalScrollBar().valueChanged.connect(self._ensure_actions)
@@ -159,7 +174,17 @@ class InventoryWindow(QWidget):
             )
             return
         self._all_items = items
+        self._show_summary(items)
         self._filter_table(self.search_input.text())
+
+    def _show_summary(self, items: list[dict]) -> None:
+        out = sum(1 for i in items if int(i.get("current_stock") or 0) <= 0)
+        low = sum(1 for i in items if 0 < int(i.get("current_stock") or 0) <= int(i.get("min_stock") or 0))
+        value = sum(max(int(i.get("current_stock") or 0), 0) * float(i.get("selling_price") or 0) for i in items)
+        self.card_products.set_value(len(items))
+        self.card_low.set_value(low)
+        self.card_out.set_value(out)
+        self.card_value.set_value(inr(value, 0))
 
     ACTION_ROWS_AHEAD = 10  # rows beyond the visible ones that already have their buttons
 
@@ -226,13 +251,7 @@ class InventoryWindow(QWidget):
             elif col in (self.COL_GST, self.COL_STOCK, self.COL_STATUS):
                 cell.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             if col == self.COL_STATUS:
-                cell.setBackground(
-                    QColor(Colors.LOW_STOCK_BG if low else Colors.SUCCESS_BG)
-                )
-                cell.setForeground(QColor(Colors.RED if stock_val <= 0 else Colors.ORANGE if low else Colors.SUCCESS))
-                font = cell.font()
-                font.setBold(True)
-                cell.setFont(font)
+                pass  # drawn as a pill by PillDelegate, from the text
             if col == self.COL_STOCK and held:
                 cell.setForeground(QColor(Colors.ORANGE))
                 cell.setToolTip(
