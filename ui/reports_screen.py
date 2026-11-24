@@ -20,6 +20,7 @@ from PyQt6.QtGui import QColor
 
 from ui.theme import Theme, Colors, Fonts
 from ui.components.metric_card import MetricCard
+from services.money import inr
 from services.report_service import ReportService
 from ui.workers import load_async
 
@@ -144,7 +145,7 @@ class ReportsScreen(QWidget):
         if dash:
             self.card_today_orders.set_value(dash.get("today_sales_count", 0))
             self.card_today_revenue.set_value(
-                f"₹{float(dash.get('today_revenue', 0)):,.2f}"
+                f"{inr(float(dash.get('today_revenue', 0)))}"
             )
             self.card_low_stock.set_value(dash.get("low_stock_count", 0))
 
@@ -152,9 +153,9 @@ class ReportsScreen(QWidget):
         if sales:
             self.card_all_orders.set_value(sales.get("total_orders", 0))
             self.card_total_revenue.set_value(
-                f"₹{float(sales.get('total_revenue', 0)):,.2f}"
+                f"{inr(float(sales.get('total_revenue', 0)))}"
             )
-            self.card_total_tax.set_value(f"₹{float(sales.get('total_tax', 0)):,.2f}")
+            self.card_total_tax.set_value(f"{inr(float(sales.get('total_tax', 0)))}")
 
         # Low stock items
         self.table.setRowCount(0)

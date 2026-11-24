@@ -26,6 +26,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from services.money import inr
 from services.api_client import APIError, ForbiddenError
 from services.iam_service import BUILTIN_ROLES, IamService
 from services.places_service import PlacesService
@@ -338,7 +339,7 @@ class StaffScreen(QWidget):
                 u["username"],
                 self._role_words.get(u.get("role"), u.get("role") or ""),
                 u.get("phone") or "",
-                f"₹{float(u.get('base_daily_wage') or 0):,.0f}",
+                f"{inr(float(u.get('base_daily_wage') or 0), 0)}",
                 "Active" if u.get("is_active") else "Switched off",
             ]
             for c, text in enumerate(values):

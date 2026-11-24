@@ -316,6 +316,8 @@ class PlacesScreen(QWidget):
         layout.addWidget(hint)
 
         self.tabs = QTabWidget()
+
+        Theme.style_tabs(self.tabs)
         layout.addWidget(self.tabs, 1)
 
         # -- what is where

@@ -129,14 +129,15 @@ def test_a_table_that_always_has_rows_never_builds_an_empty_state(qapp):
     table.close()
 
 
-def test_main_window_has_a_navbar_with_the_page_title(qapp):
+def test_main_window_has_a_navbar_and_the_pages_carry_their_own_title(qapp):
     from ui.main_window import MainWindow
 
     w = MainWindow()
     w._sync_timer.stop()
-    assert w.navbar.title_lbl.text() == "Home"
+    assert w.navbar.title == "Home"
     w._switch_page(15, refresh=False)
-    assert w.navbar.title_lbl.text() == "Orders"
+    assert w.navbar.title == "Orders"
+    assert not hasattr(w.navbar, "title_lbl")  # the heading is on the page, not repeated up here
     assert not w.logo_lbl.pixmap().isNull()  # the logo is in the sidebar header
     assert w.role_badge.text() == "Owner"
     assert hasattr(w.orders_view.table, "viewport")

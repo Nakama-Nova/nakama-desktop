@@ -20,6 +20,7 @@ from ui.theme import Theme, Colors, Fonts, Spacing
 from ui.components.bootstrap import Card, Grid12
 from ui.components.carvings import CarvingRow
 from ui.components.metric_card import MetricCard
+from services.money import inr
 from services.report_service import ReportService
 from services.event_bus import EventBus, SALE_CREATED
 from services.session import Session
@@ -27,7 +28,7 @@ from ui.workers import load_async
 
 
 def _money(value) -> str:
-    return f"₹{float(value or 0):,.0f}"
+    return f"{inr(float(value or 0), 0)}"
 
 
 def attention_lines(attention: dict) -> list[tuple[str, str, str]]:
@@ -210,11 +211,11 @@ class DashboardWindow(QWidget):
         if summary:
             self.card_sales.set_value(summary.get("today_sales_count", 0))
             self.card_revenue.set_value(
-                f"₹{float(summary.get('today_revenue', 0)):,.2f}"
+                f"{inr(float(summary.get('today_revenue', 0)))}"
             )
             self.card_low_stock.set_value(summary.get("low_stock_count", 0))
             self.card_wages.set_value(
-                f"₹{float(summary.get('pending_wages_total', 0)):,.2f}"
+                f"{inr(float(summary.get('pending_wages_total', 0)))}"
             )
 
     def _show_attention(self, attention):

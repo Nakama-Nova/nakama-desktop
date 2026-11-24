@@ -30,6 +30,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from services.money import inr
 from services.places_service import PlacesService
 from services.registers_service import RegistersService
 from services.session import Session
@@ -65,7 +66,7 @@ def money(value) -> str:
     if value in (None, ""):
         return ""
     v = float(value)
-    return f"{'-' if v < 0 else ''}₹{abs(v):,.2f}"
+    return f"{'-' if v < 0 else ''}{inr(abs(v))}"
 
 
 def parse_date(text) -> date | None:
@@ -292,6 +293,7 @@ class MachineDetailDialog(QDialog):
         summary.setWordWrap(True)
         root.addWidget(summary)
         tabs = QTabWidget()
+        Theme.style_tabs(tabs)
         root.addWidget(tabs, 1)
         t = _table(["Date", "Kind", "Cost", "Done by", "What was done"])
         t.setRowCount(len(maintenance))
@@ -440,6 +442,8 @@ class MachinesScreen(QWidget):
         layout.addWidget(self.alert)
 
         self.tabs = QTabWidget()
+
+        Theme.style_tabs(self.tabs)
         self.tabs.currentChanged.connect(self._tab_changed)
         layout.addWidget(self.tabs, 1)
 

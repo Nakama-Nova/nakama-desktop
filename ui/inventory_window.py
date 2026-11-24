@@ -24,6 +24,7 @@ from PyQt6.QtWidgets import (
 )
 
 from services import pricing
+from services.money import inr
 from services.inventory_service import InventoryService
 from services.session import Session
 from ui.components.place_picker import fetch_places
@@ -208,10 +209,10 @@ class InventoryWindow(QWidget):
             item["name"],
             self.TYPE_WORDS.get(item.get("item_type") or "furniture", "Furniture"),
             item.get("sku") or "",
-            f"₹{pricing.price_with_gst(item):,.2f}",
+            f"{inr(pricing.price_with_gst(item))}",
             f"{float(item.get('gst_percent') or 0):g}%" if float(item.get("gst_percent") or 0) else "-",
             f"{stock_val}  ·  {held} held" if held else str(stock_val),
-            "⚠️ Low" if low else "✅ OK",
+            "Out of stock" if stock_val <= 0 else "Running low" if low else "In stock",
         ]
         for col, text in enumerate(values):
             cell = QTableWidgetItem(text)
@@ -225,6 +226,10 @@ class InventoryWindow(QWidget):
                 cell.setBackground(
                     QColor(Colors.LOW_STOCK_BG if low else Colors.SUCCESS_BG)
                 )
+                cell.setForeground(QColor(Colors.RED if stock_val <= 0 else Colors.ORANGE if low else Colors.SUCCESS))
+                font = cell.font()
+                font.setBold(True)
+                cell.setFont(font)
             if col == self.COL_STOCK and held:
                 cell.setForeground(QColor(Colors.ORANGE))
                 cell.setToolTip(

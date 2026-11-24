@@ -29,9 +29,11 @@ from PyQt6.QtWidgets import QApplication
 
 from services import notifications_service as ns
 from ui.assets import logo_path, scaled_pixmap
-from ui.components.bootstrap import Badge, Button
+from ui.components.bootstrap import Button
 from ui.components.carvings import attach_empty_state
 from ui.components.navbar import Navbar
+from ui.components.goto_dialog import GoToDialog
+from ui import icons
 from ui.theme import Theme, Colors, Fonts, Radius, Spacing
 
 from ui.dashboard_window import DashboardWindow
@@ -252,7 +254,10 @@ class MainWindow(QMainWindow):
         sidebar_layout.addSpacing(Spacing.SM)
         self._nav_buttons: list[QPushButton] = []
         self._nav_mapping: dict[int, QPushButton] = {}
-        self._headings: list[QLabel] = []
+        self._headings: list[QPushButton] = []
+        self._groups: dict[str, list[QPushButton]] = {}
+        self._collapsed: set[str] = set()
+        self._page_group: dict[int, str] = {}
         self._compact = False
 
         nav_box = QWidget()
@@ -269,6 +274,9 @@ class MainWindow(QMainWindow):
                 nav_layout.addWidget(self._headings[-1])
             current_section = section
             btn = self._create_nav_button(icon, label, index)
+            if section:
+                self._groups.setdefault(section, []).append(btn)
+                self._page_group[index] = section
             self._nav_buttons.append(btn)
             self._nav_mapping[index] = btn
             nav_layout.addWidget(btn)
@@ -287,21 +295,13 @@ class MainWindow(QMainWindow):
         self.nav_scroll = nav_scroll
         sidebar_layout.addWidget(nav_scroll, 1)
 
-        # Everyone can change their own password
-        pw_btn = QPushButton("🔑  My password")
-        pw_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        pw_btn.setStyleSheet(self._footer_button_css())
-        pw_btn.clicked.connect(lambda: change_my_password(self))
-        sidebar_layout.addWidget(pw_btn)
-        self._pw_btn = pw_btn
-
         # Version, and a manual "check for updates"
         self.update_btn = QPushButton(f"⬆  Updates  ·  v{APP_VERSION}")
         self.update_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.update_btn.setStyleSheet(self._footer_button_css())
         self.update_btn.clicked.connect(lambda: self.updater.check(manual=True))
         sidebar_layout.addWidget(self.update_btn)
-        self._footer = [(pw_btn, "🔑", "My password"), (self.update_btn, "⬆", f"Updates  ·  v{APP_VERSION}")]
+        self._footer = [(self.update_btn, "⬆", f"Updates  ·  v{APP_VERSION}")]
 
         main_layout.addWidget(self.sidebar)
 
@@ -315,13 +315,15 @@ class MainWindow(QMainWindow):
         # Navbar: page title on the left; notifications, who is signed in, sign out on the right
         self.navbar = Navbar()
         # Notifications: a count of what is new, and the list
-        self.bell_btn = Button("🔔  Notifications", "secondary", "sm", outline=True)
+        self.bell_btn = Button("🔔", "secondary", "sm", outline=True)
+        self.bell_btn.setToolTip("Notifications")
         self.navbar.add_right(self.bell_btn)
-        self.role_badge = Badge(self._role_text(), "primary")
+        # Who is signed in: their role, and the menu with change password and sign out
+        self.role_badge = self.navbar.make_account_button(
+            self._role_text(), lambda: change_my_password(self), self._handle_logout
+        )
         self.navbar.add_right(self.role_badge)
-        logout_btn = Button("🚪  Sign Out", "danger", "sm", outline=True)
-        logout_btn.clicked.connect(self._handle_logout)
-        self.navbar.add_right(logout_btn)
+        self.navbar.goto_requested.connect(self._open_goto)
         content_layout.addWidget(self.navbar)
         on_busy_changed(self.navbar.set_busy)  # "Loading…" while a screen fetches in the background
 
@@ -398,6 +400,17 @@ class MainWindow(QMainWindow):
         self._sync_timer.timeout.connect(self._sync_async)
         self._sync_timer.start(SYNC_INTERVAL_MS)
 
+        # The connection chip in the top bar: is the server reachable, and how many bills wait
+        self._conn_timer = QTimer(self)
+        self._conn_timer.timeout.connect(self._refresh_connection)
+        self._conn_timer.start(5000)
+        self._refresh_connection()
+        self.statusBar().setSizeGripEnabled(False)
+        self.statusBar().setStyleSheet(
+            f"QStatusBar {{ background: {Colors.CARD_BG}; color: {Colors.TEXT_SECONDARY};"
+            f" border-top: 1px solid {Colors.CARD_BORDER}; font-size: {Fonts.BODY_SM}px; }}"
+        )
+
         # Desktop notifications (website orders, money received, low stock, finished scans)
         self.notifier = Notifier(self)
         self.notifier.changed.connect(self._show_unread)
@@ -413,9 +426,23 @@ class MainWindow(QMainWindow):
         # full interval for the first sync.
         QTimer.singleShot(2000, self._sync_async)
 
+    def _refresh_connection(self):
+        """Online unless the last request found the server down; waiting = bills not yet sent."""
+        import time
+
+        from database.outbox_repository import OutboxRepository
+        from services import api_client
+
+        try:
+            waiting = len(OutboxRepository().get_pending())
+        except Exception:  # a locked or missing local database must not break the window
+            waiting = 0
+        self.navbar.set_connection(time.monotonic() >= api_client._down_until, waiting)
+
     def _show_unread(self):
         n = self.notifier.unread
-        self.bell_btn.setText("🔔  Notifications" + (f"  ({n})" if n else ""))
+        self.bell_btn.setText(f"🔔  {n}" if n else "🔔")
+        self.bell_btn.setToolTip(f"Notifications, {n} new" if n else "Notifications")
 
     def _open_screen(self, screen: str):
         """Open the screen a notification is about, if this user has it in the side panel."""
@@ -511,23 +538,52 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
     # Nav button factory
     # ------------------------------------------------------------------
-    def _section_heading(self, text: str) -> QLabel:
-        heading = QLabel(text.upper())
+    def _section_heading(self, text: str) -> QPushButton:
+        """A section title that folds its entries away when clicked."""
+        heading = QPushButton(text)
+        heading.setProperty("section", text)
+        heading.setCursor(Qt.CursorShape.PointingHandCursor)
         heading.setStyleSheet(
-            f"color: {Colors.SIDEBAR_HEADING}; font-size: 11px; font-weight: 700; letter-spacing: 1px;"
-            f" padding: {Spacing.MD}px 12px {Spacing.XS}px 12px; background: transparent;"
+            f"QPushButton {{ color: {Colors.SIDEBAR_HEADING}; font-size: {Fonts.BODY_SM}px; font-weight: 600;"
+            f" padding: {Spacing.MD}px 12px {Spacing.XS}px 12px; background: transparent; border: none;"
+            " text-align: left; }"
+            f"QPushButton:hover {{ color: {Colors.TEXT_PRIMARY}; }}"
         )
+        heading.clicked.connect(lambda _=False, name=text: self._toggle_group(name))
+        self._set_heading_text(heading, text)
         return heading
 
+    def _set_heading_text(self, heading: QPushButton, name: str) -> None:
+        heading.setText(f"{'+' if name in self._collapsed else '−'}  {name}")  # a plus opens, a minus folds
+
+    def _toggle_group(self, name: str) -> None:
+        self._collapsed ^= {name}
+        self._apply_groups()
+
+    def _apply_groups(self) -> None:
+        """Show each group's entries unless it is folded (a narrow, icons-only sidebar shows all)."""
+        for heading in self._headings:
+            name = heading.property("section")
+            self._set_heading_text(heading, name)
+            for btn in self._groups.get(name, []):
+                btn.setVisible(self._compact or name not in self._collapsed)
+
     def _create_nav_button(self, icon: str, label: str, index: int) -> QPushButton:
-        btn = QPushButton(f"  {icon}   {label}")
+        btn = QPushButton(f"  {label}")
         btn.setProperty("icon_text", icon)
         btn.setProperty("label_text", label)
+        btn.setIconSize(QSize(18, 18))
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
         btn.setFixedHeight(40)
-        btn.setStyleSheet(self._nav_button_css(active=False))
+        self._style_nav(btn, active=False)
         btn.clicked.connect(lambda _, idx=index: self._switch_page(idx))
         return btn
+
+    def _style_nav(self, btn: QPushButton, active: bool) -> None:
+        """The button's look and its line icon, in the colour the state needs."""
+        btn.setStyleSheet(self._nav_button_css(active))
+        colour = Colors.SIDEBAR_ACTIVE_TEXT if active else Colors.SIDEBAR_TEXT
+        btn.setIcon(icons.icon(icons.for_label(btn.property("label_text")), colour))
 
     def _nav_button_css(self, active: bool) -> str:
         align = "center" if self._compact else "left"
@@ -609,7 +665,13 @@ class MainWindow(QMainWindow):
 
         # Update active state on nav buttons
         for i, btn in self._nav_mapping.items():
-            btn.setStyleSheet(self._nav_button_css(active=(i == index)))
+            self._style_nav(btn, active=(i == index))
+        group = self._page_group.get(index)
+        if group in self._collapsed:  # never leave the open page hidden in a folded section
+            self._collapsed.discard(group)
+            self._apply_groups()
+        if index in self._nav_mapping:
+            self.nav_scroll.ensureWidgetVisible(self._nav_mapping[index], 0, Spacing.XL)
 
         if refresh:
             self._refresh_current()
@@ -628,12 +690,13 @@ class MainWindow(QMainWindow):
         self._brand_layout.setContentsMargins(m, Spacing.MD, m, Spacing.MD)
         for w in self._brand_words + self._headings:
             w.setVisible(not on)
+        self._apply_groups()
         current = self.content_stack.currentIndex()
         for index, btn in self._nav_mapping.items():
             icon, label = btn.property("icon_text"), btn.property("label_text")
-            btn.setText(icon if on else f"  {icon}   {label}")
+            btn.setText("" if on else f"  {label}")
             btn.setToolTip(label if on else "")
-            btn.setStyleSheet(self._nav_button_css(active=(index == current)))
+            self._style_nav(btn, active=(index == current))
         for btn, icon, words in self._footer:
             btn.setText(icon if on else f"{icon}  {words}")
             btn.setToolTip(words if on else "")
@@ -642,7 +705,7 @@ class MainWindow(QMainWindow):
     def _install_shortcuts(self):
         """F5 refreshes this screen, Ctrl+F jumps to its search box, Ctrl+1..9 open the first nine
         sidebar entries (the ones this role can see, in the order shown)."""
-        keys = {"F5": self._refresh_current, "Ctrl+F": self._focus_search}
+        keys = {"F5": self._refresh_current, "Ctrl+F": self._focus_search, "Ctrl+K": self._open_goto}
         for n in range(1, 10):
             keys[f"Ctrl+{n}"] = lambda n=n: self._go_to_nth(n)
         self._shortcuts = []
@@ -650,6 +713,13 @@ class MainWindow(QMainWindow):
             sc = QShortcut(QKeySequence(key), self)
             sc.activated.connect(slot)
             self._shortcuts.append(sc)
+
+    def _open_goto(self):
+        """Ctrl+K: type a screen's name and press Enter."""
+        entries = [(label, index) for _, label, index in self._get_allowed_nav_items()]
+        dialog = GoToDialog(entries, self)
+        if dialog.exec() and dialog.chosen is not None:
+            self._switch_page(dialog.chosen)
 
     def _go_to_nth(self, n: int):
         if n <= len(self._nav_buttons):
