@@ -24,6 +24,7 @@ from PyQt6.QtWidgets import (
 )
 
 from services import pricing
+from ui.icons import IconButton
 from services.money import inr
 from services.inventory_service import InventoryService
 from services.session import Session
@@ -74,7 +75,7 @@ class InventoryWindow(QWidget):
         header_row.addStretch()
 
         def head_button(text, style, slot, visible=True):
-            b = QPushButton(text)
+            b = IconButton(text)
             b.setCursor(Qt.CursorShape.PointingHandCursor)
             b.setStyleSheet(style)
             b.clicked.connect(slot)
@@ -256,7 +257,7 @@ class InventoryWindow(QWidget):
         if self.can_scan and item.get("item_type") == "sculpture":
             buttons += [("📷 3D scan", self._scan_3d), ("🧊 View 3D", self._view_3d)]
         for text, slot in buttons:
-            b = QPushButton(text)
+            b = IconButton(text)
             b.setCursor(Qt.CursorShape.PointingHandCursor)
             b.setFixedHeight(30)
             if text in ("🕘", "🗑️"):

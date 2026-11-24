@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ui.icons import IconButton
 from ui.theme import Colors, Fonts, Spacing, Theme
 
 STATE_COLOURS = {
@@ -90,7 +91,7 @@ class ChipBar(QScrollArea):
         if self._current not in keys:
             self._current = keys[0] if keys else ""
         for key, label, count in chips:
-            b = QPushButton(f"{label}  ·  {count}")
+            b = IconButton(f"{label}  ·  {count}")
             b.setCheckable(True)
             b.setCursor(Qt.CursorShape.PointingHandCursor)
             b.setStyleSheet(self._css())
@@ -138,7 +139,7 @@ def action_buttons(actions: list[tuple[str, object, str]]) -> QWidget:
     h.setContentsMargins(4, 4, 4, 4)
     h.setSpacing(6)
     for text, slot, tip in actions:
-        b = QPushButton(text)
+        b = IconButton(text)
         b.setFixedHeight(30)
         b.setStyleSheet(Theme.btn_table_action())
         b.setCursor(Qt.CursorShape.PointingHandCursor)

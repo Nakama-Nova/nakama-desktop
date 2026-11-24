@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 
+from ui.icons import IconButton
 from ui.theme import Theme, Colors, Fonts
 from ui.errors import handle_permissions
 from services.customer_service import CustomerService
@@ -76,11 +77,11 @@ class CustomerDialog(QDialog):
         btn_row = QHBoxLayout()
         btn_row.setSpacing(10)
 
-        self.cancel_btn = QPushButton("Cancel")
+        self.cancel_btn = IconButton("Cancel")
         self.cancel_btn.setStyleSheet(Theme.btn_secondary())
         self.cancel_btn.clicked.connect(self.reject)
 
-        self.save_btn = QPushButton("💾  Save")
+        self.save_btn = IconButton("💾  Save")
         self.save_btn.setStyleSheet(Theme.btn_primary())
         self.save_btn.clicked.connect(self.accept)
 
@@ -118,7 +119,7 @@ class CustomersScreen(QWidget):
         header_row.addWidget(header)
         header_row.addStretch()
 
-        self.add_btn = QPushButton("➕  Add Buyer")
+        self.add_btn = IconButton("➕  Add Buyer")
         self.add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.add_btn.setStyleSheet(Theme.btn_primary())
         self.add_btn.clicked.connect(self.add_customer)
@@ -187,13 +188,13 @@ class CustomersScreen(QWidget):
             actions_layout.setContentsMargins(4, 4, 4, 4)
             actions_layout.setSpacing(6)
 
-            edit_btn = QPushButton("✏️ Edit")
+            edit_btn = IconButton("✏️ Edit")
             edit_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             edit_btn.setFixedHeight(28)
             edit_btn.setStyleSheet(Theme.btn_table_action())
             edit_btn.clicked.connect(lambda _, cust=c: self.edit_customer(cust))
 
-            del_btn = QPushButton("🗑️")
+            del_btn = IconButton("🗑️")
             del_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             del_btn.setFixedSize(36, 28)
             del_btn.setStyleSheet(f"""

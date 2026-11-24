@@ -30,6 +30,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ui.icons import IconButton
 from services.money import inr
 from services.places_service import PlacesService
 from services.registers_service import RegistersService
@@ -309,7 +310,7 @@ class MachineDetailDialog(QDialog):
             for c, text in enumerate([_stamp(r["started_at"]), _stamp(ended) if ended else "Still stopped", r.get("reason") or ""]):
                 d.setItem(i, c, QTableWidgetItem(text))
         tabs.addTab(d, f"Stoppages ({len(downtime)})")
-        close = QPushButton("Close")
+        close = IconButton("Close")
         close.setStyleSheet(Theme.btn_secondary())
         close.clicked.connect(self.accept)
         row = QHBoxLayout()
@@ -424,11 +425,11 @@ class MachinesScreen(QWidget):
         title.setStyleSheet(Theme.heading(Fonts.HEADING_LG))
         head.addWidget(title)
         head.addStretch()
-        refresh = QPushButton("🔄  Refresh")
+        refresh = IconButton("🔄  Refresh")
         refresh.setStyleSheet(Theme.btn_secondary())
         refresh.clicked.connect(self.refresh_async)
         head.addWidget(refresh)
-        self.add_btn = QPushButton("➕  Add")
+        self.add_btn = IconButton("➕  Add")
         self.add_btn.setStyleSheet(Theme.btn_primary())
         self.add_btn.clicked.connect(self._add)
         self.add_btn.setVisible(self._can_manage)
@@ -692,7 +693,7 @@ class MachinesScreen(QWidget):
             for c, text in enumerate([r.get("user_name") or "", _stamp(r["issued_at"]), back, outcome.get(r.get("outcome"), "")]):
                 table.setItem(i, c, QTableWidgetItem(text))
         v.addWidget(table)
-        close = QPushButton("Close")
+        close = IconButton("Close")
         close.setStyleSheet(Theme.btn_secondary())
         close.clicked.connect(d.accept)
         v.addWidget(close, 0, Qt.AlignmentFlag.AlignRight)

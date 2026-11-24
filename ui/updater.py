@@ -21,6 +21,7 @@ from PyQt6.QtWidgets import (
 )
 
 from services import update_service as svc
+from ui.icons import IconButton
 from services.version import APP_VERSION, is_release_build
 from ui.theme import Colors, Theme
 
@@ -77,11 +78,11 @@ class UpdateBanner(QFrame):
         self.text = QLabel("")
         row.addWidget(self.text)
         row.addStretch()
-        self.update_btn = QPushButton("⬆  Update now")
+        self.update_btn = IconButton("⬆  Update now")
         self.update_btn.setStyleSheet(Theme.btn_primary())
         self.update_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.update_btn.clicked.connect(self.update_clicked.emit)
-        later = QPushButton("Later")
+        later = IconButton("Later")
         later.setStyleSheet(Theme.btn_secondary())
         later.clicked.connect(self.hide)
         row.addWidget(self.update_btn)
