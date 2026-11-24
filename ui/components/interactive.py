@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ui.icons import IconButton
 from ui.theme import Colors, Fonts, Spacing, Theme
 
 STATE_COLOURS = {
@@ -55,6 +56,7 @@ class ChipBar(QScrollArea):
         self._group.setExclusive(True)
         self._buttons: dict[str, QPushButton] = {}
         self._current = ""
+        self.hide()  # shown by set_chips() once there is something to choose
 
     @staticmethod
     def _css() -> str:
@@ -90,7 +92,7 @@ class ChipBar(QScrollArea):
         if self._current not in keys:
             self._current = keys[0] if keys else ""
         for key, label, count in chips:
-            b = QPushButton(f"{label}  ·  {count}")
+            b = IconButton(f"{label}  ·  {count}")
             b.setCheckable(True)
             b.setCursor(Qt.CursorShape.PointingHandCursor)
             b.setStyleSheet(self._css())
@@ -100,6 +102,7 @@ class ChipBar(QScrollArea):
             self._buttons[key] = b
             self._row.addWidget(b)
         self._row.addStretch()
+        self.setVisible(bool(chips))  # no chips yet (the data has not arrived): no empty strip
 
     def choose(self, key: str) -> None:
         if key not in self._buttons:
@@ -138,7 +141,7 @@ def action_buttons(actions: list[tuple[str, object, str]]) -> QWidget:
     h.setContentsMargins(4, 4, 4, 4)
     h.setSpacing(6)
     for text, slot, tip in actions:
-        b = QPushButton(text)
+        b = IconButton(text)
         b.setFixedHeight(30)
         b.setStyleSheet(Theme.btn_table_action())
         b.setCursor(Qt.CursorShape.PointingHandCursor)

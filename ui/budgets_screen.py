@@ -22,6 +22,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ui.icons import IconButton
 from services.registers_service import RegistersService
 from services.session import Session
 from ui.components.bootstrap import Card, Grid12
@@ -127,7 +128,7 @@ class BudgetCard(Card):
         )
         worth.setStyleSheet(f"color: {Colors.TEXT_SECONDARY};")
         self.body.addWidget(worth)
-        self.set_btn = QPushButton("✏️  Change budget" if amount else "➕  Set a budget")
+        self.set_btn = IconButton("✏️  Change budget" if amount else "➕  Set a budget")
         self.set_btn.setStyleSheet(Theme.btn_table_action())
         self.set_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.set_btn.setVisible(can_set)
@@ -151,11 +152,11 @@ class BudgetsScreen(QWidget):
         layout.setContentsMargins(32, 28, 32, 28)
         layout.setSpacing(16)
         head = QHBoxLayout()
-        title = QLabel("🎯  Budgets")
+        title = QLabel("Budgets")
         title.setStyleSheet(Theme.heading(Fonts.HEADING_LG))
         head.addWidget(title)
         head.addStretch()
-        refresh = QPushButton("🔄  Refresh")
+        refresh = IconButton("🔄  Refresh")
         refresh.setStyleSheet(Theme.btn_secondary())
         refresh.clicked.connect(self.refresh_async)
         head.addWidget(refresh)

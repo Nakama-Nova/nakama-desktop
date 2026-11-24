@@ -65,10 +65,10 @@ def test_expenses_list_total_and_owner_only_cancel(qapp, fake, monkeypatch):
     assert s.table.item(0, s.COL_AMOUNT).text() == "₹6,000.00"
     assert s.table.item(0, s.COL_METHOD).text() == "UPI"
     assert "Total spent ₹6,900.50" in s.summary.text() and "Electricity ₹900.50" in s.summary.text()
-    assert buttons(s.table, 0, s.COL_ACTIONS) == ["✏️ Edit", "Cancel entry"]
+    assert buttons(s.table, 0, s.COL_ACTIONS) == ["Edit", "Cancel entry"]
     monkeypatch.setattr(Session, "_role", UserRole.MANAGER)
     s.refresh_data()
-    assert buttons(s.table, 0, s.COL_ACTIONS) == ["✏️ Edit"]  # only the owner cancels
+    assert buttons(s.table, 0, s.COL_ACTIONS) == ["Edit"]  # only the owner cancels
 
 
 def test_cancel_needs_a_reason(qapp, fake, monkeypatch, dialogs):

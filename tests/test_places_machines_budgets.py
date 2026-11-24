@@ -164,8 +164,8 @@ def test_a_stopped_machine_offers_working_again_and_a_working_one_offers_stopped
     def texts(row):
         return [b.text() for b in w.m_table.cellWidget(row, w.M_ACTIONS).findChildren(QPushButton)]
 
-    assert "⛔ Stopped" in texts(0) and "✅ Working" not in texts(0)
-    assert "✅ Working" in texts(1) and "⛔ Stopped" not in texts(1)
+    assert "Stopped" in texts(0) and "Working" not in texts(0)
+    assert "Working" in texts(1) and "Stopped" not in texts(1)
 
 
 def test_tool_chips_show_who_has_what(qapp, registers):

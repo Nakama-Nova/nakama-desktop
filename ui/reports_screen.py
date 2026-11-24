@@ -18,6 +18,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor
 
+from ui.icons import IconButton
 from ui.theme import Theme, Colors, Fonts
 from ui.components.metric_card import MetricCard
 from services.money import inr
@@ -40,12 +41,12 @@ class ReportsScreen(QWidget):
 
         # Header
         header_row = QHBoxLayout()
-        header = QLabel("📊  Reports")
+        header = QLabel("Reports")
         header.setStyleSheet(Theme.heading(Fonts.HEADING_LG))
         header_row.addWidget(header)
         header_row.addStretch()
 
-        refresh_btn = QPushButton("🔄  Refresh")
+        refresh_btn = IconButton("🔄  Refresh")
         refresh_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         refresh_btn.setStyleSheet(Theme.btn_secondary())
         refresh_btn.clicked.connect(self.refresh_data)
@@ -79,7 +80,7 @@ class ReportsScreen(QWidget):
         layout.addLayout(cards_grid)
 
         # Low stock alerts
-        alert_header = QLabel("⚠️  Low Stock Alerts")
+        alert_header = QLabel("Low Stock Alerts")
         alert_header.setStyleSheet(Theme.subheading())
         layout.addWidget(alert_header)
 
@@ -112,7 +113,7 @@ class ReportsScreen(QWidget):
                     widget.hide()
 
             # Show lock icon and message
-            lock_label = QLabel("🛡️ Permission Denied")
+            lock_label = QLabel("Permission Denied")
             lock_label.setStyleSheet(Theme.heading(Fonts.HEADING_XL))
             lock_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 

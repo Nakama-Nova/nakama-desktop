@@ -72,7 +72,7 @@ def test_lists_open_orders_by_default_with_customer_and_money(qapp, fake):
     s.refresh_data()
     assert s.table.rowCount() == 2  # the delivered one is not "open"
     texts = {s.table.item(r, s.COL_NO).text(): r for r in range(2)}
-    assert "ORD-2026-0002  🌐" in texts  # website orders are marked
+    assert "ORD-2026-0002  (website)" in texts  # website orders are marked
     r = texts["ORD-2026-0001"]
     assert s.table.item(r, s.COL_CUSTOMER).text() == "Lakshmi Devi  ·  9876543210"
     assert s.table.item(r, s.COL_AMOUNT).text() == "₹10,000.00" and s.table.item(r, s.COL_DUE).text() == "₹7,000.00"
@@ -302,7 +302,7 @@ def _payment_buttons(screen, row):
     from PyQt6.QtWidgets import QPushButton
 
     w = screen.payments.cellWidget(row, 4)
-    return [b.text() for b in w.findChildren(QPushButton)] if w else []
+    return [b.text() or b.toolTip() for b in w.findChildren(QPushButton)] if w else []
 
 
 def test_only_the_owner_corrects_or_voids_a_payment_and_a_void_one_is_marked(qapp, fake, monkeypatch):
@@ -311,7 +311,7 @@ def test_only_the_owner_corrects_or_voids_a_payment_and_a_void_one_is_marked(qap
     s = OrdersScreen()
     s.refresh_data()
     select(s, 0)
-    assert _payment_buttons(s, 0) == ["✏️", "🚫"]  # a live payment can be corrected or taken off
+    assert _payment_buttons(s, 0) == ["Correct this payment", "Take this payment off the order"]  # a live payment can be corrected or taken off
     assert _payment_buttons(s, 1) == []  # a void one is history
     assert s.payments.item(1, 3).text() == "VOID: entered twice" and s.payments.item(1, 1).font().strikeOut()
     monkeypatch.setattr(Session, "_role", UserRole.MANAGER)

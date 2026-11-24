@@ -32,6 +32,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ui.icons import IconButton
 from services.customer_service import CustomerService
 from services.inventory_service import InventoryService
 from services.letters_service import (
@@ -127,10 +128,10 @@ class QuotationDialog(QDialog):
         self.subject = _line(placeholder="optional, e.g. Quotation for temple door")
         self.lines = _table(["What", "Qty", "Price each (with GST)"], 0)
         self.lines.setMaximumHeight(170)
-        add = QPushButton("➕  Add a line")
+        add = IconButton("➕  Add a line")
         add.setStyleSheet(Theme.btn_secondary())
         add.clicked.connect(lambda _c=False: self._add_line())
-        drop = QPushButton("Remove last")
+        drop = IconButton("Remove last")
         drop.setStyleSheet(Theme.btn_secondary())
         drop.clicked.connect(self._remove_last)
         buttons = QHBoxLayout()
@@ -410,7 +411,7 @@ class LettersScreen(QWidget):
         root.setContentsMargins(32, 28, 32, 28)
         root.setSpacing(14)
         head = QHBoxLayout()
-        title = QLabel("✉️  Letters")
+        title = QLabel("Letters")
         title.setStyleSheet(Theme.heading(Fonts.HEADING_LG))
         head.addWidget(title)
         head.addStretch()
@@ -430,16 +431,16 @@ class LettersScreen(QWidget):
             self.status_filter.addItem(label, value)
         self.status_filter.currentIndexChanged.connect(lambda _i: self.refresh_data())
         head.addWidget(self.status_filter)
-        refresh = QPushButton("🔄  Refresh")
+        refresh = IconButton("🔄  Refresh")
         refresh.setStyleSheet(Theme.btn_secondary())
         refresh.clicked.connect(self.refresh_data)
         head.addWidget(refresh)
-        self.head_btn = QPushButton("🏷️  Letterhead")
+        self.head_btn = IconButton("🏷️  Letterhead")
         self.head_btn.setStyleSheet(Theme.btn_secondary())
         self.head_btn.setVisible(Session.can("letters:profile:write"))
         self.head_btn.clicked.connect(lambda _c=False: self._letterhead())
         head.addWidget(self.head_btn)
-        self.new_btn = QPushButton("➕  New letter")
+        self.new_btn = IconButton("➕  New letter")
         self.new_btn.setStyleSheet(Theme.btn_primary())
         self.new_menu = QMenu(self)
         self.new_actions = {}
@@ -463,11 +464,11 @@ class LettersScreen(QWidget):
         root.addWidget(self.table)
 
         actions = QHBoxLayout()
-        self.open_btn = QPushButton("📄  Open PDF")
-        self.save_btn = QPushButton("💾  Save PDF…")
-        self.void_btn = QPushButton("🚫  Void…")
+        self.open_btn = IconButton("📄  Open PDF")
+        self.save_btn = IconButton("💾  Save PDF…")
+        self.void_btn = IconButton("🚫  Void…")
         self.void_btn.setVisible(Session.can("letters:letter:void"))
-        self.delete_btn = QPushButton("🗑️  Delete")
+        self.delete_btn = IconButton("🗑️  Delete")
         self.delete_btn.setToolTip("Remove a void letter for good (void it first, with a reason)")
         self.delete_btn.setVisible(Session.can("letters:letter:delete"))
         for b, slot in ((self.open_btn, self._open), (self.save_btn, self._save), (self.void_btn, self._void), (self.delete_btn, self._delete)):

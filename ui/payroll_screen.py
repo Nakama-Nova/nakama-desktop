@@ -28,6 +28,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ui.icons import IconButton
 from services.money_service import MoneyService, rupees
 from services.session import Session
 from ui.components.metric_card import MetricCard
@@ -308,20 +309,20 @@ class PayrollScreen(QWidget):
         layout.setContentsMargins(32, 28, 32, 28)
         layout.setSpacing(16)
         head = QHBoxLayout()
-        title = QLabel("💰  Wages" if self.can_manage else "💰  My pay")
+        title = QLabel("Wages" if self.can_manage else "💰  My pay")
         title.setStyleSheet(Theme.heading(Fonts.HEADING_LG))
         head.addWidget(title)
         head.addStretch()
-        refresh = QPushButton("🔄  Refresh")
+        refresh = IconButton("🔄  Refresh")
         refresh.setStyleSheet(Theme.btn_secondary())
         refresh.clicked.connect(self.refresh_data)
         head.addWidget(refresh)
         if self.can_manage:
-            self.work_btn = QPushButton("➕  Work or bonus")
+            self.work_btn = IconButton("➕  Work or bonus")
             self.work_btn.setStyleSheet(Theme.btn_secondary())
             self.work_btn.clicked.connect(lambda _c=False: self._add_work(None))
             head.addWidget(self.work_btn)
-            self.advance_btn = QPushButton("🤝  Advance")
+            self.advance_btn = IconButton("🤝  Advance")
             self.advance_btn.setStyleSheet(Theme.btn_secondary())
             self.advance_btn.clicked.connect(lambda _c=False: self._advance(None))
             head.addWidget(self.advance_btn)
@@ -451,7 +452,7 @@ class PayrollScreen(QWidget):
             ("➕ Work", self._add_work, True),
             ("🤝 Advance", self._advance, True),
         ]:
-            b = QPushButton(text)
+            b = IconButton(text)
             b.setFixedHeight(30)
             b.setEnabled(on)
             b.setStyleSheet(Theme.btn_table_action())

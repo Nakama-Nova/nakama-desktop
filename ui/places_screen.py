@@ -28,6 +28,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ui.icons import IconButton
 from services.places_service import NOT_PLACED, PlacesService, place_name, thing_key
 from services.session import Session
 from ui.components.interactive import ChipBar, action_buttons
@@ -63,10 +64,10 @@ def _table(headers: list[str]) -> QTableWidget:
 def _button_row(dialog: QDialog, ok_text: str) -> tuple[QHBoxLayout, QPushButton]:
     row = QHBoxLayout()
     row.addStretch()
-    cancel = QPushButton("Cancel")
+    cancel = IconButton("Cancel")
     cancel.setStyleSheet(Theme.btn_secondary())
     cancel.clicked.connect(dialog.reject)
-    ok = QPushButton(ok_text)
+    ok = IconButton(ok_text)
     ok.setStyleSheet(Theme.btn_primary())
     row.addWidget(cancel)
     row.addWidget(ok)
@@ -286,20 +287,20 @@ class PlacesScreen(QWidget):
         layout.setContentsMargins(32, 28, 32, 28)
         layout.setSpacing(16)
         head = QHBoxLayout()
-        title = QLabel("📍  Places")
+        title = QLabel("Places")
         title.setStyleSheet(Theme.heading(Fonts.HEADING_LG))
         head.addWidget(title)
         head.addStretch()
-        refresh = QPushButton("🔄  Refresh")
+        refresh = IconButton("🔄  Refresh")
         refresh.setStyleSheet(Theme.btn_secondary())
         refresh.clicked.connect(self.refresh_async)
         head.addWidget(refresh)
-        self.add_place_btn = QPushButton("➕  Add place")
+        self.add_place_btn = IconButton("➕  Add place")
         self.add_place_btn.setStyleSheet(Theme.btn_secondary())
         self.add_place_btn.clicked.connect(self._add_place)
         self.add_place_btn.setVisible(self._is_owner)
         head.addWidget(self.add_place_btn)
-        self.move_btn = QPushButton("↔️  Move stock")
+        self.move_btn = IconButton("↔️  Move stock")
         self.move_btn.setStyleSheet(Theme.btn_primary())
         self.move_btn.clicked.connect(lambda: self._move(None))
         self.move_btn.setVisible(self._can_move)
@@ -330,7 +331,7 @@ class PlacesScreen(QWidget):
         sv.addWidget(self.chips)
         find = QHBoxLayout()
         self.search = QLineEdit()
-        self.search.setPlaceholderText("🔍  Search by name...")
+        self.search.setPlaceholderText("Search by name...")
         self.search.setStyleSheet(Theme.input_style())
         self.search.textChanged.connect(lambda _t: self._apply_filter())
         find.addWidget(self.search, 1)

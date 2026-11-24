@@ -22,6 +22,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ui.icons import IconButton
 from services.session import Session
 from services.stock_service import StockService
 from ui.components.place_picker import fetch_places
@@ -67,10 +68,10 @@ class MaterialDialog(QDialog):
             form.addRow(QLabel("Opening stock", styleSheet=Theme.label()), self.stock)
         row = QHBoxLayout()
         row.addStretch()
-        cancel = QPushButton("Cancel")
+        cancel = IconButton("Cancel")
         cancel.setStyleSheet(Theme.btn_secondary())
         cancel.clicked.connect(self.reject)
-        ok = QPushButton("Save")
+        ok = IconButton("Save")
         ok.setStyleSheet(Theme.btn_primary())
         ok.clicked.connect(self._check)
         row.addWidget(cancel)
@@ -110,15 +111,15 @@ class MaterialsScreen(QWidget):
         layout.setContentsMargins(32, 28, 32, 28)
         layout.setSpacing(16)
         head = QHBoxLayout()
-        title = QLabel("🌳  Materials")
+        title = QLabel("Materials")
         title.setStyleSheet(Theme.heading(Fonts.HEADING_LG))
         head.addWidget(title)
         head.addStretch()
-        refresh = QPushButton("🔄  Refresh")
+        refresh = IconButton("🔄  Refresh")
         refresh.setStyleSheet(Theme.btn_secondary())
         refresh.clicked.connect(self.refresh_data)
         head.addWidget(refresh)
-        self.add_btn = QPushButton("➕  Add material")
+        self.add_btn = IconButton("➕  Add material")
         self.add_btn.setStyleSheet(Theme.btn_primary())
         self.add_btn.clicked.connect(self._add)
         head.addWidget(self.add_btn)
@@ -180,12 +181,13 @@ class MaterialsScreen(QWidget):
         if self._is_owner:
             buttons.append(("🗑️", self._delete))
         for text, slot in buttons:
-            b = QPushButton(text)
+            b = IconButton(text)
             b.setFixedHeight(30)
             b.setStyleSheet(Theme.btn_table_action())
             b.setCursor(Qt.CursorShape.PointingHandCursor)
             if text in ("🕘", "🗑️"):
                 b.setFixedWidth(40)
+                b.setToolTip({"🕘": "Stock history", "🗑️": "Delete"}[text])  # icon-only: name it
             b.clicked.connect(lambda _=False, mm=m, s=slot: s(mm))
             h.addWidget(b)
         return box

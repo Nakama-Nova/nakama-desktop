@@ -24,6 +24,7 @@ from PyQt6.QtWidgets import (
 )
 
 from services import pricing
+from ui.icons import IconButton
 from services.money import inr
 from ui.theme import Colors, Theme
 
@@ -211,10 +212,10 @@ class ItemDialog(QDialog):
         # ---- Buttons
         btns = QHBoxLayout()
         btns.addStretch()
-        cancel = QPushButton("Cancel")
+        cancel = IconButton("Cancel")
         cancel.setStyleSheet(Theme.btn_secondary())
         cancel.clicked.connect(self.reject)
-        save = QPushButton("💾 Save")
+        save = IconButton("💾 Save")
         save.setStyleSheet(Theme.btn_primary())
         save.clicked.connect(self.accept)
         btns.addWidget(cancel)

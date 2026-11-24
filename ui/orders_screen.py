@@ -31,6 +31,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ui.icons import IconButton
 from services.customer_service import CustomerService
 from services.inventory_service import InventoryService
 from services.money_service import rupees
@@ -307,10 +308,10 @@ class NewOrderDialog(QDialog):
         self.lines.setMaximumHeight(190)
         root.addWidget(self.lines)
         row = QHBoxLayout()
-        add = QPushButton("➕  Add a piece")
+        add = IconButton("➕  Add a piece")
         add.setStyleSheet(Theme.btn_secondary())
         add.clicked.connect(lambda _c=False: self._add_line())
-        drop = QPushButton("Remove last")
+        drop = IconButton("Remove last")
         drop.setStyleSheet(Theme.btn_secondary())
         drop.clicked.connect(self._remove_last)
         row.addWidget(add)
@@ -453,7 +454,7 @@ class OrdersScreen(QWidget):
         root.setContentsMargins(32, 28, 32, 28)
         root.setSpacing(14)
         head = QHBoxLayout()
-        title = QLabel("📋  Orders")
+        title = QLabel("Orders")
         title.setStyleSheet(Theme.heading(Fonts.HEADING_LG))
         head.addWidget(title)
         head.addStretch()
@@ -478,11 +479,11 @@ class OrdersScreen(QWidget):
         self.source.setStyleSheet(Theme.input_style())
         self.source.currentIndexChanged.connect(lambda _i: self.refresh_async())
         head.addWidget(self.source)
-        refresh = QPushButton("🔄  Refresh")
+        refresh = IconButton("🔄  Refresh")
         refresh.setStyleSheet(Theme.btn_secondary())
         refresh.clicked.connect(self.refresh_async)
         head.addWidget(refresh)
-        self.new_btn = QPushButton("➕  New order")
+        self.new_btn = IconButton("➕  New order")
         self.new_btn.setStyleSheet(Theme.btn_primary())
         self.new_btn.clicked.connect(self._new)
         head.addWidget(self.new_btn)
@@ -511,16 +512,16 @@ class OrdersScreen(QWidget):
         for w in (self.heading, self.who, self.extra):
             d.addWidget(w)
         actions = QHBoxLayout()
-        self.next_btn = QPushButton("")
+        self.next_btn = IconButton("")
         self.next_btn.setStyleSheet(Theme.btn_primary())
         self.next_btn.clicked.connect(lambda _c=False: self._advance())
-        self.pay_btn = QPushButton("💵  Record payment")
-        self.edit_btn = QPushButton("✏️  Edit")
-        self.cancel_btn = QPushButton("Cancel order")
-        self.delete_btn = QPushButton("🗑️  Delete order")
+        self.pay_btn = IconButton("💵  Record payment")
+        self.edit_btn = IconButton("✏️  Edit")
+        self.cancel_btn = IconButton("Cancel order")
+        self.delete_btn = IconButton("🗑️  Delete order")
         self.delete_btn.setToolTip("Only for an order with no payments, bill, jobs or letters")
-        self.letter_btn = QPushButton("✉️  Confirmation letter")
-        self.bill_btn = QPushButton("🧾  Create bill")
+        self.letter_btn = IconButton("✉️  Confirmation letter")
+        self.bill_btn = IconButton("🧾  Create bill")
         for b, slot in ((self.pay_btn, self._pay), (self.bill_btn, self._bill), (self.letter_btn, self._letter), (self.edit_btn, self._edit), (self.cancel_btn, self._cancel), (self.delete_btn, self._delete_order)):
             b.setStyleSheet(Theme.btn_secondary())
             b.clicked.connect(lambda _c=False, s=slot: s())
@@ -575,7 +576,7 @@ class OrdersScreen(QWidget):
             if o.get("customer_phone"):
                 customer += f"  ·  {o['customer_phone']}"
             values = [
-                o["order_number"] + ("  🌐" if o.get("source") == "web" else ""),
+                o["order_number"] + ("  (website)" if o.get("source") == "web" else ""),
                 str(o["order_date"])[:10],
                 customer,
                 items_summary(o),

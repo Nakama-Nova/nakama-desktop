@@ -27,6 +27,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ui.icons import IconButton
 from services.api_client import APIError, ForbiddenError
 from services.finance_service import FinanceService
 from services.session import Session
@@ -126,7 +127,7 @@ class EntryDialog(QDialog):
         self.table.setMinimumHeight(min(60 + 40 * len(lines), 360))
         v.addWidget(self.table)
         v.addWidget(QLabel(f"Amount moved: {money(entry.get('total')) or '₹0.00'}", styleSheet=f"font-weight: 700; color: {Colors.TEXT_PRIMARY};"))
-        close = QPushButton("Close")
+        close = IconButton("Close")
         close.setStyleSheet(Theme.btn_primary())
         close.clicked.connect(self.accept)
         row = QHBoxLayout()
@@ -168,7 +169,7 @@ class LedgerDialog(QDialog):
         self.table.setMinimumHeight(260)
         v.addWidget(self.table, 1)
         v.addWidget(QLabel(f"Closing balance: {money(ledger.get('closing_balance')) or '₹0.00'}", styleSheet=f"font-weight: 700; color: {Colors.TEXT_PRIMARY};"))
-        close = QPushButton("Close")
+        close = IconButton("Close")
         close.setStyleSheet(Theme.btn_primary())
         close.clicked.connect(self.accept)
         row = QHBoxLayout()
@@ -224,14 +225,14 @@ class FinanceScreen(QWidget):
         layout.setContentsMargins(32, 28, 32, 28)
         layout.setSpacing(14)
         head = QHBoxLayout()
-        title = QLabel("📒  Accounts")
+        title = QLabel("Accounts")
         title.setStyleSheet(Theme.heading(Fonts.HEADING_LG))
         head.addWidget(title)
         head.addStretch()
         self.from_edit, self.to_edit = self._date_box(), self._date_box()
         for w in (QLabel("From", styleSheet=Theme.label()), self.from_edit, QLabel("to", styleSheet=Theme.label()), self.to_edit):
             head.addWidget(w)
-        refresh = QPushButton("🔄  Refresh")
+        refresh = IconButton("🔄  Refresh")
         refresh.setStyleSheet(Theme.btn_secondary())
         refresh.clicked.connect(self.refresh_async)
         head.addWidget(refresh)
@@ -391,7 +392,7 @@ class FinanceScreen(QWidget):
         self.kind_chips.changed.connect(self._kind_chosen)
         v.addWidget(self.kind_chips)
         self.entry_search = QLineEdit()
-        self.entry_search.setPlaceholderText("🔍  Search what happened...")
+        self.entry_search.setPlaceholderText("Search what happened...")
         self.entry_search.setStyleSheet(Theme.input_style())
         self.entry_search.textChanged.connect(lambda _t: self._show_entries())
         v.addWidget(self.entry_search)
@@ -399,7 +400,7 @@ class FinanceScreen(QWidget):
         self.entries_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self.entries_table.cellDoubleClicked.connect(self._open_entry)
         v.addWidget(self.entries_table, 1)
-        self.more_btn = QPushButton("Show more entries")
+        self.more_btn = IconButton("Show more entries")
         self.more_btn.setStyleSheet(Theme.btn_secondary())
         self.more_btn.clicked.connect(self._load_more)
         self.more_btn.setVisible(False)
@@ -412,7 +413,7 @@ class FinanceScreen(QWidget):
         v.setContentsMargins(12, 12, 12, 12)
         v.setSpacing(10)
         self.account_search = QLineEdit()
-        self.account_search.setPlaceholderText("🔍  Search by code or name...")
+        self.account_search.setPlaceholderText("Search by code or name...")
         self.account_search.setStyleSheet(Theme.input_style())
         self.account_search.textChanged.connect(lambda _t: self._show_accounts())
         v.addWidget(self.account_search)
@@ -485,7 +486,7 @@ class FinanceScreen(QWidget):
         parts, role = [], "success"
         if recon:
             if recon.get("agrees"):
-                parts.append("✅ The ledger agrees with the profit report.")
+                parts.append("The ledger agrees with the profit report.")
             else:
                 role = "warning"
                 waiting, changed = int(recon.get("to_post") or 0), int(recon.get("to_reverse") or 0)
@@ -494,7 +495,7 @@ class FinanceScreen(QWidget):
                     bits.append(f"{waiting} record{'s' if waiting != 1 else ''} not in the ledger yet")
                 if changed:
                     bits.append(f"{changed} changed since posting")
-                parts.append("⚠️ The ledger and the profit report differ" + (f" ({', '.join(bits)})" if bits else "") + ". The owner can post the records.")
+                parts.append("The ledger and the profit report differ" + (f" ({', '.join(bits)})" if bits else "") + ". The owner can post the records.")
         through = (closing or {}).get("closed_through")
         if through:
             parts.append(f"Books are closed through {when(through)}.")
@@ -536,7 +537,7 @@ class FinanceScreen(QWidget):
         ok = bool(b.get("balanced"))
         self.balance_note.setStyleSheet(Theme.alert("success" if ok else "danger"))
         self.balance_note.setText(
-            f"As of {when(b.get('as_of'))}. " + ("✅ Assets equal liabilities plus worth." if ok else "⚠️ The sheet does not balance: assets differ from liabilities plus worth.")
+            f"As of {when(b.get('as_of'))}. " + ("Assets equal liabilities plus worth." if ok else "The sheet does not balance: assets differ from liabilities plus worth.")
         )
 
     def _show_trial(self, t: dict) -> None:
@@ -556,7 +557,7 @@ class FinanceScreen(QWidget):
             self.trial_note.setStyleSheet(f"color: {Colors.SUCCESS if ok else Colors.DANGER}; font-weight: 600;")
             self.trial_note.setText(
                 f"As of {when(t.get('as_of'))}:  debits {money(t.get('debit_balance_total')) or '₹0.00'}  ·  credits "
-                f"{money(t.get('credit_balance_total')) or '₹0.00'}  ·  " + ("balanced ✅" if ok else "NOT balanced ⚠️")
+                f"{money(t.get('credit_balance_total')) or '₹0.00'}  ·  " + ("balanced" if ok else "NOT balanced")
             )
         else:
             self.trial_note.setText("")

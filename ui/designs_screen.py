@@ -28,6 +28,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ui.icons import IconButton
 from services.designs_service import DESIGN_STATUS_WORDS, DESIGN_STATUSES, TYPE_WORDS, DesignsService
 from services.inventory_service import InventoryService
 from services.money_service import rupees
@@ -199,7 +200,7 @@ class DesignsScreen(QWidget):
         root.setContentsMargins(32, 28, 32, 28)
         root.setSpacing(14)
         head = QHBoxLayout()
-        title = QLabel("🎨  Designs")
+        title = QLabel("Designs")
         title.setStyleSheet(Theme.heading(Fonts.HEADING_LG))
         head.addWidget(title)
         head.addStretch()
@@ -214,11 +215,11 @@ class DesignsScreen(QWidget):
         self.status_filter.setStyleSheet(Theme.input_style())
         self.status_filter.currentIndexChanged.connect(lambda _i: self.refresh_data())
         head.addWidget(self.status_filter)
-        refresh = QPushButton("🔄  Refresh")
+        refresh = IconButton("🔄  Refresh")
         refresh.setStyleSheet(Theme.btn_secondary())
         refresh.clicked.connect(self.refresh_data)
         head.addWidget(refresh)
-        self.new_btn = QPushButton("➕  New design")
+        self.new_btn = IconButton("➕  New design")
         self.new_btn.setStyleSheet(Theme.btn_primary())
         self.new_btn.clicked.connect(self._new)
         head.addWidget(self.new_btn)
@@ -249,9 +250,9 @@ class DesignsScreen(QWidget):
         d.addWidget(self.heading)
         d.addWidget(self.notes)
         actions = QHBoxLayout()
-        self.edit_btn = QPushButton("✏️  Edit")
-        self.link_btn = QPushButton("🔗  Link a product…")
-        self.make_btn = QPushButton("🪵  Create a product")
+        self.edit_btn = IconButton("✏️  Edit")
+        self.link_btn = IconButton("🔗  Link a product…")
+        self.make_btn = IconButton("🪵  Create a product")
         for b, slot in ((self.edit_btn, self._edit), (self.link_btn, self._link), (self.make_btn, self._make)):
             b.setStyleSheet(Theme.btn_secondary())
             b.clicked.connect(lambda _c=False, s=slot: s())
@@ -328,7 +329,7 @@ class DesignsScreen(QWidget):
             values = [p["sku"], p["name"], TYPE_WORDS.get(p["item_type"], p["item_type"]), rupees(p["selling_price"]), str(p["current_stock"])]
             for c, text in enumerate(values):
                 self.products.setItem(r, c, QTableWidgetItem(text))
-            un = QPushButton("Unlink")
+            un = IconButton("Unlink")
             un.setStyleSheet(Theme.btn_table_action())
             un.clicked.connect(lambda _c=False, pp=p: self._unlink(pp))
             self.products.setCellWidget(r, self.PCOL_ACTION, un)
@@ -340,7 +341,7 @@ class DesignsScreen(QWidget):
         for r, f in enumerate(files):
             self.files.setItem(r, 0, QTableWidgetItem(KIND_WORDS.get(f["kind"], f["kind"])))
             self.files.setItem(r, 1, QTableWidgetItem(_size(f["size_bytes"])))
-            save = QPushButton("💾  Save…")
+            save = IconButton("💾  Save…")
             save.setStyleSheet(Theme.btn_table_action())
             save.clicked.connect(lambda _c=False, ff=f: self._save(ff))
             self.files.setCellWidget(r, self.FCOL_SAVE, save)

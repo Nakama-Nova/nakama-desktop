@@ -25,6 +25,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ui.icons import IconButton
 from services.money import inr
 from services.event_bus import SALE_CREATED, EventBus
 from services.sales_service import BillPdfError, SalesService
@@ -98,10 +99,10 @@ class DeleteBillDialog(QDialog):
         v.addLayout(form)
         row = QHBoxLayout()
         row.addStretch()
-        cancel = QPushButton("Keep the bill")
+        cancel = IconButton("Keep the bill")
         cancel.setStyleSheet(Theme.btn_secondary())
         cancel.clicked.connect(self.reject)
-        self.delete_btn = QPushButton("Delete bill")
+        self.delete_btn = IconButton("Delete bill")
         self.delete_btn.setStyleSheet(Theme.btn_danger())
         self.delete_btn.clicked.connect(self._check)
         row.addWidget(cancel)
@@ -146,10 +147,10 @@ class PaymentDialog(QDialog):
         form.addRow(QLabel("Paid by", styleSheet=Theme.label()), self.method)
         row = QHBoxLayout()
         row.addStretch()
-        cancel = QPushButton("Cancel")
+        cancel = IconButton("Cancel")
         cancel.setStyleSheet(Theme.btn_secondary())
         cancel.clicked.connect(self.reject)
-        save = QPushButton("Save")
+        save = IconButton("Save")
         save.setStyleSheet(Theme.btn_primary())
         save.clicked.connect(self.accept)
         row.addWidget(cancel)
@@ -187,11 +188,11 @@ class SalesHistoryScreen(QWidget):
         layout.setSpacing(16)
 
         header_row = QHBoxLayout()
-        header = QLabel("📜  Bill History")
+        header = QLabel("Bill History")
         header.setStyleSheet(Theme.heading(Fonts.HEADING_LG))
         header_row.addWidget(header)
         header_row.addStretch()
-        refresh_btn = QPushButton("🔄  Refresh")
+        refresh_btn = IconButton("🔄  Refresh")
         refresh_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         refresh_btn.setStyleSheet(Theme.btn_secondary())
         refresh_btn.clicked.connect(self.refresh_async)
@@ -205,7 +206,7 @@ class SalesHistoryScreen(QWidget):
         filter_row = QHBoxLayout()
         filter_row.setSpacing(10)
         self.search = QLineEdit()
-        self.search.setPlaceholderText("🔍  Search by bill number...")
+        self.search.setPlaceholderText("Search by bill number...")
         self.search.setStyleSheet(Theme.input_style())
         self.search.textChanged.connect(lambda _t: self._show())
         filter_row.addWidget(self.search, 1)
@@ -218,12 +219,12 @@ class SalesHistoryScreen(QWidget):
         self.date_filter.setStyleSheet(Theme.input_style())
         self.date_filter.setFixedWidth(160)
         filter_row.addWidget(self.date_filter)
-        apply_btn = QPushButton("🔍  Filter")
+        apply_btn = IconButton("🔍  Filter")
         apply_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         apply_btn.setStyleSheet(Theme.btn_secondary())
         apply_btn.clicked.connect(self._apply_filter)
         filter_row.addWidget(apply_btn)
-        clear_btn = QPushButton("Clear")
+        clear_btn = IconButton("Clear")
         clear_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         clear_btn.setStyleSheet(Theme.btn_secondary())
         clear_btn.clicked.connect(self.refresh_async)
@@ -333,7 +334,7 @@ class SalesHistoryScreen(QWidget):
         if self._can_delete and not cancelled:
             buttons.append(("🗑️ Delete", self._delete_bill, "Cancel this bill; the stock comes back"))
         for text, slot, tip in buttons:
-            b = QPushButton(text)
+            b = IconButton(text)
             b.setCursor(Qt.CursorShape.PointingHandCursor)
             b.setFixedHeight(34)
             b.setToolTip(tip)
@@ -356,7 +357,7 @@ class SalesHistoryScreen(QWidget):
         if not items:
             QMessageBox.information(self, "No Items", "No items found for this bill.")
             return
-        QMessageBox.information(self, "📋 Bill Details", bill_text(sale, items) + ("\n\nThis bill was deleted (cancelled)." if is_cancelled(sale) else ""))
+        QMessageBox.information(self, "Bill details", bill_text(sale, items) + ("\n\nThis bill was deleted (cancelled)." if is_cancelled(sale) else ""))
 
     def _reprint_invoice(self, sale):
         inv_num = sale.get("invoice_number")

@@ -30,6 +30,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ui.icons import IconButton
 from services.money import inr
 from services.places_service import PlacesService
 from services.registers_service import RegistersService
@@ -309,7 +310,7 @@ class MachineDetailDialog(QDialog):
             for c, text in enumerate([_stamp(r["started_at"]), _stamp(ended) if ended else "Still stopped", r.get("reason") or ""]):
                 d.setItem(i, c, QTableWidgetItem(text))
         tabs.addTab(d, f"Stoppages ({len(downtime)})")
-        close = QPushButton("Close")
+        close = IconButton("Close")
         close.setStyleSheet(Theme.btn_secondary())
         close.clicked.connect(self.accept)
         row = QHBoxLayout()
@@ -420,15 +421,15 @@ class MachinesScreen(QWidget):
         layout.setContentsMargins(32, 28, 32, 28)
         layout.setSpacing(16)
         head = QHBoxLayout()
-        title = QLabel("🛠️  Machines and tools")
+        title = QLabel("Machines and tools")
         title.setStyleSheet(Theme.heading(Fonts.HEADING_LG))
         head.addWidget(title)
         head.addStretch()
-        refresh = QPushButton("🔄  Refresh")
+        refresh = IconButton("🔄  Refresh")
         refresh.setStyleSheet(Theme.btn_secondary())
         refresh.clicked.connect(self.refresh_async)
         head.addWidget(refresh)
-        self.add_btn = QPushButton("➕  Add")
+        self.add_btn = IconButton("➕  Add")
         self.add_btn.setStyleSheet(Theme.btn_primary())
         self.add_btn.clicked.connect(self._add)
         self.add_btn.setVisible(self._can_manage)
@@ -456,7 +457,7 @@ class MachinesScreen(QWidget):
             self.m_chips.changed.connect(lambda _k: self._show_machines())
             mv.addWidget(self.m_chips)
             self.m_search = QLineEdit()
-            self.m_search.setPlaceholderText("🔍  Search by tag, name or make...")
+            self.m_search.setPlaceholderText("Search by tag, name or make...")
             self.m_search.setStyleSheet(Theme.input_style())
             self.m_search.textChanged.connect(lambda _t: self._show_machines())
             mv.addWidget(self.m_search)
@@ -476,7 +477,7 @@ class MachinesScreen(QWidget):
         self.t_chips.changed.connect(lambda _k: self._show_tools())
         tv.addWidget(self.t_chips)
         self.t_search = QLineEdit()
-        self.t_search.setPlaceholderText("🔍  Search by tag, name or category...")
+        self.t_search.setPlaceholderText("Search by tag, name or category...")
         self.t_search.setStyleSheet(Theme.input_style())
         self.t_search.textChanged.connect(lambda _t: self._show_tools())
         tv.addWidget(self.t_search)
@@ -524,7 +525,7 @@ class MachinesScreen(QWidget):
                 parts.append(f"{len(late)} overdue for service: " + ", ".join(m["name"] for m in late[:4]) + ("…" if len(late) > 4 else ""))
             if down:
                 parts.append(f"{len(down)} stopped: " + ", ".join(m["name"] for m in down[:4]) + ("…" if len(down) > 4 else ""))
-            self.alert.setText("⚠️  " + "   ·   ".join(parts) if parts else "")
+            self.alert.setText("   ·   ".join(parts) if parts else "")
             self.alert.setVisible(bool(parts))
         self._tool_chips()
         self._show_tools()
@@ -692,7 +693,7 @@ class MachinesScreen(QWidget):
             for c, text in enumerate([r.get("user_name") or "", _stamp(r["issued_at"]), back, outcome.get(r.get("outcome"), "")]):
                 table.setItem(i, c, QTableWidgetItem(text))
         v.addWidget(table)
-        close = QPushButton("Close")
+        close = IconButton("Close")
         close.setStyleSheet(Theme.btn_secondary())
         close.clicked.connect(d.accept)
         v.addWidget(close, 0, Qt.AlignmentFlag.AlignRight)

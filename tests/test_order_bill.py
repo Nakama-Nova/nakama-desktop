@@ -55,11 +55,11 @@ def test_the_button_follows_the_stage_and_the_bill(screen_for):
     select(s, WEB["order_number"])  # still a draft: confirm it with the customer first
     assert s.bill_btn.isHidden()
     select(s, SHOP["order_number"])
-    assert not s.bill_btn.isHidden() and s.bill_btn.text() == "🧾  Create bill"
+    assert not s.bill_btn.isHidden() and s.bill_btn.text() == "Create bill"
     select(s, DONE["order_number"])  # delivered orders can be billed too
-    assert not s.bill_btn.isHidden() and s.bill_btn.text() == "🧾  Create bill"
+    assert not s.bill_btn.isHidden() and s.bill_btn.text() == "Create bill"
     select(s, BILLED["order_number"])
-    assert s.bill_btn.text() == "🧾  Open bill" and "Bill NTD-2026-00007" in s.heading.text()
+    assert s.bill_btn.text() == "Open bill" and "Bill NTD-2026-00007" in s.heading.text()
     assert s.edit_btn.isHidden() and s.cancel_btn.isHidden()  # a billed order's amount is fixed
 
 

@@ -28,6 +28,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ui.icons import IconButton
 from services.money import inr
 from services.inventory_service import InventoryService
 from services.places_service import NOT_PLACED, PlacesService
@@ -101,7 +102,7 @@ class NewPurchaseDialog(QDialog):
         self.price.setPrefix("₹")
         self.price.setSuffix(" each")
         self.gst = _combo([(f"GST {g}%", g) for g in GST_CHOICES])
-        add = QPushButton("➕ Add line")
+        add = IconButton("➕ Add line")
         add.setStyleSheet(Theme.btn_secondary())
         add.clicked.connect(self._add_line)
         for w in (self.what, self.qty, self.price, self.gst, add):
@@ -124,10 +125,10 @@ class NewPurchaseDialog(QDialog):
         self.total.setStyleSheet(Theme.subheading())
         bottom.addWidget(self.total)
         bottom.addStretch()
-        cancel = QPushButton("Cancel")
+        cancel = IconButton("Cancel")
         cancel.setStyleSheet(Theme.btn_secondary())
         cancel.clicked.connect(self.reject)
-        save = QPushButton("💾 Save purchase")
+        save = IconButton("💾 Save purchase")
         save.setStyleSheet(Theme.btn_primary())
         save.clicked.connect(self._check)
         bottom.addWidget(cancel)
@@ -161,7 +162,7 @@ class NewPurchaseDialog(QDialog):
                 [line["label"], f"{line['quantity']:g}", f"{inr(line['unit_price'])}", f"{line['gst_percent']}%"]
             ):
                 self.table.setItem(r, c, QTableWidgetItem(text))
-            rm = QPushButton("✖")
+            rm = IconButton("✖")
             rm.setStyleSheet(Theme.btn_table_action())
             rm.clicked.connect(lambda _=False, i=r: self._remove(i))
             self.table.setCellWidget(r, 4, rm)
@@ -209,7 +210,7 @@ class PurchasesScreen(QWidget):
         layout.setContentsMargins(32, 28, 32, 28)
         layout.setSpacing(16)
         head = QHBoxLayout()
-        title = QLabel("🛒  Purchases")
+        title = QLabel("Purchases")
         title.setStyleSheet(Theme.heading(Fonts.HEADING_LG))
         head.addWidget(title)
         head.addStretch()
@@ -218,7 +219,7 @@ class PurchasesScreen(QWidget):
             ("🔄  Refresh", Theme.btn_secondary(), self.refresh_data),
             ("➕  New purchase", Theme.btn_primary(), self._new),
         ]:
-            b = QPushButton(text)
+            b = IconButton(text)
             b.setStyleSheet(style)
             b.clicked.connect(slot)
             head.addWidget(b)
@@ -281,13 +282,13 @@ class PurchasesScreen(QWidget):
         h = QHBoxLayout(box)
         h.setContentsMargins(4, 4, 4, 4)
         h.setSpacing(6)
-        view = QPushButton("👁 View")
+        view = IconButton("👁 View")
         view.setStyleSheet(Theme.btn_table_action())
         view.setFixedHeight(30)
         view.clicked.connect(lambda _=False, pp=p: self._view(pp))
         h.addWidget(view)
         if p.get("status") == "pending":
-            ok = QPushButton("✅ Confirm")
+            ok = IconButton("✅ Confirm")
             ok.setStyleSheet(Theme.btn_table_action())
             ok.setFixedHeight(30)
             ok.clicked.connect(lambda _=False, pp=p: self._confirm(pp))

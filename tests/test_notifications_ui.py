@@ -192,11 +192,11 @@ def main_window(qapp, monkeypatch, tmp_path, role=UserRole.OWNER):
 
 def test_the_bell_shows_how_many_are_unread(qapp, monkeypatch, tmp_path):
     w = main_window(qapp, monkeypatch, tmp_path)
-    assert w.bell_btn.text() == "🔔"
+    assert w.bell_btn.text() == "" and w.bell_btn.toolTip() == "Notifications"
     w.notifier.receive(feed(note("a"), note("b")))
-    assert w.bell_btn.text() == "🔔  2"
+    assert w.bell_btn.text() == "2" and w.bell_btn.toolTip() == "Notifications, 2 new"
     w.notifier.mark_read()
-    assert w.bell_btn.text() == "🔔"
+    assert w.bell_btn.text() == "" and w.bell_btn.toolTip() == "Notifications"
 
 
 def test_a_notification_opens_the_screen_it_is_about(qapp, monkeypatch, tmp_path):

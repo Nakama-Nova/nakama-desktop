@@ -19,6 +19,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ui.icons import IconButton
 from services.money_service import PERIODS, MoneyService, period_range, rupees
 from ui.components.metric_card import MetricCard
 from ui.errors import handle_permissions
@@ -38,7 +39,7 @@ class ProfitScreen(QWidget):
         layout.setContentsMargins(32, 28, 32, 28)
         layout.setSpacing(16)
         head = QHBoxLayout()
-        title = QLabel("💹  Profit")
+        title = QLabel("Profit")
         title.setStyleSheet(Theme.heading(Fonts.HEADING_LG))
         head.addWidget(title)
         head.addStretch()
@@ -48,7 +49,7 @@ class ProfitScreen(QWidget):
         self.period.setStyleSheet(Theme.input_style())
         self.period.currentIndexChanged.connect(lambda _i: self.refresh_data())
         head.addWidget(self.period)
-        refresh = QPushButton("🔄  Refresh")
+        refresh = IconButton("🔄  Refresh")
         refresh.setStyleSheet(Theme.btn_secondary())
         refresh.clicked.connect(self.refresh_data)
         head.addWidget(refresh)

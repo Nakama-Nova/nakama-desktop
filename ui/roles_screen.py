@@ -23,6 +23,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ui.icons import IconButton
 from services.api_client import ForbiddenError
 from services.iam_service import IamService, allowed_in
 from services.session import Session
@@ -89,12 +90,12 @@ class RoleDialog(QDialog):
             for w in (self.label, self.description, self.tree):
                 w.setEnabled(False)
         row.addStretch()
-        cancel = QPushButton("Close" if read_only else "Cancel")
+        cancel = IconButton("Close" if read_only else "Cancel")
         cancel.setStyleSheet(Theme.btn_secondary())
         cancel.clicked.connect(self.reject)
         row.addWidget(cancel)
         if not read_only:
-            ok = QPushButton("Save")
+            ok = IconButton("Save")
             ok.setStyleSheet(Theme.btn_primary())
             ok.clicked.connect(self._check)
             row.addWidget(ok)
@@ -133,15 +134,15 @@ class RolesScreen(QWidget):
         layout.setContentsMargins(32, 28, 32, 28)
         layout.setSpacing(16)
         head = QHBoxLayout()
-        title = QLabel("🔑  Roles")
+        title = QLabel("Roles")
         title.setStyleSheet(Theme.heading(Fonts.HEADING_LG))
         head.addWidget(title)
         head.addStretch()
-        refresh = QPushButton("🔄  Refresh")
+        refresh = IconButton("🔄  Refresh")
         refresh.setStyleSheet(Theme.btn_secondary())
         refresh.clicked.connect(self.refresh_async)
         head.addWidget(refresh)
-        self.add_btn = QPushButton("➕  New role")
+        self.add_btn = IconButton("➕  New role")
         self.add_btn.setStyleSheet(Theme.btn_primary())
         self.add_btn.clicked.connect(self._add)
         self.add_btn.setVisible(Session.can("iam:role:write"))
@@ -193,7 +194,7 @@ class RolesScreen(QWidget):
         if can_write and not role.get("is_system"):
             buttons.append(("🗑 Delete", self._delete))
         for text, slot in buttons:
-            b = QPushButton(text)
+            b = IconButton(text)
             b.setFixedHeight(30)
             b.setStyleSheet(Theme.btn_table_action())
             b.setCursor(Qt.CursorShape.PointingHandCursor)

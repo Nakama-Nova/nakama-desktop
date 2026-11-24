@@ -577,12 +577,29 @@ class Theme:
     @staticmethod
     def style_table(table) -> None:
         """Table look plus column titles aligned left, like the text under them (Qt centres them)."""
-        from PyQt6.QtCore import Qt
+        from PyQt6.QtCore import QTimer, Qt
 
         table.setStyleSheet(Theme.table_style())
         header = getattr(table, "horizontalHeader", None)
         if callable(header):
             header().setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+            # A table whose columns all fit their contents leaves the right side empty: let its
+            # last column take the rest. Decided after the screen has set its own column modes.
+            QTimer.singleShot(0, lambda: Theme._fill_width(table))
+
+    @staticmethod
+    def _fill_width(table) -> None:
+        from PyQt6.QtWidgets import QHeaderView
+
+        try:
+            header = table.horizontalHeader()
+            stretching = any(
+                header.sectionResizeMode(i) == QHeaderView.ResizeMode.Stretch for i in range(header.count())
+            )
+            if not stretching and header.count():
+                header.setStretchLastSection(True)
+        except RuntimeError:  # the table was closed before this ran
+            pass
 
     # ------------------------------------------------------------------
     # Page heading

@@ -24,6 +24,7 @@ from PyQt6.QtWidgets import (
 )
 
 from services import pricing
+from ui.icons import IconButton
 from services.money import inr
 from services.inventory_service import InventoryService
 from services.session import Session
@@ -69,13 +70,13 @@ class InventoryWindow(QWidget):
         layout.setSpacing(16)
 
         header_row = QHBoxLayout()
-        header = QLabel("📦  Stock")
+        header = QLabel("Stock")
         header.setStyleSheet(Theme.heading(Fonts.HEADING_LG))
         header_row.addWidget(header)
         header_row.addStretch()
 
         def head_button(text, style, slot, visible=True):
-            b = QPushButton(text)
+            b = IconButton(text)
             b.setCursor(Qt.CursorShape.PointingHandCursor)
             b.setStyleSheet(style)
             b.clicked.connect(slot)
@@ -95,7 +96,7 @@ class InventoryWindow(QWidget):
 
         find_row = QHBoxLayout()
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("🔍  Search by name or code...")
+        self.search_input.setPlaceholderText("Search by name or code...")
         self.search_input.setStyleSheet(Theme.input_style())
         self.search_input.textChanged.connect(self._filter_table)
         find_row.addWidget(self.search_input, 1)
@@ -258,7 +259,7 @@ class InventoryWindow(QWidget):
         if self.can_scan and item.get("item_type") == "sculpture":
             buttons += [("📷 3D scan", self._scan_3d), ("🧊 View 3D", self._view_3d)]
         for text, slot in buttons:
-            b = QPushButton(text)
+            b = IconButton(text)
             b.setCursor(Qt.CursorShape.PointingHandCursor)
             b.setFixedHeight(30)
             if text in ("🕘", "🗑️"):

@@ -34,6 +34,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ui.icons import IconButton
 from services.designs_service import DesignsService
 from services.inventory_service import InventoryService
 from services.money_service import rupees
@@ -63,10 +64,10 @@ def _size(n) -> str:
 def _buttons(dialog, ok_text="Save"):
     row = QHBoxLayout()
     row.addStretch()
-    cancel = QPushButton("Cancel")
+    cancel = IconButton("Cancel")
     cancel.setStyleSheet(Theme.btn_secondary())
     cancel.clicked.connect(dialog.reject)
-    ok = QPushButton(ok_text)
+    ok = IconButton(ok_text)
     ok.setStyleSheet(Theme.btn_primary())
     ok.clicked.connect(dialog._check)
     row.addWidget(cancel)
@@ -319,7 +320,7 @@ class RestorationScreen(QWidget):
         root.setContentsMargins(32, 28, 32, 28)
         root.setSpacing(14)
         head = QHBoxLayout()
-        title = QLabel("🏛️  Restoration")
+        title = QLabel("Restoration")
         title.setStyleSheet(Theme.heading(Fonts.HEADING_LG))
         head.addWidget(title)
         head.addStretch()
@@ -330,11 +331,11 @@ class RestorationScreen(QWidget):
         self.filter.setStyleSheet(Theme.input_style())
         self.filter.currentIndexChanged.connect(lambda _i: self.refresh_data())
         head.addWidget(self.filter)
-        refresh = QPushButton("🔄  Refresh")
+        refresh = IconButton("🔄  Refresh")
         refresh.setStyleSheet(Theme.btn_secondary())
         refresh.clicked.connect(self.refresh_data)
         head.addWidget(refresh)
-        self.new_btn = QPushButton("➕  New restoration")
+        self.new_btn = IconButton("➕  New restoration")
         self.new_btn.setStyleSheet(Theme.btn_primary())
         self.new_btn.clicked.connect(self._new)
         head.addWidget(self.new_btn)
@@ -371,13 +372,13 @@ class RestorationScreen(QWidget):
         d.addWidget(self.designs_label)
 
         actions = QHBoxLayout()
-        self.edit_btn = QPushButton("✏️  Edit")
-        self.photos_btn = QPushButton("📷  Add photos…")
-        self.video_btn = QPushButton("🎥  Add video…")
-        self.design_btn = QPushButton("🎨  Make a design")
-        self.cost_btn = QPushButton("💰  Cost")
+        self.edit_btn = IconButton("✏️  Edit")
+        self.photos_btn = IconButton("📷  Add photos…")
+        self.video_btn = IconButton("🎥  Add video…")
+        self.design_btn = IconButton("🎨  Make a design")
+        self.cost_btn = IconButton("💰  Cost")
         self.cost_btn.setVisible(Session.can("restoration:cost:read"))  # money: the owner only
-        self.certificate_btn = QPushButton("📜  Certificate")
+        self.certificate_btn = IconButton("📜  Certificate")
         self.certificate_btn.setVisible(False)  # owner, temple project marked Restored
         for b, slot in ((self.edit_btn, self._edit), (self.photos_btn, lambda: self._capture("photos")), (self.video_btn, lambda: self._capture("video")), (self.design_btn, self._make_design), (self.cost_btn, self._cost), (self.certificate_btn, self._certificate)):
             b.setStyleSheet(Theme.btn_secondary())
@@ -493,7 +494,7 @@ class RestorationScreen(QWidget):
         for r, f in enumerate(d["files"]):
             for c, text in enumerate([KIND_WORDS.get(f["kind"], f["kind"]), _size(f["size_bytes"]), str(f["created_at"])[:10]]):
                 self.files.setItem(r, c, QTableWidgetItem(text))
-            save = QPushButton("💾  Save…")
+            save = IconButton("💾  Save…")
             save.setStyleSheet(Theme.btn_table_action())
             save.clicked.connect(lambda _c=False, ff=f: self._save(ff))
             self.files.setCellWidget(r, self.FCOL_SAVE, save)

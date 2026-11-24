@@ -18,6 +18,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ui.icons import IconButton
 from ui.theme import Colors, Fonts, Radius, Spacing, shade, tint
 
 NAVBAR_HEIGHT = 52
@@ -49,7 +50,7 @@ class Navbar(QFrame):
         row.setContentsMargins(Spacing.LG, 0, Spacing.LG, 0)
         row.setSpacing(Spacing.SM + 2)
 
-        self.goto_btn = QPushButton("  Go to a screen…   (Ctrl+K)")
+        self.goto_btn = IconButton("  Go to a screen…   (Ctrl+K)")
         self.goto_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.goto_btn.setToolTip("Jump to any screen (Ctrl+K)")
         self.goto_btn.setFixedWidth(280)

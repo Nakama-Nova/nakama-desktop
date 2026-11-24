@@ -26,6 +26,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ui.icons import IconButton
 from services.api_client import APIClient, APIError
 from ui.theme import Colors, Theme
 from ui.workers import run_async
@@ -43,7 +44,7 @@ def _field(placeholder="", password=False) -> QLineEdit:
 
 
 def _link(text: str) -> QPushButton:
-    b = QPushButton(text)
+    b = IconButton(text)
     b.setFlat(True)
     b.setCursor(Qt.CursorShape.PointingHandCursor)
     b.setStyleSheet(
@@ -94,7 +95,7 @@ class ForgotPasswordDialog(QDialog):
         self.ask_email.setText(email)
         self.ask_email.returnPressed.connect(self.send_code)
         v.addWidget(self.ask_email)
-        self.send_btn = QPushButton("Send me a code")
+        self.send_btn = IconButton("Send me a code")
         self.send_btn.setStyleSheet(Theme.btn_primary())
         self.send_btn.clicked.connect(self.send_code)
         self.have_code_link = _link("I already have a code")
@@ -118,7 +119,7 @@ class ForgotPasswordDialog(QDialog):
         self.repeat.returnPressed.connect(self.set_password)
         for label, w in [("Email", self.email), ("Code", self.code), ("New password", self.new), ("Repeat", self.repeat)]:
             form.addRow(QLabel(label, styleSheet=Theme.label()), w)
-        self.set_btn = QPushButton("Set password")
+        self.set_btn = IconButton("Set password")
         self.set_btn.setStyleSheet(Theme.btn_primary())
         self.set_btn.clicked.connect(self.set_password)
         self.again_link = _link("Send a new code")

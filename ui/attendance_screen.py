@@ -20,6 +20,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor
 from datetime import datetime
 
+from ui.icons import IconButton
 from ui.theme import Theme, Colors, Fonts
 from services.workforce_service import AttendanceService
 from services.session import Session
@@ -41,7 +42,7 @@ class AttendanceScreen(QWidget):
         layout.setSpacing(20)
 
         # Header
-        header = QLabel("👷 Attendance")
+        header = QLabel("Attendance")
         header.setStyleSheet(f"font-size: 24px; font-weight: bold; color: {Colors.TEXT_PRIMARY};")
         layout.addWidget(header)
 
@@ -60,7 +61,7 @@ class AttendanceScreen(QWidget):
             self.user_combo.currentIndexChanged.connect(self._update_check_out_button)
             action_layout.addWidget(self.user_combo)
             
-            self.btn_check_in = QPushButton("✅ Check In")
+            self.btn_check_in = IconButton("✅ Check In")
             self.btn_check_in.clicked.connect(self._handle_check_in)
             action_layout.addWidget(self.btn_check_in)
         else:
@@ -69,7 +70,7 @@ class AttendanceScreen(QWidget):
             )
             action_layout.addStretch()
 
-        self.btn_check_out = QPushButton("🚪 Check Out")
+        self.btn_check_out = IconButton("🚪 Check Out")
         self.btn_check_out.clicked.connect(self._handle_check_out)
         self.btn_check_out.setEnabled(False)  # Enabled if the selected worker is checked in
         self.btn_check_out.setVisible(is_admin)  # the server refuses it for other roles
@@ -165,11 +166,11 @@ class AttendanceScreen(QWidget):
         the owner to review), or without a position (a check-in at the desk)."""
         status = record.get("location_status")
         if status == "off_site":
-            cell = QTableWidgetItem("⚠️ Off site")
+            cell = QTableWidgetItem("Off site")
             cell.setToolTip("Marked from a phone that was outside every plant unit. The owner reviews these.")
             cell.setForeground(QColor(Colors.DANGER))
         elif status == "on_site":
-            cell = QTableWidgetItem("📍 On site")
+            cell = QTableWidgetItem("On site")
         else:
             cell = QTableWidgetItem("-")
         return cell
