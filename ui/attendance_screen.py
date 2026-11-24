@@ -21,6 +21,7 @@ from PyQt6.QtGui import QColor
 from datetime import datetime
 
 from ui.icons import IconButton
+from ui.attendance_sheet import MonthSheetDialog
 from ui.theme import Theme, Colors, Fonts
 from services.workforce_service import AttendanceService
 from services.session import Session
@@ -64,6 +65,10 @@ class AttendanceScreen(QWidget):
             self.btn_check_in = IconButton("✅ Check In")
             self.btn_check_in.clicked.connect(self._handle_check_in)
             action_layout.addWidget(self.btn_check_in)
+            self.btn_sheet = IconButton("📅 Month sheet")
+            self.btn_sheet.setToolTip("Everyone's month on one grid, with a CSV for the accountant")
+            self.btn_sheet.clicked.connect(self._open_sheet)
+            action_layout.addWidget(self.btn_sheet)
         else:
             action_layout.addWidget(
                 QLabel("Your attendance history. The owner, a manager or the counter records check-in and check-out.")
@@ -87,6 +92,9 @@ class AttendanceScreen(QWidget):
         layout.addWidget(self.table)
         # loaded when the screen is opened (the main window calls refresh_data), not
         # while the window is being built, so starting the app never waits on the server
+
+    def _open_sheet(self, _checked=False):
+        MonthSheetDialog(self, self._service, self._service.get_users()).exec()
 
     @staticmethod
     def _is_admin() -> bool:
