@@ -35,7 +35,7 @@ class ReceiptDialog(QDialog):
     def __init__(self, parent, receipt: dict):
         super().__init__(parent)
         self._receipt = receipt
-        self.setWindowTitle("Receipt" + (" (provisional)" if receipt.get("provisional") else ""))
+        self.setWindowTitle("Pay slip" if receipt.get("payslip") else "Receipt" + (" (provisional)" if receipt.get("provisional") else ""))
         self.setMinimumSize(520, 560)
         self.setStyleSheet(f"background-color: {Colors.BG};")
         root = QVBoxLayout(self)

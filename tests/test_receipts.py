@@ -64,3 +64,32 @@ def test_the_till_keeps_the_last_bill_for_a_receipt(qapp, monkeypatch):
     s._generate_invoice()  # saved offline
     sale, items, provisional = s._last_bill
     assert provisional and sale["customer_name"] == "Meena" and items[0]["item_name"] == "Chair" and s.receipt_btn.isEnabled()
+
+
+def test_a_payslip_comes_from_one_payout(qapp, tmp_path):
+    pay = {"paid_on": "2026-11-24", "gross_daily": "6000", "gross_extras": "1500", "deductions": "500", "net_paid": "7000", "method": "upi"}
+    p = rr.payslip_from_payment(pay, "Ravi", "Achari", {"name": "Vriksha Studios"})
+    assert (p["gross"], p["deductions"], p["net"], p["payslip"]) == (7500, 500, 7000, True)
+    out = tmp_path / "slip.pdf"
+    for key, *_ in rr.FORMATS:
+        rr.save_pdf(str(out), rr.BY_KEY[key], p)
+        assert out.read_bytes().startswith(b"%PDF")
+    assert rr.receipt_image(rr.BY_KEY["a5"], p).height() > 100
+
+
+def test_payroll_screen_prints_the_selected_payout(qapp, monkeypatch):
+    from PyQt6.QtWidgets import QMessageBox
+    from services.session import Session
+    from ui import payroll_screen
+    from ui.receipt_dialog import ReceiptDialog
+
+    monkeypatch.setattr(Session, "can", classmethod(lambda cls, a, *x: True))
+    s = payroll_screen.PayrollScreen()
+    owed = [{"user_id": "u1", "full_name": "Ravi", "username": "ravi", "role": "achari", "pending_daily": "0", "pending_extras": "0", "owed_gross": "0", "advance_balance": "0"}]
+    pays = [{"user_id": "u1", "paid_on": "2026-11-24", "gross_daily": "100", "gross_extras": "0", "deductions": "0", "net_paid": "100", "method": "cash"}]
+    s._refresh_everyone(owed, pays)
+    shown = []
+    monkeypatch.setattr(ReceiptDialog, "exec", lambda self: shown.append(self._receipt))
+    monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: shown.append("hint"))
+    s.payslip_btn.click()  # one pay-out in the list: no need to select it
+    assert shown[-1]["payslip"] and shown[-1]["name"] == "Ravi" and shown[-1]["net"] == 100

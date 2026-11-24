@@ -36,6 +36,8 @@ from ui.errors import handle_permissions
 from ui.expenses_screen import METHODS, date_edit, dialog_buttons, iso, money_spin
 from ui.staff_screen import ROLE_WORDS
 from ui.theme import Colors, Fonts, Theme
+from ui.receipt_dialog import ReceiptDialog, shop_details
+from ui.receipt_render import payslip_from_payment
 from ui.workers import load_async
 
 KINDS = [
@@ -299,6 +301,7 @@ class PayrollScreen(QWidget):
         super().__init__()
         self._svc = MoneyService()
         self._owed: list[dict] = []
+        self._pay_rows: list[tuple] = []  # (payment, person's name, role) for the pay-out table on show
         self.can_manage = Session.can("payroll:payment:create")
         self.setStyleSheet(Theme.content_bg())
         self._build_ui()
@@ -326,6 +329,11 @@ class PayrollScreen(QWidget):
             self.advance_btn.setStyleSheet(Theme.btn_secondary())
             self.advance_btn.clicked.connect(lambda _c=False: self._advance(None))
             head.addWidget(self.advance_btn)
+        self.payslip_btn = IconButton("🧾  Pay slip")
+        self.payslip_btn.setStyleSheet(Theme.btn_secondary())
+        self.payslip_btn.setToolTip("Print the pay slip of the pay-out you selected below")
+        self.payslip_btn.clicked.connect(self._payslip)
+        head.addWidget(self.payslip_btn)
         layout.addLayout(head)
 
         hint = QLabel(
@@ -408,6 +416,8 @@ class PayrollScreen(QWidget):
             self.table.setCellWidget(r, self.COL_ACTIONS, self._actions(p))
             self.table.setRowHeight(r, 52)
         rows = payments
+        roles = {p["user_id"]: ROLE_WORDS.get(p.get("role"), p.get("role")) for p in self._owed}
+        self._pay_rows = [(p, names.get(p["user_id"], "(former staff)"), roles.get(p["user_id"])) for p in rows]
         self.payments.setRowCount(len(rows))
         for r, p in enumerate(rows):
             gross = float(p["gross_daily"]) + float(p["gross_extras"])
@@ -434,6 +444,7 @@ class PayrollScreen(QWidget):
             for c, text in enumerate(values):
                 self.entries.setItem(r, c, _cell(text, right=c == 3))
         pays = me["recent_payments"]
+        self._pay_rows = [(p, me.get("full_name") or me.get("username") or "", None) for p in pays]
         self.my_payments.setRowCount(len(pays))
         for r, p in enumerate(pays):
             gross = float(p["gross_daily"]) + float(p["gross_extras"])
@@ -442,6 +453,17 @@ class PayrollScreen(QWidget):
                 self.my_payments.setItem(r, c, _cell(text, right=c in (1, 2, 3)))
 
     # --------------------------------------------------------- actions
+    def _payslip(self, _checked=False):
+        table = self.payments if self.can_manage else self.my_payments
+        row = table.currentRow()
+        if row < 0 and len(self._pay_rows) == 1:
+            row = 0
+        if not 0 <= row < len(self._pay_rows):
+            QMessageBox.information(self, "Pay slip", "Click a pay-out in the list first.")
+            return
+        payment, name, role = self._pay_rows[row]
+        ReceiptDialog(self, payslip_from_payment(payment, name, role, shop_details())).exec()
+
     def _actions(self, p: dict) -> QWidget:
         box = QWidget()
         h = QHBoxLayout(box)

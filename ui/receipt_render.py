@@ -120,8 +120,52 @@ class _Pen:
         self.y += (h_mm + 1) * self.k
 
 
+def payslip_from_payment(payment: dict, name: str, role: str | None = None, shop: dict | None = None) -> dict:
+    """What a pay slip prints, from one pay-out (the server's payment row)."""
+    daily, extras = _num(payment.get("gross_daily")), _num(payment.get("gross_extras"))
+    return {
+        "payslip": True, "shop": shop or {}, "name": name, "role": role or "", "date": str(payment.get("paid_on") or "")[:10],
+        "method": str(payment.get("method") or ""), "daily": daily, "extras": extras, "gross": daily + extras,
+        "deductions": _num(payment.get("deductions")), "net": _num(payment.get("net_paid")), "number": "",
+    }
+
+
+def _paint_payslip(p, k, fmt, r: dict, draw: bool) -> float:
+    _key, _title, w_mm, _h, size, margin = fmt
+    pen = _Pen(p, k, w_mm, size, margin, draw)
+    shop = r["shop"]
+    pen.image(load_image(logo_path()), 14 if w_mm >= 140 else 12)
+    pen.text(shop.get("name") or "Vriksha Studios", CENTER, 1.3, True)
+    if shop.get("address"):
+        pen.text(str(shop["address"]), CENTER, 0.85)
+    pen.gap()
+    pen.rule()
+    pen.text("PAY SLIP", CENTER, 1.2, True)
+    pen.gap(1)
+    pen.pair("Name", r["name"], 1.0, True)
+    if r["role"]:
+        pen.pair("Role", r["role"], 0.95)
+    pen.pair("Paid on", r["date"], 0.95)
+    pen.pair("Paid by", r["method"].upper() if r["method"] == "upi" else r["method"].title(), 0.95)
+    pen.rule()
+    pen.pair("Daily wages", inr(r["daily"]), 1.0)
+    pen.pair("Piece work, overtime, bonus", inr(r["extras"]), 1.0)
+    pen.pair("Total earned", inr(r["gross"]), 1.0, True)
+    if r["deductions"]:
+        pen.pair("Taken back from advance", f"-{inr(r['deductions'])}", 1.0)
+    pen.rule()
+    pen.pair("NET PAID", inr(r["net"]), 1.3, True)
+    pen.gap(8)
+    pen.pair("Received by: ____________", "Paid by: ____________", 0.9)
+    pen.gap(2)
+    pen.text("Thank you for your work.", CENTER, 0.9)
+    return (pen.y / k) + margin
+
+
 def _paint(p, k, fmt, r: dict, draw: bool) -> float:
-    """Draw the receipt; returns how far down it goes, in mm."""
+    """Draw the receipt (or pay slip); returns how far down it goes, in mm."""
+    if r.get("payslip"):
+        return _paint_payslip(p, k, fmt, r, draw)
     _key, _title, w_mm, _h, size, margin = fmt
     pen = _Pen(p, k, w_mm, size, margin, draw)
     wide = w_mm >= 140
