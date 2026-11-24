@@ -92,7 +92,8 @@ def test_stock_shows_the_price_with_gst_and_the_rate(qapp, monkeypatch):
     monkeypatch.setattr(InventoryService, "get_items", lambda self, allow_cached=False: ITEMS)
     w = InventoryWindow()
     w.refresh_data()
-    assert w.table.horizontalHeaderItem(w.COL_PRICE).text() == "Price with GST"
+    price_header = w.table.horizontalHeaderItem(w.COL_PRICE)
+    assert price_header.text() == "Price" and price_header.toolTip() == "Price with GST"  # short title, long form on hover
     assert w.table.item(0, w.COL_PRICE).text() == "₹22,400.00" and w.table.item(0, w.COL_GST).text() == "12%"
     assert w.table.item(1, w.COL_PRICE).text() == "₹900.00" and w.table.item(1, w.COL_GST).text() == "-"
 
