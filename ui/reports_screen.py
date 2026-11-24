@@ -21,6 +21,7 @@ from PyQt6.QtGui import QColor
 from ui.icons import IconButton
 from ui.theme import Theme, Colors, Fonts
 from ui.components.metric_card import MetricCard
+from ui.gst_summary import GstSummaryPanel
 from services.money import inr
 from services.report_service import ReportService
 from ui.workers import load_async
@@ -79,6 +80,9 @@ class ReportsScreen(QWidget):
 
         layout.addLayout(cards_grid)
 
+        self.gst_panel = GstSummaryPanel(self._report_service)
+        layout.addWidget(self.gst_panel)
+
         # Low stock alerts
         alert_header = QLabel("Low Stock Alerts")
         alert_header.setStyleSheet(Theme.subheading())
@@ -136,9 +140,15 @@ class ReportsScreen(QWidget):
 
     def refresh_data(self):
         self._show(self._fetch())
+        self._refresh_gst()
+
+    def _refresh_gst(self):
+        if self.gst_panel.isVisible():
+            self.gst_panel.refresh()
 
     def refresh_async(self, _checked=False):
         load_async(self, self._fetch, self._show)
+        self._refresh_gst()
 
     def _show(self, data):
         dash, sales, low_stock = data

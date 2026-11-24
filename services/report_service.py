@@ -32,6 +32,13 @@ class ReportService:
         """
         return self._api.get_sales_report(self._token(), start_date, end_date)
 
+    def get_gst_summary(self, start_date: str, end_date: str) -> dict | None:
+        """GET /reports/gst-summary: {taxable_value, cgst_total, sgst_total, igst_total, total_tax}"""
+        try:
+            return self._api._get("/reports/gst-summary", self._token(), params={"start_date": start_date, "end_date": end_date}, quiet=True)
+        except Exception:  # forbidden, offline or an older server: the panel says it could not load
+            return None
+
     def get_inventory_report(self) -> list:
         """
         GET /reports/inventory

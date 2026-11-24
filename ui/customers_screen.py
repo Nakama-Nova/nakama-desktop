@@ -26,6 +26,9 @@ from ui.errors import handle_permissions
 from services.customer_service import CustomerService
 from services.session import Session
 from ui.workers import load_async
+from services import dues
+from services.money import inr
+from services.sales_service import SalesService
 
 
 class CustomerDialog(QDialog):
@@ -98,12 +101,66 @@ class CustomerDialog(QDialog):
         }
 
 
+class DuesDialog(QDialog):
+    """What one buyer owes, bill by bill, with a reminder that opens in WhatsApp (you press send)."""
+
+    def __init__(self, parent, customer: dict, owed: dict):
+        super().__init__(parent)
+        self._customer, self._owed = customer, owed
+        self.setWindowTitle(f"Dues: {customer.get('name', '')}")
+        self.setMinimumWidth(480)
+        self.setStyleSheet(f"background-color: {Colors.BG};")
+        v = QVBoxLayout(self)
+        v.setContentsMargins(24, 20, 24, 20)
+        v.setSpacing(10)
+        v.addWidget(QLabel(f"{customer.get('name', '')} owes {inr(owed['owed'])}", styleSheet=Theme.subheading()))
+        t = QTableWidget(len(owed["bills"]), 3)
+        t.setHorizontalHeaderLabels(["Bill", "Date", "Still to pay"])
+        t.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        t.verticalHeader().setVisible(False)
+        t.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        Theme.style_table(t)
+        for r, s in enumerate(owed["bills"]):
+            for c, text in enumerate([s.get("invoice_number") or "", str(s.get("created_at") or "")[:10], inr(dues.due_of(s))]):
+                t.setItem(r, c, QTableWidgetItem(text))
+        v.addWidget(t)
+        if any(s.get("balance_due") is None and s.get("payment_status") == "partial" for s in owed["bills"]):
+            v.addWidget(QLabel("A part-paid bill is counted in full: this server does not say how much was paid.", styleSheet=f"color: {Colors.TEXT_SECONDARY};"))
+        row = QHBoxLayout()
+        row.addStretch()
+        close = QPushButton("Close")
+        close.setStyleSheet(Theme.btn_secondary())
+        close.clicked.connect(self.accept)
+        self.remind_btn = QPushButton("💬  Remind on WhatsApp")
+        self.remind_btn.setStyleSheet(Theme.btn_primary())
+        self.remind_btn.clicked.connect(self._remind)
+        row.addWidget(close)
+        row.addWidget(self.remind_btn)
+        v.addLayout(row)
+
+    def link(self) -> str | None:
+        text = dues.reminder_text(
+            self._customer.get("name", ""), inr(self._owed["owed"]), [b.get("invoice_number") for b in self._owed["bills"] if b.get("invoice_number")]
+        )
+        return dues.whatsapp_link(self._customer.get("phone") or "", text)
+
+    def _remind(self):
+        import webbrowser
+
+        link = self.link()
+        if not link:
+            QMessageBox.information(self, "Reminder", "This buyer has no usable phone number.")
+            return
+        webbrowser.open(link)  # opens the chat with the words typed in; nothing is sent until you press send
+
+
 class CustomersScreen(QWidget):
 
     def __init__(self):
         super().__init__()
         self._customer_service = CustomerService()
         self._all_customers: list[dict] = []
+        self._dues: dict = {}
         self.setStyleSheet(Theme.content_bg())
         self._build_ui()
 
@@ -141,8 +198,8 @@ class CustomersScreen(QWidget):
         # Table — NO UUID ID column, NO "Created At"
         self.table = QTableWidget()
 
-        self.table.setColumnCount(4 if self._can_edit else 3)
-        headers = ["Name", "Phone", "Address"]
+        self.table.setColumnCount(6 if self._can_edit else 5)
+        headers = ["Name", "Phone", "Address", "Owes", "Open since"]
         if self._can_edit:
             headers.append("Actions")
         self.table.setHorizontalHeaderLabels(headers)
@@ -151,8 +208,8 @@ class CustomersScreen(QWidget):
         hdr.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
 
         if self._can_edit:
-            hdr.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
-            self.table.setColumnWidth(3, 160)
+            hdr.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)
+            self.table.setColumnWidth(5, 250)
 
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
@@ -161,15 +218,26 @@ class CustomersScreen(QWidget):
 
         layout.addWidget(self.table)
 
+    def _fetch(self):
+        """The buyers, and the bills (to show who owes what)."""
+        customers = self._customer_service.get_all()
+        try:
+            sales = SalesService().get_sales() if Session.can("sales:sale:read") else []
+        except Exception:  # offline or refused: the list still shows, without the dues
+            sales = []
+        return customers, sales
+
     @handle_permissions
     def refresh_data(self):
-        self._show_customers(self._customer_service.get_all())
+        self._show_customers(self._fetch())
 
     def refresh_async(self):
         """Same as refresh_data, but the list is fetched in the background."""
-        load_async(self, self._customer_service.get_all, self._show_customers)
+        load_async(self, self._fetch, self._show_customers)
 
-    def _show_customers(self, customers):
+    def _show_customers(self, data):
+        customers, sales = data if isinstance(data, tuple) else (data, [])
+        self._dues = dues.dues_by_customer(sales or [])
         self._all_customers = customers or []
         self._populate_table(self._all_customers)
 
@@ -181,6 +249,13 @@ class CustomersScreen(QWidget):
             self.table.setItem(row, 0, QTableWidgetItem(c["name"]))
             self.table.setItem(row, 1, QTableWidgetItem(c.get("phone", "") or ""))
             self.table.setItem(row, 2, QTableWidgetItem(c.get("address", "") or ""))
+            owed = self._dues.get(str(c.get("id")))
+            owes = QTableWidgetItem(inr(owed["owed"]) if owed else "")
+            owes.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            if owed:
+                owes.setForeground(Qt.GlobalColor.darkRed)
+            self.table.setItem(row, 3, owes)
+            self.table.setItem(row, 4, QTableWidgetItem(f"{owed['days']} days" if owed else ""))
 
             # Action buttons — compact style for table cells
             actions = QWidget()
@@ -211,11 +286,23 @@ class CustomersScreen(QWidget):
             """)
             del_btn.clicked.connect(lambda _, cust=c: self.delete_customer(cust))
 
+            if owed:
+                due_btn = IconButton("💬 Dues")
+                due_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+                due_btn.setFixedHeight(28)
+                due_btn.setStyleSheet(Theme.btn_table_action())
+                due_btn.setToolTip("Unpaid bills and a WhatsApp reminder")
+                due_btn.clicked.connect(lambda _, cust=c, o=owed: self.show_dues(cust, o))
+                actions_layout.addWidget(due_btn)
             actions_layout.addWidget(edit_btn)
             actions_layout.addWidget(del_btn)
 
             if self._can_edit:
-                self.table.setCellWidget(row, 3, actions)
+                self.table.setCellWidget(row, 5, actions)
+
+    def show_dues(self, customer: dict, owed: dict):
+        """The buyer's unpaid bills, and a WhatsApp reminder to send them."""
+        DuesDialog(self, customer, owed).exec()
 
     def _filter_table(self, text: str):
         query = text.strip().lower()

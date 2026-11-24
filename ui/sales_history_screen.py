@@ -30,6 +30,9 @@ from services.money import inr
 from services.event_bus import SALE_CREATED, EventBus
 from services.sales_service import BillPdfError, SalesService
 from services.session import Session
+from ui.receipt_dialog import ReceiptDialog, shop_details
+from ui.receipt_render import receipt_from_sale
+from ui.bill_payments import PaymentsDialog, ReturnDialog
 from ui.components.interactive import ChipBar
 from ui.errors import handle_permissions
 from ui.theme import Colors, Fonts, Theme
@@ -64,7 +67,12 @@ def bill_text(sale: dict, items: list[dict]) -> str:
         msg += f"\nGST: {inr(tax)}  (CGST {inr(tax / 2)} + SGST {inr(tax / 2)})"
     if discount:
         msg += f"\nDiscount: -{inr(discount)}"
-    return msg + f"\nTotal: {inr(float(sale.get('total_amount', 0)))}"
+    msg += f"\nTotal: {inr(float(sale.get('total_amount', 0)))}"
+    if sale.get("amount_paid") is not None:
+        msg += f"\nPaid: {inr(float(sale['amount_paid']))}  ·  still to pay {inr(float(sale.get('balance_due') or 0))}"
+    if float(sale.get("returned_total") or 0):
+        msg += f"\nReturned: -{inr(float(sale['returned_total']))}"
+    return msg
 
 
 class DeleteBillDialog(QDialog):
@@ -238,7 +246,7 @@ class SalesHistoryScreen(QWidget):
         hdr.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         hdr.setSectionResizeMode(self.COL_ACTIONS, QHeaderView.ResizeMode.Fixed)
         # room for every button with its words: View, Print, Payment, Delete
-        self.table.setColumnWidth(self.COL_ACTIONS, 420 if self._can_delete else 320 if self._can_edit else 200)
+        self.table.setColumnWidth(self.COL_ACTIONS, self._actions_width())
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.verticalHeader().setVisible(False)
@@ -319,9 +327,20 @@ class SalesHistoryScreen(QWidget):
             self.table.setCellWidget(row, self.COL_ACTIONS, self._actions(sale, cancelled))
         # as wide as the widest row of buttons needs, in whatever font this computer uses (a fixed guess cut "Payment" to "Payme")
         wide = max((self.table.cellWidget(r, self.COL_ACTIONS).sizeHint().width() for r in range(self.table.rowCount())), default=0)
-        floor = 420 if self._can_delete else 320 if self._can_edit else 200  # what the buttons measured on Windows (the hint is taken before the style is applied)
+        floor = self._actions_width()  # what the buttons measured on Windows (the hint is taken before the style is applied)
         if wide:
             self.table.setColumnWidth(self.COL_ACTIONS, max(floor, wide + 8))
+
+    def _actions_width(self) -> int:
+        """What the row buttons need (measured on Windows): View and Print, plus Payments, Return and Delete."""
+        w = 310  # View, Print and Receipt
+        if self._can_edit or Session.can("sales:payment:add") or Session.can("sales:payment:void"):
+            w += 120
+        if Session.can("sales:sale:return"):
+            w += 110
+        if self._can_delete:
+            w += 100
+        return w
 
     def _actions(self, sale: dict, cancelled: bool) -> QWidget:
         box = QWidget()
@@ -329,8 +348,14 @@ class SalesHistoryScreen(QWidget):
         h.setContentsMargins(4, 4, 4, 4)
         h.setSpacing(6)
         buttons = [("👁️ View", self._view_details, "See what was sold"), ("🖨️ Print", self._reprint_invoice, "Open the bill PDF")]
-        if self._can_edit and not cancelled:
-            buttons.append(("✏️ Payment", self._edit_payment, "Correct how it was paid"))
+        if not cancelled:
+            buttons.append(("🧾 Receipt", self._receipt, "Print a receipt on a roll, A5 or A4"))
+            if "payments" in sale and (Session.can("sales:payment:add") or Session.can("sales:payment:void")):
+                buttons.append(("💳 Payments", self._payments, "See, add or take off payments on this bill"))
+            elif "payments" not in sale and self._can_edit:  # an older server: only the status and method
+                buttons.append(("✏️ Payment", self._edit_payment, "Correct how it was paid"))
+            if Session.can("sales:sale:return"):
+                buttons.append(("↩️ Return", self._return_goods, "Take goods back and make a credit note"))
         if self._can_delete and not cancelled:
             buttons.append(("🗑️ Delete", self._delete_bill, "Cancel this bill; the stock comes back"))
         for text, slot, tip in buttons:
@@ -378,6 +403,45 @@ class SalesHistoryScreen(QWidget):
         if not changes:
             return
         self._sales_service.edit_sale(str(sale["id"]), changes)
+        self.refresh_async()
+
+    @handle_permissions
+    def _receipt(self, sale):
+        items = self._sales_service.get_sale_items(str(sale["id"]))
+        if not items:
+            QMessageBox.information(self, "Receipt", "No items found for this bill.")
+            return
+        ReceiptDialog(self, receipt_from_sale(sale, items, shop_details())).exec()
+
+    @handle_permissions
+    def _payments(self, sale):
+        PaymentsDialog(self, sale, self._sales_service, Session.can("sales:payment:add"), Session.can("sales:payment:void")).exec()
+        self.refresh_async()
+
+    @handle_permissions
+    def _return_goods(self, sale):
+        sale_id = str(sale["id"])
+        details = self._sales_service.get_sale_details(sale_id) or sale  # fresh: shows what was already returned
+        items = self._sales_service.get_sale_items(sale_id)
+        if not items:
+            QMessageBox.information(self, "Return", "No items found for this bill.")
+            return
+        d = ReturnDialog(self, details, items)
+        if d.exec() != QDialog.DialogCode.Accepted:
+            return
+        note = self._sales_service.create_return(sale_id, d.lines(), d.reason_text(), d.method.currentData(), d.restock.isChecked()) or {}
+        number = note.get("credit_note_number")
+        QMessageBox.information(
+            self,
+            "Credit note made",
+            f"Credit note {number} for {inr(float(note.get('refund_amount') or 0))} was made."
+            + (" The goods are back in stock." if note.get("restocked") else ""),
+        )
+        if number:
+            try:
+                self._sales_service.open_pdf(self._sales_service.fetch_and_save_credit_note(number))
+            except BillPdfError as exc:
+                QMessageBox.warning(self, "Credit note PDF", f"The credit note was made, but its PDF could not be opened.\n\n{exc}")
         self.refresh_async()
 
     @handle_permissions

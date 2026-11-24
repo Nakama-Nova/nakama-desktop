@@ -42,15 +42,22 @@ class SalesService:
         customer_id: str | None = None,
         client_id: str | None = None,
         location_id: str | None = None,
+        discount: float = 0,
         payment_method: str | None = None,
         payment_status: str | None = None,
+        payments: list | None = None,
     ) -> dict | None:
-        """POST /sales and return the SaleResponse dict."""
+        """POST /sales and return the SaleResponse dict. discount is rupees off the bill total;
+        payments is [{"amount", "method"}, ...] when the bill is paid in more than one way."""
         paid = {}  # only what was chosen: left out, the server records the bill as not paid
         if payment_method is not None:
             paid["payment_method"] = payment_method
         if payment_status is not None:
             paid["payment_status"] = payment_status
+        if discount:
+            paid["discount"] = discount
+        if payments:
+            paid["payments"] = payments
         if location_id is None:  # the common case: one shop, which the server fills in
             return self._api.create_sale(self._token(), items, customer_id, client_id, **paid)
         return self._api.create_sale(self._token(), items, customer_id, client_id, location_id, **paid)
@@ -62,6 +69,25 @@ class SalesService:
     def edit_sale(self, sale_id: str, changes: dict) -> dict:
         """Correct a bill's payment (owner, manager): {"payment_status": ..., "payment_method": ...}."""
         return self._api._patch(f"/sales/{sale_id}", self._token(), json=changes)
+
+    # ------------------------------------------------------------------
+    # Payments and returns on a bill (see docs/BILLING_B3_B4_CONTRACT.md)
+    # ------------------------------------------------------------------
+    def add_payment(self, sale_id: str, data: dict) -> dict:
+        """Money received against a bill: {"amount", "method", "reference"?, "note"?}. Returns the bill."""
+        return self._api._post(f"/sales/{sale_id}/payments", self._token(), json=data)
+
+    def void_payment(self, sale_id: str, payment_id: str, reason: str) -> dict:
+        """Take a wrong payment off the bill (it stays on record with the reason). Returns the bill."""
+        return self._api._post(f"/sales/{sale_id}/payments/{payment_id}/void", self._token(), json={"reason": reason})
+
+    def returns(self, sale_id: str) -> list:
+        return self._api._get(f"/sales/{sale_id}/returns", self._token()) or []
+
+    def create_return(self, sale_id: str, items: list[dict], reason: str, refund_method: str, restock: bool = True) -> dict:
+        """Take goods back: items [{"sale_item_id", "quantity"}]. Returns the credit note."""
+        body = {"items": items, "reason": reason, "refund_method": refund_method, "restock": restock}
+        return self._api._post(f"/sales/{sale_id}/returns", self._token(), json=body)
 
     def is_online(self) -> bool:
         return self._api.health_check()
@@ -121,8 +147,15 @@ class SalesService:
     def fetch_and_save_pdf(self, invoice_number: str) -> Path:
         """Download a bill's PDF, keep a copy on this PC and return its path.
         Raises BillPdfError, with the reason, when it cannot."""
+        return self._download_pdf(f"/invoices/{invoice_number}/pdf", invoice_number)
+
+    def fetch_and_save_credit_note(self, number: str) -> Path:
+        """The same for a credit note (its number has slashes: CN/26-27/0001)."""
+        return self._download_pdf(f"/returns/{number}/pdf", number.replace("/", "-"))
+
+    def _download_pdf(self, path: str, name: str) -> Path:
         try:
-            pdf = self._api._get_file(f"/invoices/{invoice_number}/pdf", self._token())
+            pdf = self._api._get_file(path, self._token())
         except APIError as exc:
             raise BillPdfError(f"The server could not make the PDF: {exc}") from exc
         except requests.RequestException as exc:
@@ -131,7 +164,7 @@ class SalesService:
             raise BillPdfError("The server sent something that is not a PDF.")
         try:
             self.INVOICE_DIR.mkdir(parents=True, exist_ok=True)
-            filepath = self.INVOICE_DIR / f"{invoice_number}.pdf"
+            filepath = self.INVOICE_DIR / f"{name}.pdf"
             filepath.write_bytes(pdf)
         except OSError as exc:
             raise BillPdfError(f"The PDF could not be saved in {self.INVOICE_DIR}: {exc.strerror or exc}") from exc

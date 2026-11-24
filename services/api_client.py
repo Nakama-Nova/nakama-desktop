@@ -516,14 +516,13 @@ class APIClient:
             return None
 
     def create_customer(
-        self, token: str, name: str, phone: str = None, address: str = None
+        self, token: str, name: str, phone: str = None, address: str = None, gstin: str = None
     ) -> dict | None:
+        body = {"name": name, "phone": phone, "address": address}
+        if gstin:
+            body["gstin"] = gstin
         try:
-            return self._post(
-                "/customers",
-                token,
-                json={"name": name, "phone": phone, "address": address},
-            )
+            return self._post("/customers", token, json=body)
         except ForbiddenError:
             raise
         except APIError:
@@ -548,13 +547,13 @@ class APIClient:
         name: str,
         phone: str = None,
         address: str = None,
+        gstin: str = None,
     ) -> dict | None:
+        body = {"name": name, "phone": phone, "address": address}
+        if gstin:  # only when given: an update that leaves it out must not wipe the one on file
+            body["gstin"] = gstin
         try:
-            return self._put(
-                f"/customers/{customer_id}",
-                token,
-                json={"name": name, "phone": phone, "address": address},
-            )
+            return self._put(f"/customers/{customer_id}", token, json=body)
         except APIError:
             return None
 
@@ -572,11 +571,16 @@ class APIClient:
         customer_id: str | None = None,
         client_id: str | None = None,
         location_id: str | None = None,
+        discount: float = 0,
         payment_method: str | None = None,
         payment_status: str | None = None,
+        payments: list | None = None,
     ) -> dict | None:
         """
         POST /sales
+        payments: [{"amount", "method"}, ...] for a bill paid in more than one way.
+        discount: rupees off the bill total (items + GST). payment_method / payment_status:
+        how it was paid (paid, partial, pending); left out, the server records "pending".
         items: [{"item_id": "<uuid>", "quantity": int}, ...]
         payment_method / payment_status: how the buyer paid ("cash", "upi", ...; "paid") or
         "pending" for a bill not paid yet. Left out, the server records the bill as not paid.
@@ -591,6 +595,10 @@ class APIClient:
             payload["customer_id"] = customer_id
         if client_id is not None:
             payload["client_id"] = client_id
+        if discount:
+            payload["discount"] = discount
+        if payments:
+            payload["payments"] = payments
         if payment_method is not None:
             payload["payment_method"] = payment_method
         if payment_status is not None:

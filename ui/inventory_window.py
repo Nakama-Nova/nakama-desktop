@@ -42,6 +42,7 @@ from ui.stock_dialogs import (
     MovementsDialog,
     PhotosDialog,
 )
+from ui.label_print_dialog import LabelPrintDialog
 from ui.item_scan import ItemScanDialog, view_3d
 from ui.theme import Colors, Fonts, Spacing, Theme
 from ui.workers import load_async
@@ -89,6 +90,7 @@ class InventoryWindow(QWidget):
         self.categories_btn = head_button(
             "🏷️  Categories", Theme.btn_secondary(), self._categories, self.can_edit
         )
+        head_button("🏷️  Labels", Theme.btn_secondary(), self._print_labels, Session.can("items:item:read"))
         head_button("🔄  Refresh", Theme.btn_secondary(), self.refresh_async)
         self.add_btn = head_button(
             "➕  Add product", Theme.btn_primary(), self._add_item, self.can_edit
@@ -369,6 +371,16 @@ class InventoryWindow(QWidget):
                 self.refresh_data()
 
     @handle_permissions
+    def _print_labels(self, _checked=False):
+        """Stickers for the rows you selected, or for everything the list shows now."""
+        rows = sorted({i.row() for i in self.table.selectedIndexes()})
+        shown = getattr(self, "_shown_items", [])
+        items = [shown[r] for r in rows if r < len(shown)] or shown
+        if not items:
+            QMessageBox.information(self, "Labels", "There are no products to label.")
+            return
+        LabelPrintDialog(self, items).exec()
+
     def _categories(self, _checked=False):
         ManageRowsDialog(
             self, self._stock, "categories", "Categories", CATEGORY_FIELDS
