@@ -24,6 +24,7 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QSpinBox,
     QCompleter,
+    QComboBox,
     QFrame,
 )
 from PyQt6.QtCore import Qt, QStringListModel
@@ -34,6 +35,7 @@ from ui.icons import IconButton
 from ui.theme import Theme, Colors, Fonts
 from ui.components.place_picker import PlacePicker, fetch_places, selling_places
 from ui.errors import handle_permissions
+from ui.sales_history_screen import METHODS
 from ui.workers import load_async
 from services.sales_service import BillPdfError, SalesService
 from services.customer_service import CustomerService
@@ -205,6 +207,18 @@ class SalesScreen(QWidget):
         total_row.addWidget(total_name)
         total_row.addWidget(self.grandtotal_lbl, 1)
         col.addLayout(total_row)
+
+        # How the buyer paid. Cash is the usual counter sale; "Not paid yet" leaves the bill open.
+        pay_lbl = QLabel("Paid by")
+        pay_lbl.setStyleSheet(Theme.label())
+        col.addWidget(pay_lbl)
+        self.pay_pick = QComboBox()
+        for label, value in METHODS:
+            self.pay_pick.addItem(label, value)
+        self.pay_pick.addItem("Not paid yet", None)
+        self.pay_pick.setStyleSheet(Theme.input_style())
+        self.pay_pick.setMinimumHeight(38)
+        col.addWidget(self.pay_pick)
 
         self.invoice_btn = IconButton("Create bill")
         self.invoice_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -399,8 +413,16 @@ class SalesScreen(QWidget):
             self._cart.pop(row)
             self._refresh_table()
 
+    def _payment(self) -> dict:
+        """What to tell the server about payment: the method and "paid", or just "pending"."""
+        method = self.pay_pick.currentData()
+        if method is None:
+            return {"payment_status": "pending"}
+        return {"payment_method": method, "payment_status": "paid"}
+
     def _clear_cart(self):
         self._bill_key = None
+        self.pay_pick.setCurrentIndex(0)  # back to cash for the next bill
         self._cart.clear()
         self._refresh_table()
 
@@ -511,8 +533,16 @@ class SalesScreen(QWidget):
             {"item_id": c.item_id, "quantity": c.quantity, "price": c.price}
             for c in self._cart
         ]
+        pay = self._payment()
         ref = self._sales_service.queue_offline_sale(
-            lines, customer_name, phone, client_id, self._sold_from()
+            lines, customer_name, phone, client_id, self._sold_from(),
+            payment_method=pay.get("payment_method"), payment_status=pay["payment_status"],
+        )
+        paid_note = (
+            "\n\nHow it was paid is kept with it, but the server shows it as not paid until "
+            "you correct it in Bill History."
+            if pay["payment_status"] == "paid"
+            else ""
         )
         QMessageBox.information(
             self,
@@ -520,7 +550,7 @@ class SalesScreen(QWidget):
             f"No internet, so this bill is saved on this computer (ref {ref}).\n\n"
             "It is sent automatically when the connection is back, and the "
             "official bill number is given then. A printed bill is not "
-            "available until then.",
+            "available until then." + paid_note,
         )
         self._clear_cart()
         self.customer_input.clear()
@@ -567,7 +597,7 @@ class SalesScreen(QWidget):
             place = self._sold_from()
             extra = {"location_id": place} if place else {}  # one shop: the server fills it in
             sale_data = self._sales_service.create_sale(
-                items=payload_items, customer_id=customer_id, client_id=client_id, **extra
+                items=payload_items, customer_id=customer_id, client_id=client_id, **extra, **self._payment()
             )
         except requests.RequestException:
             # The connection dropped after the online check. The server may or

@@ -572,10 +572,14 @@ class APIClient:
         customer_id: str | None = None,
         client_id: str | None = None,
         location_id: str | None = None,
+        payment_method: str | None = None,
+        payment_status: str | None = None,
     ) -> dict | None:
         """
         POST /sales
         items: [{"item_id": "<uuid>", "quantity": int}, ...]
+        payment_method / payment_status: how the buyer paid ("cash", "upi", ...; "paid") or
+        "pending" for a bill not paid yet. Left out, the server records the bill as not paid.
         client_id: idempotency key; the server returns the existing sale when it
         has already recorded this id.
         location_id: the place the bill is sold from (left out: the one shop, if there is one).
@@ -587,6 +591,10 @@ class APIClient:
             payload["customer_id"] = customer_id
         if client_id is not None:
             payload["client_id"] = client_id
+        if payment_method is not None:
+            payload["payment_method"] = payment_method
+        if payment_status is not None:
+            payload["payment_status"] = payment_status
         try:
             return self._post("/sales", token, json=payload)
         except ForbiddenError:
