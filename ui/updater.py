@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import (
     QSystemTrayIcon,
 )
 
+from services import app_settings
 from services import update_service as svc
 from ui.icons import IconButton
 from services.version import APP_VERSION, is_release_build
@@ -114,10 +115,19 @@ class Updater(QObject):
     # ----- starting
     def start(self) -> None:
         """Begin the background checks (installed release builds only)."""
-        if not is_release_build():
+        if not is_release_build() or not app_settings.get("auto_updates"):
             return
         QTimer.singleShot(FIRST_CHECK_MS, self.check)
         self._timer.start(CHECK_EVERY_MS)
+
+    def set_automatic(self, on: bool) -> None:
+        """Settings: start or stop the background checks now (a manual check always works)."""
+        if not is_release_build():
+            return
+        if on and not self._timer.isActive():
+            self._timer.start(CHECK_EVERY_MS)
+        elif not on:
+            self._timer.stop()
 
     # ----- checking
     def check(self, manual: bool = False) -> None:
