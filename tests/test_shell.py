@@ -39,7 +39,7 @@ def test_the_chip_follows_the_server_state(qapp, monkeypatch):
 def test_the_account_menu_holds_password_and_sign_out(qapp):
     w = window(qapp)
     assert w.role_badge.text() == "Owner"
-    assert [a.text() for a in w.navbar.account_menu.actions() if a.text()] == ["Change my password", "Sign out"]
+    assert [a.text() for a in w.navbar.account_menu.actions() if a.text()] == ["Settings", "Change my password", "Sign out"]
     w.close()
 
 

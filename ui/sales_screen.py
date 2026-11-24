@@ -41,6 +41,7 @@ from services.sales_service import BillPdfError, SalesService
 from services.customer_service import CustomerService
 from services.inventory_service import InventoryService
 from services.event_bus import EventBus, SALE_CREATED
+from services import app_settings
 from services.money import inr
 
 
@@ -263,6 +264,7 @@ class SalesScreen(QWidget):
         for label, value in METHODS:
             self.pay_pick.addItem(label, value)
         self.pay_pick.addItem("Not paid yet", None)
+        self.pay_pick.setCurrentIndex(self._default_payment_index())
         self.pay_pick.setStyleSheet(Theme.input_style())
         self.pay_pick.setMinimumHeight(38)
         col.addWidget(self.pay_pick)
@@ -467,9 +469,18 @@ class SalesScreen(QWidget):
             return {"payment_status": "pending"}
         return {"payment_method": method, "payment_status": "paid"}
 
+    def _default_payment_index(self) -> int:
+        """Settings: a new bill starts as Cash or as Not paid yet."""
+        return self.pay_pick.count() - 1 if app_settings.get("default_payment") == "none" else 0
+
+    def apply_settings(self) -> None:
+        """Settings were saved: an empty bill takes the new starting choice at once."""
+        if not self._cart:
+            self.pay_pick.setCurrentIndex(self._default_payment_index())
+
     def _clear_cart(self):
         self._bill_key = None
-        self.pay_pick.setCurrentIndex(0)  # back to cash for the next bill
+        self.pay_pick.setCurrentIndex(self._default_payment_index())  # back to the usual for the next bill
         self._cart.clear()
         self._refresh_table()
 
@@ -648,7 +659,9 @@ class SalesScreen(QWidget):
             return
 
         try:
-            self._sales_service.open_pdf(self._sales_service.fetch_and_save_pdf(invoice_number))
+            pdf = self._sales_service.fetch_and_save_pdf(invoice_number)
+            if app_settings.get("open_bill_pdf"):  # Settings: some counters would rather not have it pop up
+                self._sales_service.open_pdf(pdf)
         except BillPdfError as exc:
             QMessageBox.warning(
                 self,
