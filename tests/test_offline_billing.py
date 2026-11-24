@@ -110,7 +110,7 @@ def test_lost_response_queues_the_same_id_the_server_may_have_recorded(
     _go_online(screen, monkeypatch)
     sent = {}
 
-    def lost(self, items, customer_id=None, client_id=None):
+    def lost(self, items, customer_id=None, client_id=None, **_):
         sent["client_id"] = client_id
         raise requests.ConnectionError("response lost after the server committed")
 
@@ -128,7 +128,7 @@ def test_retrying_the_same_bill_reuses_its_id_but_a_changed_cart_gets_a_new_one(
     _go_online(screen, monkeypatch)
     ids = []
 
-    def fail(self, items, customer_id=None, client_id=None):
+    def fail(self, items, customer_id=None, client_id=None, **_):
         ids.append(client_id)
         return None  # the server answered with an error: the bill stays on screen
 
@@ -147,7 +147,7 @@ def test_a_finished_bill_does_not_donate_its_id_to_the_next_one(
     _go_online(screen, monkeypatch)
     ids = []
 
-    def ok(self, items, customer_id=None, client_id=None):
+    def ok(self, items, customer_id=None, client_id=None, **_):
         ids.append(client_id)
         return {"invoice_number": "INV-1"}
 

@@ -42,11 +42,18 @@ class SalesService:
         customer_id: str | None = None,
         client_id: str | None = None,
         location_id: str | None = None,
+        payment_method: str | None = None,
+        payment_status: str | None = None,
     ) -> dict | None:
         """POST /sales and return the SaleResponse dict."""
+        paid = {}  # only what was chosen: left out, the server records the bill as not paid
+        if payment_method is not None:
+            paid["payment_method"] = payment_method
+        if payment_status is not None:
+            paid["payment_status"] = payment_status
         if location_id is None:  # the common case: one shop, which the server fills in
-            return self._api.create_sale(self._token(), items, customer_id, client_id)
-        return self._api.create_sale(self._token(), items, customer_id, client_id, location_id)
+            return self._api.create_sale(self._token(), items, customer_id, client_id, **paid)
+        return self._api.create_sale(self._token(), items, customer_id, client_id, location_id, **paid)
 
     def cancel_sale(self, sale_id: str, reason: str) -> dict:
         """Delete a bill (owner): its stock comes back, it stays in the history as cancelled."""
@@ -66,6 +73,8 @@ class SalesService:
         customer_phone: str,
         client_id: str | None = None,
         location_id: str | None = None,
+        payment_method: str | None = "cash",
+        payment_status: str | None = None,
     ) -> str:
         """
         Save a counter sale in the local outbox; the background sync pushes it
@@ -93,8 +102,12 @@ class SalesService:
             ],
             # The server recalculates from its own prices; this is informational.
             "total_amount": sum(ln["price"] * ln["quantity"] for ln in lines),
-            "payment_method": "cash",
+            "payment_method": payment_method,
         }
+        if payment_status is not None:
+            # The server's sync does not read this yet: an offline bill arrives as not paid until
+            # it is corrected in Bill History. Sent anyway so it takes effect once the server reads it.
+            payload["payment_status"] = payment_status
         if location_id is not None:
             payload["location_id"] = location_id
         OutboxRepository().add_entry(
