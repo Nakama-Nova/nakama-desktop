@@ -108,7 +108,7 @@ class InventoryWindow(QWidget):
         layout.addLayout(find_row)
 
         self.table = QTableWidget()
-        cols = ["Product", "Type", "Code", "Price with GST", "GST", "In stock", "Status"]
+        cols = ["Product", "Type", "Code", "Price", "GST", "In stock", "Status"]
         if self.has_actions:
             cols.append("")
         self.table.setColumnCount(len(cols))
@@ -121,11 +121,13 @@ class InventoryWindow(QWidget):
             self.table.horizontalHeader().setSectionResizeMode(
                 self.COL_ACTIONS, QHeaderView.ResizeMode.Fixed
             )
-            self.table.setColumnWidth(self.COL_ACTIONS, 330)
+            self.table.setColumnWidth(self.COL_ACTIONS, 300)  # five compact buttons; grows if a row has more
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         Theme.style_table(self.table)
+        self.table.horizontalHeaderItem(self.COL_PRICE).setToolTip("Price with GST")
+        self.table.setColumnHidden(self.COL_GST, True)  # the price already includes it; the rate is in the product's form
         self.table.verticalHeader().setDefaultSectionSize(52)
         self.table.verticalScrollBar().valueChanged.connect(self._ensure_actions)
         layout.addWidget(self.table)
@@ -174,7 +176,7 @@ class InventoryWindow(QWidget):
         finally:
             self.table.setUpdatesEnabled(True)
         if self.has_actions:
-            self.table.setColumnWidth(self.COL_ACTIONS, 330)
+            self.table.setColumnWidth(self.COL_ACTIONS, 300)
             self._ensure_actions()
 
     def _ensure_actions(self, *_):
@@ -251,7 +253,7 @@ class InventoryWindow(QWidget):
                 ("✏️ Edit", self._edit_item),
                 ("± Stock", self._adjust),
                 ("🕘", self._history),
-                ("🖼️ Photos", self._photos),
+                ("🖼️", self._photos),
                 ("🗑️", self._delete_item),
             ]
         if self.can_scan and item.get("item_type") == "sculpture":
@@ -260,10 +262,10 @@ class InventoryWindow(QWidget):
             b = IconButton(text)
             b.setCursor(Qt.CursorShape.PointingHandCursor)
             b.setFixedHeight(30)
-            if text in ("🕘", "🗑️"):
-                b.setFixedWidth(40)
+            if text in ("🕘", "🖼️", "🗑️"):  # icon-only: a square button
+                b.setFixedWidth(34)
             b.setToolTip(
-                {"🕘": "Stock history", "🖼️ Photos": "Photos and 3D model shown on the website", "🗑️": "Delete"}.get(
+                {"🕘": "Stock history", "🖼️": "Photos and 3D model shown on the website", "🗑️": "Delete"}.get(
                     text, ""
                 )
             )

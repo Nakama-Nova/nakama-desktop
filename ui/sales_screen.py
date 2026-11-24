@@ -27,7 +27,7 @@ from PyQt6.QtWidgets import (
     QComboBox,
     QFrame,
 )
-from PyQt6.QtCore import Qt, QStringListModel
+from PyQt6.QtCore import Qt, QStringListModel, pyqtSignal
 from PyQt6.QtGui import QKeySequence, QShortcut
 
 
@@ -42,6 +42,51 @@ from services.customer_service import CustomerService
 from services.inventory_service import InventoryService
 from services.event_bus import EventBus, SALE_CREATED
 from services.money import inr
+
+
+class QtyStepper(QFrame):
+    """[ - 2 + ]: a quantity the counter can change with one tap, instead of a tiny spin box."""
+
+    valueChanged = pyqtSignal(int)
+
+    def __init__(self, value: int = 1, maximum: int = 9999):
+        super().__init__()
+        self._value, self._max = value, maximum
+        self.setObjectName("qty")
+        self.setFixedHeight(32)
+        self.setStyleSheet(
+            f"QFrame#qty {{ background: {Colors.CARD_BG}; border: 1px solid {Colors.INPUT_BORDER}; border-radius: 6px; }}"
+            f"QFrame#qty QPushButton {{ background: transparent; border: none; color: {Colors.TEXT_SECONDARY};"
+            f" font-size: 16px; min-width: 28px; max-width: 28px; }}"
+            f"QFrame#qty QPushButton:hover {{ background: {Colors.SIDEBAR_HOVER}; color: {Colors.TEXT_PRIMARY}; }}"
+            f"QFrame#qty QLabel {{ border: none; background: transparent; font-weight: 700; color: {Colors.TEXT_PRIMARY}; }}"
+        )
+        row = QHBoxLayout(self)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(0)
+        self.minus = QPushButton("\u2212")
+        self.minus.setToolTip("One less")
+        self.minus.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.minus.clicked.connect(lambda: self.setValue(self._value - 1))
+        self.label = QLabel(str(value))
+        self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.label.setMinimumWidth(34)
+        self.plus = QPushButton("+")
+        self.plus.setToolTip("One more")
+        self.plus.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.plus.clicked.connect(lambda: self.setValue(self._value + 1))
+        for w in (self.minus, self.label, self.plus):
+            row.addWidget(w)
+
+    def value(self) -> int:
+        return self._value
+
+    def setValue(self, value: int) -> None:
+        value = max(1, min(self._max, int(value)))
+        if value != self._value:
+            self._value = value
+            self.label.setText(str(value))
+            self.valueChanged.emit(value)
 
 
 class CartItem:
@@ -134,8 +179,10 @@ class SalesScreen(QWidget):
         self.table = QTableWidget()
         self.table.setColumnCount(6)
         self.table.setHorizontalHeaderLabels(
-            ["Item", "Price (before GST)", "Qty", "GST", "Amount (with GST)", ""]
+            ["Item", "Price", "Qty", "GST", "Amount", ""]
         )
+        for col, tip in ((1, "Price before GST"), (4, "Amount with GST")):
+            self.table.horizontalHeaderItem(col).setToolTip(tip)
         header_view = self.table.horizontalHeader()
         header_view.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         header_view.setSectionResizeMode(self.COL_NAME, QHeaderView.ResizeMode.Stretch)
@@ -436,30 +483,13 @@ class SalesScreen(QWidget):
             self.table.setRowHeight(row, 42)
             self.table.setItem(row, self.COL_NAME, QTableWidgetItem(ci.name))
             self.table.setItem(row, self.COL_PRICE, self._number_cell(inr(ci.price)))
-            self.table.setItem(row, self.COL_GST, self._number_cell(f"{ci.gst_pct:.1f}%"))
+            self.table.setItem(row, self.COL_GST, self._number_cell(f"{ci.gst_pct:g}%"))
             self.table.setItem(row, self.COL_TOTAL, self._number_cell(inr(ci.line_total), bold=True))
 
-            # Quantity spinner — compact style for table cells
-            qty_spin = QSpinBox()
-            qty_spin.setRange(1, 9999)
-            qty_spin.setValue(ci.quantity)
-            qty_spin.setFixedHeight(30)
-            qty_spin.setStyleSheet(f"""
-                QSpinBox {{
-                    border: 1px solid {Colors.INPUT_BORDER};
-                    border-radius: 4px;
-                    padding: 2px 6px;
-                    font-size: {Fonts.BODY}px;
-                    background: white;
-                }}
-                QSpinBox:focus {{
-                    border-color: {Colors.INPUT_FOCUS};
-                }}
-            """)
-            qty_spin.valueChanged.connect(
-                lambda val, idx=row: self._on_qty_changed(idx, val)
-            )
-            self.table.setCellWidget(row, self.COL_QTY, qty_spin)
+            # Quantity: - n +
+            stepper = QtyStepper(ci.quantity)
+            stepper.valueChanged.connect(lambda val, idx=row: self._on_qty_changed(idx, val))
+            self.table.setCellWidget(row, self.COL_QTY, stepper)
 
             # Remove button — visible with border
             rm_btn = IconButton("✕")
