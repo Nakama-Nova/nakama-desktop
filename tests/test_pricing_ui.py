@@ -133,9 +133,9 @@ def test_the_side_panel_is_grouped_under_headings(qapp):
     w = MainWindow()
     w._sync_timer.stop()
     labels = [label for _, label, _ in w._get_allowed_nav_items()]
-    assert labels == ["Home", "New Bill", "Bill History", "Orders", "Buyers", "Letters", "Stock", "Materials", "Purchases", "Places", "3D Lab", "Restoration", "Designs", "Machines and tools", "Attendance", "Wages", "Staff", "Expenses", "Profit", "Budgets", "Accounts", "Reports", "Roles"]  # fmt: skip
+    assert labels == ["Home", "New Bill", "Bill History", "Orders", "Buyers", "Letters", "Stock", "Materials", "Purchases", "Places", "3D Lab", "Restoration", "Designs", "Machines and tools", "Attendance", "Leave", "Wages", "Staff", "Expenses", "Profit", "Budgets", "Accounts", "Reports", "Roles"]  # fmt: skip
     assert headings(w) == ["Selling", "Stock and buying", "Workshop", "People and pay", "Money", "Access"]
-    assert sorted(i for _, _, i in w.NAV_ITEMS) == list(range(23))  # every page is still reachable, once
+    assert sorted(i for _, _, i in w.NAV_ITEMS) == list(range(24))  # every page is still reachable, once
     assert {label for names in w.NAV_SECTIONS.values() for label in names} == set(labels) - {"Home"}
 
 

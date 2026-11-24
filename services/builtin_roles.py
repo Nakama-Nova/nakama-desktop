@@ -59,7 +59,7 @@ BUILTIN_ACTIONS: dict[str, tuple[str, ...]] = {
     "manager": (
         ("finance:ledger:read", "iam:role:read", "iam:role:write", "iam:user_role:assign")
         + _PAYMASTER + _ATTENDANCE_BOSS + _SALES_BOSS + _PRODUCTION_BOSS
-        + _LAB_BOSS + _DOCS_BOSS + _PEOPLE_BOSS
+        + _LAB_BOSS + _DOCS_BOSS + _PEOPLE_BOSS + ("leave:request:create", "leave:request:approve", "leave:request:read_all")
     ),
     "accountant": ("finance:ledger:read", "finance:balance_sheet:read"),
     "sales": (

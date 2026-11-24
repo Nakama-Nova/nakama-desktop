@@ -11,7 +11,7 @@ from services.session import Session
 # What each built-in role's menu looked like before dynamic roles (the old hardcoded lists).
 OLD_MENU = {
     "owner": {"Home", "New Bill", "Bill History", "Orders", "Buyers", "Letters", "Stock", "Materials", "Purchases",
-              "Places", "3D Lab", "Restoration", "Designs", "Machines and tools", "Attendance", "Wages", "Staff",
+              "Places", "3D Lab", "Restoration", "Designs", "Machines and tools", "Attendance", "Leave", "Wages", "Staff",
               "Expenses", "Profit", "Budgets", "Accounts", "Reports"},
     "sales": {"Home", "New Bill", "Bill History", "Orders", "Buyers", "Letters", "Stock", "Places", "Attendance"},
     "achari": {"Home", "Stock", "Attendance", "Wages", "3D Lab", "Machines and tools"},

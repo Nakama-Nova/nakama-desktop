@@ -67,6 +67,7 @@ _PATHS = {
 # Sidebar label -> icon
 FOR_LABEL = {
     "Home": "home",
+    "Leave": "calendar",
     "New Bill": "bill",
     "Bill History": "list",
     "Orders": "book",
