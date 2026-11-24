@@ -21,6 +21,7 @@ from PyQt6.QtGui import QColor
 from ui.icons import IconButton
 from ui.theme import Theme, Colors, Fonts
 from ui.components.metric_card import MetricCard
+from ui.gst_summary import GstSummaryPanel
 from services.money import inr
 from services.report_service import ReportService
 from ui.workers import load_async
@@ -78,6 +79,9 @@ class ReportsScreen(QWidget):
         cards_grid.addWidget(self.card_low_stock, 1, 2)
 
         layout.addLayout(cards_grid)
+
+        self.gst_panel = GstSummaryPanel(self._report_service)
+        layout.addWidget(self.gst_panel)
 
         # Low stock alerts
         alert_header = QLabel("Low Stock Alerts")

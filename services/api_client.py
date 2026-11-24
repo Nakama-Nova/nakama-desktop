@@ -516,14 +516,13 @@ class APIClient:
             return None
 
     def create_customer(
-        self, token: str, name: str, phone: str = None, address: str = None
+        self, token: str, name: str, phone: str = None, address: str = None, gstin: str = None
     ) -> dict | None:
+        body = {"name": name, "phone": phone, "address": address}
+        if gstin:
+            body["gstin"] = gstin
         try:
-            return self._post(
-                "/customers",
-                token,
-                json={"name": name, "phone": phone, "address": address},
-            )
+            return self._post("/customers", token, json=body)
         except ForbiddenError:
             raise
         except APIError:
@@ -548,13 +547,13 @@ class APIClient:
         name: str,
         phone: str = None,
         address: str = None,
+        gstin: str = None,
     ) -> dict | None:
+        body = {"name": name, "phone": phone, "address": address}
+        if gstin:  # only when given: an update that leaves it out must not wipe the one on file
+            body["gstin"] = gstin
         try:
-            return self._put(
-                f"/customers/{customer_id}",
-                token,
-                json={"name": name, "phone": phone, "address": address},
-            )
+            return self._put(f"/customers/{customer_id}", token, json=body)
         except APIError:
             return None
 

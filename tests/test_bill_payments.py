@@ -120,3 +120,39 @@ def test_service_calls_the_contract_routes(monkeypatch, tmp_path):
     assert [p for p, _ in seen] == ["/sales/s1/payments", "/sales/s1/payments/p1/void", "/sales/s1/returns", "/returns/CN/26-27/0001/pdf"]
     assert seen[2][1] == {"items": [{"sale_item_id": "l1", "quantity": 1}], "reason": "cracked", "refund_method": "cash", "restock": False}
     assert path.name == "CN-26-27-0001.pdf"  # the slashes of the number cannot be in a file name
+
+
+def test_gstin_check_and_the_till_field(qapp, monkeypatch):
+    from PyQt6.QtWidgets import QMessageBox
+    from services import gst
+
+    assert gst.gstin_problem("") is None and gst.gstin_problem("27AAPFU0939F1ZV") is None
+    assert gst.gstin_problem("27AAPFU0939F1ZX") and "does not match" in gst.gstin_problem("27AAPFU0939F1ZX")
+    assert gst.gstin_problem("99XXXX") and gst.state_of("29abcde1234f1z5") == "Karnataka"
+    assert gst.check_letter("27AAPFU0939F1Z") == "V"
+
+    s = SalesScreen()
+    s.gstin_input.setText("27AAPFU0939F1ZV")
+    assert "Maharashtra" in s.gstin_note.text()
+    s.gstin_input.setText("27AAPFU0939F1ZX")
+    assert "does not match" in s.gstin_note.text()
+    s._cart = [CartItem("i1", "Chair", 1000.0, 0.0, 1)]
+    s.phone_input.setText("9876543210")
+    s.customer_input.setText("Meena")
+    warned = []
+    monkeypatch.setattr(QMessageBox, "warning", lambda *a, **k: warned.append(a[2]))
+    s._generate_invoice()
+    assert warned and "Correct it" in warned[-1] and s._cart  # a mistyped GSTIN stops the bill
+
+
+def test_gst_summary_periods_and_csv():
+    from datetime import date
+
+    from services import gst
+    from ui.gst_summary import period_dates
+
+    assert period_dates("month", date(2026, 11, 24)) == (date(2026, 11, 1), date(2026, 11, 24))
+    assert period_dates("last", date(2026, 1, 15)) == (date(2025, 12, 1), date(2025, 12, 31))
+    assert period_dates("fy", date(2026, 2, 1))[0] == date(2025, 4, 1)
+    out = gst.summary_csv({"taxable_value": "1000", "cgst_total": "90", "sgst_total": "90", "igst_total": "0", "total_tax": "180"}, "2026-11-01", "2026-11-24")
+    assert "1000.00,90.00,90.00,0.00,180.00" in out

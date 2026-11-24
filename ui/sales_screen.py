@@ -44,6 +44,7 @@ from services.customer_service import CustomerService
 from services.inventory_service import InventoryService
 from services.event_bus import EventBus, SALE_CREATED
 from services.money import inr
+from services import gst
 from services.billing import change_or_balance, discount_amount, payment_status, received_total
 
 
@@ -175,6 +176,17 @@ class SalesScreen(QWidget):
         self.customer_input.setStyleSheet(Theme.input_style())
         self.customer_input.setMinimumHeight(38)
         col.addWidget(self.customer_input)
+        self.gstin_input = QLineEdit()
+        self.gstin_input.setPlaceholderText("Buyer's GSTIN (only for a business buyer)")
+        self.gstin_input.setStyleSheet(Theme.input_style())
+        self.gstin_input.setMinimumHeight(38)
+        self.gstin_input.setMaxLength(15)
+        self.gstin_input.textChanged.connect(self._gstin_changed)
+        col.addWidget(self.gstin_input)
+        self.gstin_note = QLabel("")
+        self.gstin_note.setWordWrap(True)
+        self.gstin_note.setVisible(False)
+        col.addWidget(self.gstin_note)
         self.search_btn = IconButton("Find buyer by phone")
         self.search_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.search_btn.setStyleSheet(Theme.btn("secondary", "sm", outline=True))
@@ -465,6 +477,7 @@ class SalesScreen(QWidget):
         self.pay_pick.setCurrentIndex(0)  # back to cash for the next bill
         self._cart.clear()
         self._clear_split_rows()
+        self.gstin_input.clear()
         self._received_touched = False  # the next bill starts as "paid in full, cash, no discount"
         self.discount_in.setValue(0)
         self._refresh_table()
@@ -607,6 +620,20 @@ class SalesScreen(QWidget):
         """Everything handed over: the first amount plus any split rows."""
         return received_total(self.received_in.value(), *[a.value() for _m, a, _r in self._split_rows])
 
+    def _gstin_changed(self, text: str):
+        """Tell the cashier at once if a GSTIN is mistyped, or which state it belongs to."""
+        problem, state = gst.gstin_problem(text), gst.state_of(text)
+        if not text.strip() or (problem and len(text.strip()) < 15):
+            self.gstin_note.setVisible(False)
+        elif problem:
+            self.gstin_note.setStyleSheet(f"color: {Colors.DANGER}; font-size: {Fonts.BODY}px;")
+            self.gstin_note.setText(problem)
+            self.gstin_note.setVisible(True)
+        else:
+            self.gstin_note.setStyleSheet(f"color: {Colors.SUCCESS}; font-size: {Fonts.BODY}px;")
+            self.gstin_note.setText(f"GSTIN looks right. State: {state}.")
+            self.gstin_note.setVisible(True)
+
     def _pay_pick_changed(self, _i=0):
         paying = self.pay_pick.currentData() is not None  # "Not paid yet": nothing handed over
         self.received_in.setEnabled(paying)
@@ -707,6 +734,10 @@ class SalesScreen(QWidget):
         if not self._cart:
             QMessageBox.warning(self, "Empty Bill", "Please add at least one item.")
             return
+        problem = gst.gstin_problem(self.gstin_input.text())
+        if problem:
+            QMessageBox.warning(self, "Buyer's GSTIN", problem + "\n\nCorrect it, or clear it for a buyer without one.")
+            return
 
         client_id = self._client_id_for_cart(phone)
 
@@ -715,8 +746,9 @@ class SalesScreen(QWidget):
             self._save_offline(customer_name, phone, client_id)
             return
 
+        buyer_gstin = [gst.clean(self.gstin_input.text())] if gst.clean(self.gstin_input.text()) else []
         try:
-            customer_id = self._customer_service.ensure_customer(customer_name, phone)
+            customer_id = self._customer_service.ensure_customer(customer_name, phone, *buyer_gstin)
             if customer_id is None:
                 QMessageBox.critical(
                     self, "Error", "Could not create buyer record. Check connection."
