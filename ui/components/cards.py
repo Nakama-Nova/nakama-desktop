@@ -16,7 +16,7 @@ from PyQt6.QtGui import QColor, QLinearGradient, QPainter, QPainterPath, QPen, Q
 from PyQt6.QtWidgets import QFrame, QGraphicsDropShadowEffect, QLabel, QWidget
 
 from ui import icons
-from ui.theme import Colors, tint
+from ui.theme import Colors, soft
 
 SHADOW = "#5A2A06"  # the brand brown: a warm shadow, not a grey one
 
@@ -70,7 +70,7 @@ def icon_chip(name: str, color: str, size: int = 40) -> QLabel:
     chip = QLabel()
     chip.setFixedSize(size, size)
     chip.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    chip.setStyleSheet(f"background: {tint(color, 0.88)}; border-radius: {size // 3}px; border: none;")
+    chip.setStyleSheet(f"background: {soft(color)}; border-radius: {size // 3}px; border: none;")
     chip.setPixmap(icons.pixmap(name, color, size // 2))
     return chip
 

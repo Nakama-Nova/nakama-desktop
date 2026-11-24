@@ -99,6 +99,21 @@ class SettingsDialog(QDialog):
 
         root.addWidget(_rule())
 
+        # ── Appearance ──
+        root.addWidget(_section("Appearance"))
+        look = QFormLayout()
+        look.setHorizontalSpacing(Spacing.LG)
+        self.theme = QComboBox()
+        self.theme.addItem("Light", "light")
+        self.theme.addItem("Dark", "dark")
+        self.theme.setCurrentIndex(max(0, self.theme.findData(values["theme"])))
+        self.theme.setStyleSheet(Theme.input_style())
+        look.addRow(QLabel("Colours", styleSheet=Theme.label()), self.theme)
+        root.addLayout(look)
+        root.addWidget(_hint("The new look is used the next time the program starts."))
+
+        root.addWidget(_rule())
+
         # ── New bills ──
         root.addWidget(_section("New bills"))
         form = QFormLayout()
@@ -233,6 +248,7 @@ class SettingsDialog(QDialog):
             "default_payment": self.payment.currentData(),
             "open_bill_pdf": self.open_pdf.isChecked(),
             "auto_updates": self.auto_updates.isChecked(),
+            "theme": self.theme.currentData(),
         }
 
     def _save(self) -> None:
@@ -244,6 +260,7 @@ class SettingsDialog(QDialog):
                 QMessageBox.warning(self, "Settings", "The server address must start with http:// or https://")
                 return
             changed_server = clean != app_settings.read_server_address(BASE_URL).rstrip("/")
+        theme_changed = self.theme.currentData() != app_settings.get("theme")
         try:
             app_settings.save(self.collect())
             if changed_server:
@@ -257,11 +274,15 @@ class SettingsDialog(QDialog):
             self._notifier.set_popups(self.popups.isChecked())
         if self._updater is not None:
             self._updater.set_automatic(self.auto_updates.isChecked())
-        self.restart_needed = changed_server
-        if changed_server:
+        self.restart_needed = changed_server or theme_changed
+        if self.restart_needed:
+            what = " and ".join(
+                [w for w, on in (("server address", changed_server), ("look", theme_changed)) if on]
+            )
             QMessageBox.information(
                 self,
-                "Server address changed",
-                "The new address is used the next time the program starts. Close it and open it again.",
+                "Restart to apply",
+                f"The new {what} {'is' if not (changed_server and theme_changed) else 'are'} used the next time the program starts. "
+                "Close it and open it again.",
             )
         self.accept()

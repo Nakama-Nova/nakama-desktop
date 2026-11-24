@@ -20,6 +20,7 @@ import json
 import logging
 import time
 from datetime import datetime
+from pathlib import Path
 from fnmatch import fnmatchcase
 from typing import Callable
 
@@ -30,6 +31,36 @@ logger = logging.getLogger(__name__)
 _KEYRING_SERVICE = "NakamaDesk"
 _KEYRING_TOKEN_KEY = "auth_token"
 _KEYRING_ROLE_KEY = "auth_role"
+
+
+def _permissions_cache_path() -> Path:
+    return Path("data") / "permissions.json"
+
+
+def _save_permissions_cache(user_id: str | None, me: dict) -> None:
+    """Remember what the server last said this person may do, for a restart with no server.
+    It only decides what the screens show; the server still checks every action."""
+    if not user_id:
+        return
+    try:
+        path = _permissions_cache_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"user": user_id, "me": me}), encoding="utf-8")
+    except (OSError, TypeError, ValueError):
+        logger.warning("Could not keep the permissions for offline use")
+
+
+def _load_permissions_cache(user_id: str | None) -> dict | None:
+    """The remembered permissions, only if they were kept for this same person."""
+    if not user_id:
+        return None
+    try:
+        saved = json.loads(_permissions_cache_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if isinstance(saved, dict) and saved.get("user") == user_id and isinstance(saved.get("me"), dict):
+        return saved["me"]
+    return None
 
 
 def _keyring():
@@ -177,11 +208,20 @@ class Session(metaclass=_SessionMeta):
         from services.api_client import APIClient, APIError
 
         try:
-            cls.set_permissions((api or APIClient()).get_my_permissions(cls._token))
+            me = (api or APIClient()).get_my_permissions(cls._token)
         except APIError:
             logger.warning("Could not read /iam/me; keeping the permissions already known")
+            return
         except Exception:
             logger.warning("Server unreachable; keeping the permissions already known")
+            if cls._allowed is None:  # nothing known yet (a restart with no server): use what was kept
+                kept = _load_permissions_cache(cls.get_user_id())
+                if kept is not None:
+                    cls.set_permissions(kept)
+            return
+        cls.set_permissions(me)
+        if me is not None:
+            _save_permissions_cache(cls.get_user_id(), me)
 
     @classmethod
     def can(cls, action: str, plant_unit_id: str | None = None) -> bool:

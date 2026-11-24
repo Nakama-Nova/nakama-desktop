@@ -352,7 +352,7 @@ class Theme:
         # A line is one text row; Qt adds the padding on top of it.
         if outline:
             # Gold and the light tints are too pale as text on white: use the dark form.
-            text = shade(base, 0.45) if role in ("secondary", "warning") else base
+            text = (tint(base, 0.15) if Colors.DARK_MODE else shade(base, 0.45)) if role in ("secondary", "warning") else base
             if role == "light":
                 text = Colors.TEXT_SECONDARY
             hover_bg, hover_text = base, on_base
@@ -379,8 +379,8 @@ class Theme:
                 }}
                 QPushButton:disabled {{
                     background-color: transparent;
-                    color: {tint(text, 0.5)};
-                    border-color: {tint(border, 0.5)};
+                    color: {shade(text, 0.45) if Colors.DARK_MODE else tint(text, 0.5)};
+                    border-color: {shade(border, 0.45) if Colors.DARK_MODE else tint(border, 0.5)};
                 }}
             """
         hover = shade(base, 0.15) if role != "light" else Colors.SIDEBAR_HOVER
@@ -405,8 +405,8 @@ class Theme:
                 border-color: {pressed};
             }}
             QPushButton:disabled {{
-                background-color: {tint(base, 0.6)};
-                border-color: {tint(base, 0.6)};
+                background-color: {shade(base, 0.5) if Colors.DARK_MODE else tint(base, 0.6)};
+                border-color: {shade(base, 0.5) if Colors.DARK_MODE else tint(base, 0.6)};
                 color: {tint(on_base, 0.3) if on_base != "#FFFFFF" else "#FFFFFF"};
             }}
         """
@@ -483,9 +483,9 @@ class Theme:
         if role in ("light",):
             base = Colors.TEXT_SECONDARY
         return f"""
-            background-color: {tint(base, 0.85)};
-            color: {shade(base, 0.4)};
-            border: 1px solid {tint(base, 0.6)};
+            background-color: {soft(base, 0.85, 0.78)};
+            color: {ink(base)};
+            border: 1px solid {mix(base, Colors.CARD_BG, 0.55) if Colors.DARK_MODE else tint(base, 0.6)};
             border-radius: {Radius.MD}px;
             padding: 12px {Spacing.MD}px;
             font-size: {Fonts.BODY_SM}px;
@@ -641,3 +641,140 @@ class Theme:
     def muted() -> str:
         """Secondary text (Bootstrap .text-muted)."""
         return f"font-size: {Fonts.BODY_SM}px; color: {Colors.TEXT_MUTED};"
+
+
+# ----------------------------------------------------------------------
+# Light and dark: one palette applied before any screen is built
+# ----------------------------------------------------------------------
+Colors.DARK_MODE = False
+LIGHT_PALETTE = {k: v for k, v in vars(Colors).items() if k.isupper() and isinstance(v, str)}
+
+# Warm, not blue-grey: the same teak and gold, with the lights turned down. Text colours are the
+# ones meant for a dark surface (brighter greens, ambers and reds), and the primary button turns
+# gold so it still stands out.
+DARK_PALETTE = {
+    "BRAND_BROWN": "#E2B25A",  # where the brand brown was text on a light page, it is gold on a dark one
+    "PRIMARY": "#D9A441",
+    "SECONDARY": "#E2B25A",
+    "SUCCESS": "#3E9C6A",
+    "DANGER": "#D2453D",
+    "WARNING": "#E2B25A",
+    "INFO": "#C48A4A",
+    "LIGHT": "#2E2116",
+    "DARK": "#120C07",
+    "SIDEBAR_BG": "#21170F",
+    "SIDEBAR_HOVER": "#2E2116",
+    "SIDEBAR_ACTIVE": "#4A3414",
+    "SIDEBAR_TEXT": "#D8C3A4",
+    "SIDEBAR_ACTIVE_TEXT": "#FFE2A8",
+    "SIDEBAR_ACCENT": "#D9A441",
+    "SIDEBAR_HEADING": "#A78F70",
+    "NAVBAR_BG": "#21170F",
+    "BG": "#1B130C",
+    "CARD_BG": "#261B12",
+    "CARD_BORDER": "#3A2B1B",
+    "TEXT_PRIMARY": "#F4E9D6",
+    "TEXT_SECONDARY": "#CDB89A",
+    "TEXT_MUTED": "#B39B7B",
+    "GREEN": "#6CC391",
+    "GREEN_DARK": "#4FAE7A",
+    "ORANGE": "#E8B64F",
+    "RED": "#F0877F",
+    "PURPLE": "#D1A06F",
+    "BLUE": "#D1A06F",
+    "TEAL": "#6CC391",
+    "BORDER": "#3A2B1B",
+    "INPUT_BORDER": "#4A3822",
+    "INPUT_FOCUS": "#D9A441",
+    "INPUT_FOCUS_RING": "#6B4C16",
+    "INPUT_DISABLED_BG": "#2A1E14",
+    "TABLE_HEADER_BG": "#2E2116",
+    "TABLE_ALT_ROW": "#21170F",
+    "TABLE_HOVER": "#3D2C14",
+    "LOW_STOCK_BG": "#3E2E12",
+    "SUCCESS_BG": "#17301F",
+    "WARNING_BG": "#3E2E12",
+    "ERROR_BG": "#3B1A17",
+}
+
+
+def _build_roles() -> dict:
+    primary_text = Colors.BRAND_DARK if Colors.DARK_MODE else "#FFFFFF"  # dark text on the gold button
+    return {
+        "primary": (Colors.PRIMARY, primary_text),
+        "secondary": (Colors.SECONDARY, Colors.BRAND_DARK),
+        "success": (Colors.SUCCESS, "#FFFFFF"),
+        "danger": (Colors.DANGER, "#FFFFFF"),
+        "warning": (Colors.WARNING, Colors.BRAND_DARK),
+        "info": (Colors.INFO, "#FFFFFF"),
+        "light": (Colors.LIGHT, Colors.TEXT_PRIMARY),
+        "dark": (Colors.DARK, "#FFFFFF"),
+    }
+
+
+def apply_theme(name: str) -> None:
+    """Switch the whole palette to "light" or "dark". Call it before any screen is built (the
+    program does at start-up, from the saved setting): screens read the colours as they are built."""
+    dark = name == "dark"
+    for key, value in LIGHT_PALETTE.items():
+        setattr(Colors, key, DARK_PALETTE.get(key, value) if dark else value)
+    Colors.DARK_MODE = dark
+    ROLES.clear()
+    ROLES.update(_build_roles())
+    Theme.btn.cache_clear()
+
+
+def soft(color: str, light: float = 0.88, dark: float = 0.80) -> str:
+    """A quiet background in `color`'s hue that suits the current surface: pale on a light page,
+    a deep tint of the card colour on a dark one."""
+    return mix(color, Colors.CARD_BG, dark if Colors.DARK_MODE else light)
+
+
+def ink(color: str) -> str:
+    """Text in `color`'s hue that reads on `soft(color)`."""
+    return tint(color, 0.45) if Colors.DARK_MODE else shade(color, 0.4)
+
+
+def native_dark_palette():
+    """A Qt palette to match, so the parts a style sheet cannot reach (message boxes, menus,
+    the calendar) are dark too."""
+    from PyQt6.QtGui import QColor, QPalette
+
+    p = QPalette()
+    for role, color in (
+        (QPalette.ColorRole.Window, Colors.BG),
+        (QPalette.ColorRole.WindowText, Colors.TEXT_PRIMARY),
+        (QPalette.ColorRole.Base, Colors.CARD_BG),
+        (QPalette.ColorRole.AlternateBase, Colors.TABLE_ALT_ROW),
+        (QPalette.ColorRole.Text, Colors.TEXT_PRIMARY),
+        (QPalette.ColorRole.Button, Colors.CARD_BG),
+        (QPalette.ColorRole.ButtonText, Colors.TEXT_PRIMARY),
+        (QPalette.ColorRole.ToolTipBase, Colors.DARK),
+        (QPalette.ColorRole.ToolTipText, "#FFFFFF"),
+        (QPalette.ColorRole.Highlight, Colors.SIDEBAR_ACTIVE),
+        (QPalette.ColorRole.HighlightedText, Colors.TEXT_PRIMARY),
+        (QPalette.ColorRole.PlaceholderText, Colors.TEXT_MUTED),
+        (QPalette.ColorRole.Link, Colors.BRAND_GOLD_LIGHT),
+    ):
+        p.setColor(role, QColor(color))
+    return p
+
+
+def _transparent_cell_widgets() -> None:
+    """A widget put in a table cell (a row of buttons) took the page colour as its background,
+    which showed as a patch against the row's own colour (white, striped or dark). Unless it
+    paints its own background, it is now transparent."""
+    from PyQt6.QtWidgets import QTableWidget
+
+    original = QTableWidget.setCellWidget
+
+    def set_cell_widget(self, row, column, widget):
+        if widget is not None and not widget.property("cell_background_set"):
+            widget.setProperty("cell_background_set", True)
+            widget.setStyleSheet("QWidget { background: transparent; }" + widget.styleSheet())
+        original(self, row, column, widget)
+
+    QTableWidget.setCellWidget = set_cell_widget
+
+
+_transparent_cell_widgets()

@@ -75,6 +75,17 @@ class IamService:
     def delete_role(self, role_id: str) -> bool:
         return self._api._delete(f"/iam/roles/{role_id}", self._t())
 
+    def user_roles(self, user_id: str) -> list[dict] | None:
+        """A person's current EXTRA roles, [{"role_key", "plant_unit_id"}]; None when the server
+        cannot say (an older server without the call, or unreachable), so the screen can warn
+        that saving will replace what it cannot see."""
+        try:
+            got = self._api._get(f"/iam/users/{user_id}/roles", self._t(), quiet=True)
+        except Exception:
+            return None
+        roles = got.get("roles") if isinstance(got, dict) else None
+        return roles if isinstance(roles, list) else None
+
     def set_user_roles(self, user_id: str, assignments: list[dict]) -> dict:
         """Replace a person's EXTRA roles: [{"role_key": ..., "plant_unit_id": ... or None}]."""
         return self._api._put(f"/iam/users/{user_id}/roles", self._t(), json=assignments)

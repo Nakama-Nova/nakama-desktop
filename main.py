@@ -12,6 +12,13 @@ if getattr(sys, "frozen", False):
     _home.mkdir(parents=True, exist_ok=True)
     os.chdir(_home)
 
+# The look (light or dark) is chosen in Settings and read here, before any screen is imported:
+# screens take their colours from the palette as they are built.
+from services import app_settings  # noqa: E402
+from ui.theme import Colors, apply_theme, native_dark_palette  # noqa: E402
+
+apply_theme(app_settings.get("theme"))
+
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QApplication, QMessageBox
 from ui.login_window import LoginWindow
@@ -56,6 +63,9 @@ def main():
     app = QApplication(sys.argv)
     app.setWindowIcon(QIcon(str(icon_path())))
     load_brand_fonts()
+    if Colors.DARK_MODE:  # the parts a style sheet cannot reach (message boxes, menus, the calendar)
+        app.setStyle("Fusion")
+        app.setPalette(native_dark_palette())
     Theme.install(app)
 
     # An expired login is kept only when the server is down: the counter still bills

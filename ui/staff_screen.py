@@ -308,9 +308,11 @@ def change_my_password(parent, service: StaffService | None = None) -> bool:
 
 class ExtraRolesDialog(QDialog):
     """Extra roles for one person, on top of their main role, each for everywhere or for one
-    place. Saving replaces their extra roles (the server cannot list the current ones)."""
+    place. Saving replaces their extra roles. When the server can list the current ones they are
+    shown to start with; when it cannot (an older server), the list starts empty and the note
+    says that saving replaces what is there."""
 
-    def __init__(self, parent, user: dict, roles: list, places: list):
+    def __init__(self, parent, user: dict, roles: list, places: list, current: list | None = None):
         super().__init__(parent)
         self.setWindowTitle(f"Extra roles: {user.get('full_name') or user['username']}")
         self.setMinimumWidth(460)
@@ -319,10 +321,17 @@ class ExtraRolesDialog(QDialog):
         self._rows: list[tuple[QComboBox, QComboBox]] = []
         self._layout = QVBoxLayout(self)
         self._layout.setContentsMargins(24, 20, 24, 20)
-        note = QLabel(
-            "Roles given here add to their main role. Saving replaces the extra roles they have now, "
-            "so add every one they should keep. Leave the list empty to remove all."
-        )
+        if current is not None:
+            text = (
+                "Roles given here add to their main role. These are the extra roles they have now; "
+                "remove any they should lose, add any they should gain, and save. They will be signed out."
+            )
+        else:
+            text = (
+                "Roles given here add to their main role. This server cannot show the extra roles they have now, "
+                "and saving replaces them: add every one they should keep. Leave the list empty to remove all."
+            )
+        note = QLabel(text)
         note.setWordWrap(True)
         note.setStyleSheet(f"color: {Colors.TEXT_SECONDARY};")
         self._layout.addWidget(note)
@@ -333,15 +342,27 @@ class ExtraRolesDialog(QDialog):
         add.clicked.connect(lambda _=False: self._add_row())
         self._layout.addWidget(add)
         self._layout.addLayout(_buttons(self))
+        for held in current or []:
+            self._add_row(held.get("role_key"), held.get("plant_unit_id"))
 
-    def _add_row(self):
+    def _add_row(self, role_key: str | None = None, place_id: str | None = None):
         row = QHBoxLayout()
         role, place = QComboBox(), QComboBox()
         for label, key in self._roles:
             role.addItem(label, key)
+        if role_key is not None and role.findData(role_key) < 0:
+            role.addItem(role_key, role_key)  # a role this list does not name: keep it, do not drop it
         place.addItem("Everywhere", None)
         for p in self._places:
             place.addItem(p.get("name") or "Place", p.get("id"))
+        if role_key is not None:
+            role.setCurrentIndex(max(0, role.findData(role_key)))
+        if place_id is not None:
+            at = place.findData(str(place_id))
+            if at < 0:  # a place this list does not name: keep it, do not drop it
+                place.addItem("A place", str(place_id))
+                at = place.count() - 1
+            place.setCurrentIndex(at)
         for w in (role, place):
             w.setStyleSheet(Theme.input_style())
             row.addWidget(w, 1)
@@ -517,7 +538,7 @@ class StaffScreen(QWidget):
             places = PlacesService().places()
         except Exception:  # the place list is optional: "Everywhere" still works
             places = []
-        d = ExtraRolesDialog(self, u, self._roles, places)
+        d = ExtraRolesDialog(self, u, self._roles, places, current=IamService().user_roles(u["id"]))
         if d.exec() != QDialog.DialogCode.Accepted:
             return
         try:

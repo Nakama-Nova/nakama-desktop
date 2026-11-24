@@ -32,6 +32,7 @@ from PyQt6.QtWidgets import (
 )
 
 from ui.icons import IconButton
+from ui.components.pills import ORDER_TONES, PillDelegate
 from services.customer_service import CustomerService
 from services.inventory_service import InventoryService
 from services.money_service import rupees
@@ -490,6 +491,7 @@ class OrdersScreen(QWidget):
         root.addLayout(head)
 
         self.table = _table(["Order", "Date", "Customer", "Items", "Amount", "Paid", "Due", "Status", "Delivery"], self.COL_ITEMS)
+        self.table.setItemDelegateForColumn(self.COL_STATUS, PillDelegate(ORDER_TONES, self.table))
         self.table.setMaximumHeight(250)
         self.table.itemSelectionChanged.connect(self._selected)
         root.addWidget(self.table)
@@ -588,9 +590,7 @@ class OrdersScreen(QWidget):
             ]
             for c, text in enumerate(values):
                 cell = _cell(text, right=c in (self.COL_AMOUNT, self.COL_PAID, self.COL_DUE))
-                if c == self.COL_STATUS:
-                    cell.setForeground(QColor(STATUS_COLORS.get(o["status"], Colors.TEXT_PRIMARY)))
-                self.table.setItem(r, c, cell)
+                self.table.setItem(r, c, cell)  # the status is drawn as a pill (see PillDelegate)
             self.table.setRowHeight(r, 42)
             if o["id"] == keep:
                 self.table.selectRow(r)

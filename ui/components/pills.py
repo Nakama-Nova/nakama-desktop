@@ -12,11 +12,32 @@ from PyQt6.QtCore import QRectF, QSize, Qt
 from PyQt6.QtGui import QColor, QFontMetrics, QPainter
 from PyQt6.QtWidgets import QStyle, QStyledItemDelegate, QStyleOptionViewItem
 
+from ui.theme import Colors, mix, tint
+
 # text -> (text colour, pill colour)
 STOCK_TONES = {
     "In stock": ("#1F6B43", "#E1F0E7"),
     "Running low": ("#8F5F00", "#FBEFCF"),
     "Out of stock": ("#B3261E", "#F9E1DE"),
+}
+
+
+# an order's stage
+ORDER_TONES = {
+    "New": ("#6E5238", "#EFE6D3"),
+    "Confirmed": ("#8F5F00", "#FBEFCF"),
+    "In production": ("#7A4620", "#F1DFCB"),
+    "Ready": ("#1F6B43", "#E1F0E7"),
+    "Delivered": ("#3F5566", "#E3EBF1"),
+    "Cancelled": ("#B3261E", "#F9E1DE"),
+}
+
+# how a bill was paid
+PAYMENT_TONES = {
+    "Paid": ("#1F6B43", "#E1F0E7"),
+    "Part paid": ("#8F5F00", "#FBEFCF"),
+    "Not paid yet": ("#6E5238", "#EFE6D3"),
+    "Cancelled": ("#B3261E", "#F9E1DE"),
 }
 
 
@@ -54,6 +75,8 @@ class PillDelegate(QStyledItemDelegate):
             option.rect.center().x() - width / 2, option.rect.center().y() - self.HEIGHT / 2, width, self.HEIGHT
         )
         fg, bg = tone
+        if Colors.DARK_MODE:  # a bright text on a deep tint of itself, instead of a pale chip on a dark row
+            fg, bg = tint(fg, 0.5), mix(fg, Colors.CARD_BG, 0.78)
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(Qt.PenStyle.NoPen)

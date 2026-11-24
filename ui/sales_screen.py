@@ -37,10 +37,10 @@ from ui.icons import IconButton
 from ui.theme import Theme, Colors, Fonts
 from ui.components.place_picker import PlacePicker, fetch_places, selling_places
 from ui.errors import handle_permissions
-from ui.sales_history_screen import METHODS
+from ui.sales_history_screen import METHODS, is_cancelled
 from ui.receipt_dialog import ReceiptDialog, shop_details
 from ui.receipt_render import receipt_from_sale
-from ui.workers import load_async
+from ui.workers import load_async, run_async
 from services.sales_service import BillPdfError, SalesService
 from services.customer_service import CustomerService
 from services.inventory_service import InventoryService
@@ -183,6 +183,18 @@ class SalesScreen(QWidget):
         item_row.addWidget(add_btn)
         left.addLayout(item_row)
 
+        # The last few products put on a bill here, one tap to add again
+        self.recent_row = QWidget()
+        recent_layout = QHBoxLayout(self.recent_row)
+        recent_layout.setContentsMargins(0, 0, 0, 0)
+        recent_layout.setSpacing(8)
+        recent_label = QLabel("Recently sold")
+        recent_label.setStyleSheet(f"font-size: {Fonts.BODY_SM}px; color: {Colors.TEXT_MUTED};")
+        recent_layout.addWidget(recent_label)
+        self._recent_layout = recent_layout
+        self.recent_row.hide()
+        left.addWidget(self.recent_row)
+
         self.table = QTableWidget()
         self.table.setColumnCount(6)
         self.table.setHorizontalHeaderLabels(
@@ -242,6 +254,10 @@ class SalesScreen(QWidget):
         self.search_btn.setStyleSheet(Theme.btn("secondary", "sm", outline=True))
         self.search_btn.clicked.connect(self._handle_customer_lookup)
         col.addWidget(self.search_btn)
+        self.buyer_note = QLabel("")
+        self.buyer_note.setWordWrap(True)
+        self.buyer_note.hide()
+        col.addWidget(self.buyer_note)
 
         # Where the bill is sold from: shown only when more than one place can sell
         self.place_box = QWidget()
@@ -404,6 +420,7 @@ class SalesScreen(QWidget):
         if not items:
             return
         self._all_items = items
+        self._show_recent()
         names = [item["name"] for item in items]
         self._completer.setModel(QStringListModel(names))
 
@@ -459,26 +476,42 @@ class SalesScreen(QWidget):
         try:
             customer = self._customer_service.search_by_phone(phone)
         except requests.RequestException:
-            QMessageBox.information(
-                self,
-                "No internet",
-                "Can't look up buyers right now. Type the buyer's name — it is "
-                "saved with the bill.",
-            )
+            self._note("Can't look up buyers while offline. Type the name; it is saved with the bill.", "muted")
             self.customer_input.setFocus()
             return
         if customer:
-            self.customer_input.setText(customer.get("name", ""))
-            QMessageBox.information(
-                self, "Buyer found", f"Buyer found: {customer.get('name')}"
-            )
+            name = customer.get("name", "")
+            self.customer_input.setText(name)
+            self._note(f"{name} is already a buyer.", "good")
+            customer_id = customer.get("id")
+            if customer_id:  # how many bills they have had, without holding up the sale
+                run_async(
+                    lambda: SalesService().get_sales(customer_id=str(customer_id)),
+                    lambda sales, n=name, p=phone: self._show_history(n, p, sales),
+                    lambda _exc: None,
+                )
         else:
-            QMessageBox.information(
-                self,
-                "Not Found",
-                "No buyer found. Enter the name — we'll create a new record automatically.",
-            )
+            self._note("No buyer has this number yet. The name you type is saved as a new buyer.", "warn")
             self.customer_input.setFocus()
+
+    def _note(self, text: str, tone: str) -> None:
+        """A line under the buyer fields, instead of a pop-up in the middle of a sale."""
+        colour = {"good": Colors.SUCCESS, "warn": Colors.ORANGE, "muted": Colors.TEXT_MUTED}[tone]
+        self.buyer_note.setText(text)
+        self.buyer_note.setStyleSheet(f"font-size: {Fonts.BODY_SM}px; color: {colour};")
+        self.buyer_note.setVisible(bool(text))
+
+    def _show_history(self, name: str, phone: str, sales) -> None:
+        """The earlier-bills count, if this is still the buyer on screen."""
+        if self.phone_input.text().strip() != phone or sales is None:
+            return
+        earlier = sum(1 for s in sales if not is_cancelled(s))
+        self._note(
+            f"{name} is already a buyer, with {earlier} earlier bill{'s' if earlier != 1 else ''}."
+            if earlier
+            else f"{name} is already a buyer, with no earlier bills.",
+            "good",
+        )
 
     # ------------------------------------------------------------------
     # Cart operations
@@ -498,7 +531,10 @@ class SalesScreen(QWidget):
         if item_data is None:
             QMessageBox.warning(self, "Not Found", f"Item '{name}' not found.")
             return
+        self._add_item(item_data)
 
+    def _add_item(self, item_data: dict) -> None:
+        """Put one more of this product on the bill (the search box and the chips both land here)."""
         item_id = str(item_data["id"])
         existing = next((c for c in self._cart if c.item_id == item_id), None)
         sellable = self._sellable_now(item_data)
@@ -524,7 +560,47 @@ class SalesScreen(QWidget):
             )
 
         self.search_input.clear()
+        self._remember_recent(item_id)
         self._refresh_table()
+
+    def _remember_recent(self, item_id: str) -> None:
+        try:
+            ids = [item_id] + [i for i in app_settings.get("recent_items") if i != item_id]
+            app_settings.set_value("recent_items", ids[:5])
+        except OSError:
+            pass  # a preference that could not be saved is not worth stopping a sale for
+        self._show_recent()
+
+    def _show_recent(self) -> None:
+        """Chips for the products most recently put on a bill (hidden until there are any)."""
+        while self._recent_layout.count() > 1:  # keep the "Recently sold" label
+            item = self._recent_layout.takeAt(1)
+            old = item.widget()
+            if old is not None:
+                old.hide()
+                old.setParent(None)  # gone at once, not when Qt gets round to deleting it
+                old.deleteLater()
+        by_id = {str(i["id"]): i for i in self._all_items}
+        shown = 0
+        for item_id in app_settings.get("recent_items"):
+            data = by_id.get(item_id)
+            if data is None:
+                continue
+            name = data["name"]
+            chip = QPushButton(name if len(name) <= 26 else name[:25] + "…")
+            chip.setToolTip(f"Add {name}")
+            chip.setCursor(Qt.CursorShape.PointingHandCursor)
+            chip.setStyleSheet(
+                f"QPushButton {{ background: {Colors.CARD_BG}; color: {Colors.TEXT_SECONDARY};"
+                f" border: 1px solid {Colors.INPUT_BORDER}; border-radius: 14px; padding: 4px 12px;"
+                f" font-size: {Fonts.BODY_SM}px; }}"
+                f"QPushButton:hover {{ border-color: {Colors.BRAND_GOLD}; color: {Colors.TEXT_PRIMARY}; }}"
+            )
+            chip.clicked.connect(lambda _=False, d=data: self._add_item(d))
+            self._recent_layout.addWidget(chip)
+            shown += 1
+        self._recent_layout.addStretch()
+        self.recent_row.setVisible(shown > 0)
 
     def _remove_item(self, row: int):
         if 0 <= row < len(self._cart):
@@ -542,6 +618,7 @@ class SalesScreen(QWidget):
 
     def _clear_cart(self):
         self._bill_key = None
+        self._note("", "muted")
         self.pay_pick.setCurrentIndex(self._default_payment_index())  # back to the usual for the next bill
         self._cart.clear()
         self._clear_split_rows()
@@ -579,11 +656,11 @@ class SalesScreen(QWidget):
                     border-radius: 4px;
                     font-size: 14px;
                     font-weight: bold;
-                    background: white;
+                    background: {Colors.CARD_BG};
                 }}
                 QPushButton:hover {{
                     background: {Colors.ERROR_BG};
-                    color: #B3261E;
+                    color: {Colors.RED};
                 }}
             """)
             rm_btn.clicked.connect(lambda _, r=row: self._remove_item(r))
@@ -768,8 +845,8 @@ class SalesScreen(QWidget):
             payment_method=pay.get("payment_method"), payment_status=pay["payment_status"],
         )
         paid_note = (
-            "\n\nHow it was paid is kept with it, but the server shows it as not paid until "
-            "you correct it in Bill History."
+            "\n\nHow it was paid is kept with it. A server that has not been updated yet shows it as "
+            "not paid until you correct it in Bill History."
             if pay["payment_status"] != "pending"
             else ""
         )
