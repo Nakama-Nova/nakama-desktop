@@ -17,6 +17,16 @@ def test_opening_a_screen_offline_shows_a_notice_not_a_crash(qapp):
     w._sync_timer.stop()
     w._switch_page(2)  # Stock: refresh hits the dead server
     settle()
+    # The notice arrives when the background load fails. On a busy machine that can take longer
+    # than settle() waits, so wait for the notice itself (up to 10 seconds) instead of guessing.
+    import time
+
+    from PyQt6.QtCore import QCoreApplication
+
+    deadline = time.monotonic() + 10
+    while "No connection" not in w.statusBar().currentMessage() and time.monotonic() < deadline:
+        QCoreApplication.processEvents()
+        time.sleep(0.01)
     assert "No connection" in w.statusBar().currentMessage()
 
 
