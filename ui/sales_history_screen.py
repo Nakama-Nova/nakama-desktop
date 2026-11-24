@@ -25,6 +25,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from services.money import inr
 from services.event_bus import SALE_CREATED, EventBus
 from services.sales_service import BillPdfError, SalesService
 from services.session import Session
@@ -50,19 +51,19 @@ def bill_text(sale: dict, items: list[dict]) -> str:
         qty = item.get("quantity", 0)
         price = float(item.get("price_at_sale", 0))
         gst = float(item.get("cgst_amount") or 0) + float(item.get("sgst_amount") or 0)
-        line = f"  • {item.get('item_name', 'Item')}:  {qty} × ₹{price:,.2f}"
+        line = f"  • {item.get('item_name', 'Item')}:  {qty} × {inr(price)}"
         if gst:
-            line += f"  + GST {float(item.get('gst_percent') or 0):g}% ₹{gst:,.2f}"
-        msg += f"{line}  =  ₹{float(item.get('total_price', 0)):,.2f}\n"
+            line += f"  + GST {float(item.get('gst_percent') or 0):g}% {inr(gst)}"
+        msg += f"{line}  =  {inr(float(item.get('total_price', 0)))}\n"
         before_gst += price * qty
     tax = float(sale.get("tax_total") or 0)
     discount = float(sale.get("discount") or 0)
-    msg += f"\nSubtotal (before GST): ₹{before_gst:,.2f}"
+    msg += f"\nSubtotal (before GST): {inr(before_gst)}"
     if tax:
-        msg += f"\nGST: ₹{tax:,.2f}  (CGST ₹{tax / 2:,.2f} + SGST ₹{tax / 2:,.2f})"
+        msg += f"\nGST: {inr(tax)}  (CGST {inr(tax / 2)} + SGST {inr(tax / 2)})"
     if discount:
-        msg += f"\nDiscount: -₹{discount:,.2f}"
-    return msg + f"\nTotal: ₹{float(sale.get('total_amount', 0)):,.2f}"
+        msg += f"\nDiscount: -{inr(discount)}"
+    return msg + f"\nTotal: {inr(float(sale.get('total_amount', 0)))}"
 
 
 class DeleteBillDialog(QDialog):
@@ -79,7 +80,7 @@ class DeleteBillDialog(QDialog):
         v.addWidget(QLabel(f"Delete bill {sale.get('invoice_number', '')}?", styleSheet=Theme.subheading()))
         amount = float(sale.get("total_amount") or 0)
         note = QLabel(
-            f"Amount ₹{amount:,.2f}.\n\n"
+            f"Amount {inr(amount)}.\n\n"
             "• Every piece on it goes back to the shelf, in the place it was sold from.\n"
             "• The bill stays in Bill History, marked Cancelled, with your reason.\n"
             "• Sales, profit and the books stop counting it.\n"
@@ -129,7 +130,7 @@ class PaymentDialog(QDialog):
         form = QFormLayout(self)
         form.setContentsMargins(24, 20, 24, 20)
         form.setSpacing(12)
-        form.addRow(QLabel(f"Bill {sale.get('invoice_number', '')}  ·  ₹{float(sale.get('total_amount') or 0):,.2f}", styleSheet=Theme.subheading()))
+        form.addRow(QLabel(f"Bill {sale.get('invoice_number', '')}  ·  {inr(float(sale.get('total_amount') or 0))}", styleSheet=Theme.subheading()))
         self.status = QComboBox()
         for value, label in (("pending", "Not paid yet"), ("partial", "Part paid"), ("paid", "Paid")):
             self.status.addItem(label, value)
@@ -295,7 +296,7 @@ class SalesHistoryScreen(QWidget):
             cancelled = is_cancelled(sale)
             created = str(sale.get("created_at") or "")
             created = created.split("T")[0] if "T" in created else created
-            cells = [sale.get("invoice_number", "N/A"), f"₹{float(sale.get('total_amount', 0)):,.2f}", created]
+            cells = [sale.get("invoice_number", "N/A"), f"{inr(float(sale.get('total_amount', 0)))}", created]
             for col, text in enumerate(cells):
                 item = QTableWidgetItem(text)
                 if col == self.COL_AMOUNT:

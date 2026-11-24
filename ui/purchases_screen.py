@@ -28,6 +28,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from services.money import inr
 from services.inventory_service import InventoryService
 from services.places_service import NOT_PLACED, PlacesService
 from services.stock_service import StockService
@@ -157,14 +158,14 @@ class NewPurchaseDialog(QDialog):
             base = line["quantity"] * line["unit_price"]
             total += base * (1 + line["gst_percent"] / 100)
             for c, text in enumerate(
-                [line["label"], f"{line['quantity']:g}", f"₹{line['unit_price']:,.2f}", f"{line['gst_percent']}%"]
+                [line["label"], f"{line['quantity']:g}", f"{inr(line['unit_price'])}", f"{line['gst_percent']}%"]
             ):
                 self.table.setItem(r, c, QTableWidgetItem(text))
             rm = QPushButton("✖")
             rm.setStyleSheet(Theme.btn_table_action())
             rm.clicked.connect(lambda _=False, i=r: self._remove(i))
             self.table.setCellWidget(r, 4, rm)
-        self.total.setText(f"Total ₹{total:,.2f}")
+        self.total.setText(f"Total {inr(total)}")
 
     def _remove(self, index: int):
         if 0 <= index < len(self._lines):
@@ -309,15 +310,15 @@ class PurchasesScreen(QWidget):
     def _view(self, p: dict):
         full = self._svc.purchase(p["id"])
         lines = "\n".join(
-            f"• {float(i['quantity']):g} × ₹{float(i['unit_price']):,.2f}"
-            f"  (GST {float(i.get('gst_percent') or 0):g}%)  = ₹{float(i['line_total']):,.2f}"
+            f"• {float(i['quantity']):g} × {inr(float(i['unit_price']))}"
+            f"  (GST {float(i.get('gst_percent') or 0):g}%)  = {inr(float(i['line_total']))}"
             for i in full.get("items", [])
         )
         QMessageBox.information(
             self,
             f"Purchase {full.get('invoice_number') or ''}".strip(),
-            f"{lines}\n\nTotal ₹{float(full.get('total_amount') or 0):,.2f}"
-            f"\nTax ₹{float(full.get('tax_total') or 0):,.2f}",
+            f"{lines}\n\nTotal {inr(float(full.get('total_amount') or 0))}"
+            f"\nTax {inr(float(full.get('tax_total') or 0))}",
         )
 
     @handle_permissions

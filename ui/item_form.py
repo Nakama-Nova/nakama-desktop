@@ -24,6 +24,7 @@ from PyQt6.QtWidgets import (
 )
 
 from services import pricing
+from services.money import inr
 from ui.theme import Colors, Theme
 
 GST_CHOICES = [0, 5, 12, 18, 28]  # what the server accepts
@@ -45,6 +46,7 @@ class ItemDialog(QDialog):
         root = QVBoxLayout(self)
         root.setContentsMargins(20, 16, 20, 16)
         tabs = QTabWidget()
+        Theme.style_tabs(tabs)
         root.addWidget(tabs)
 
         # ---- Basics
@@ -241,7 +243,7 @@ class ItemDialog(QDialog):
         """Keep Cost, Price before GST and Selling price (with GST) in step with what was typed."""
         gst = self.gst.currentData()
         cost = pricing.cost_of(self.purchase.value(), self.production.value())
-        self.cost_lbl.setText(f"₹{cost:,.2f}")
+        self.cost_lbl.setText(f"{inr(cost)}")
         auto = self.by_profit.isChecked()
         self.profit.setEnabled(auto)
         self.selling.setReadOnly(auto)
@@ -254,7 +256,7 @@ class ItemDialog(QDialog):
             self._net_saved = pricing.net_from_gross(self.selling.value(), gst)
         # else: an existing hand-typed price that was not touched keeps its stored value
         tax = pricing.with_gst(self._net_saved, gst) - self._net_saved
-        self.net_lbl.setText(f"₹{self._net_saved:,.2f}" + (f"   (GST {gst}%: ₹{tax:,.2f})" if gst else ""))
+        self.net_lbl.setText(f"{inr(self._net_saved)}" + (f"   (GST {gst}%: {inr(tax)})" if gst else ""))
         if auto or self._gross_typed or self.selling.value() == 0:
             self.selling.blockSignals(True)
             self.selling.setValue(pricing.with_gst(self._net_saved, gst))

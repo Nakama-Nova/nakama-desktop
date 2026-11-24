@@ -14,6 +14,7 @@ from PyQt6.QtCore import QCoreApplication, Qt
 from PyQt6.QtGui import QImage, QPixmap
 
 IMAGE_DIR = Path(__file__).resolve().parent.parent / "assets" / "images"
+ICON_DIR = IMAGE_DIR.parent / "icons"  # small interface arrows used by style sheets
 
 
 def logo_path(short: bool = False) -> Path:

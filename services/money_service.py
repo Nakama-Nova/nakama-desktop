@@ -7,6 +7,7 @@ profit report. Thin calls to the server; the maths all happens there.
 
 from datetime import date, timedelta
 
+from services.money import inr
 from services.api_client import APIClient
 from services.session import Session
 
@@ -33,7 +34,7 @@ def period_range(key: str, today: date | None = None):
 
 
 def rupees(value) -> str:
-    return f"₹{float(value or 0):,.2f}"
+    return f"{inr(float(value or 0))}"
 
 
 class MoneyService:

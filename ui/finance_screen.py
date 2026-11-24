@@ -259,6 +259,8 @@ class FinanceScreen(QWidget):
         self.chips.choose("month")
 
         self.tabs = QTabWidget()
+
+        Theme.style_tabs(self.tabs)
         layout.addWidget(self.tabs, 1)
         self._build_pnl()
         if self._can_balance:

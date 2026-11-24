@@ -80,7 +80,7 @@ def test_the_period_presets():
 def test_profit_and_loss_shows_the_totals_and_both_sides(qapp, books):
     s = FinanceScreen()
     s.refresh_data()
-    assert (s.income_lbl.text(), s.expense_lbl.text(), s.profit_lbl.text()) == ("₹246,500.00", "₹159,000.00", "₹87,500.00")
+    assert (s.income_lbl.text(), s.expense_lbl.text(), s.profit_lbl.text()) == ("₹2,46,500.00", "₹1,59,000.00", "₹87,500.00")
     assert [s.income_table.item(r, 1).text() for r in range(s.income_table.rowCount())] == ["Sales", "Order income"]
     assert s.expense_table.item(1, 2).text() == "₹61,000.00"
     assert "65%" in s.spend_words.text()  # expenses as a share of income

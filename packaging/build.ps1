@@ -22,5 +22,5 @@ pyinstaller --noconfirm --clean --windowed --name VrikshaDesk `
     --collect-submodules keyring.backends --copy-metadata keyring `
     --icon assets\icon\vriksha.ico `
     --add-data "assets/fonts;assets/fonts" --add-data "assets/images;assets/images" `
-    --add-data "assets/icon;assets/icon" main.py
+    --add-data "assets/icon;assets/icon" --add-data "assets/icons;assets/icons" main.py
 if ($LASTEXITCODE -ne 0) { throw "pyinstaller failed" }

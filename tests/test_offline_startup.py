@@ -46,7 +46,8 @@ def test_tables_fit_their_window_and_the_sidebar_folds_when_it_is_narrow(qapp):
     w.resize(1100, 700)
     settle()
     assert w._compact and w.sidebar.width() == 80
-    assert w._nav_buttons[0].text().strip() == w._nav_buttons[0].property("icon_text")
+    first = w._nav_buttons[0]  # icons only: no text, the name is the tooltip
+    assert first.text() == "" and not first.icon().isNull() and first.toolTip() == first.property("label_text")
     w.resize(1500, 800)
     settle()
     assert not w._compact and w.sidebar.width() == 232

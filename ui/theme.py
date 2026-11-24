@@ -18,6 +18,13 @@ Theme.badge(), Theme.alert(), Theme.card().
 from functools import lru_cache
 
 
+def _arrow(name: str) -> str:
+    """Path of a small interface arrow, in the form a style sheet's url() wants."""
+    from ui.assets import ICON_DIR
+
+    return (ICON_DIR / f"{name}.png").as_posix()
+
+
 @lru_cache(maxsize=None)
 def mix(color: str, other: str, weight: float) -> str:
     """Blend `color` towards `other` (0 = color, 1 = other), like Sass mix()."""
@@ -291,6 +298,36 @@ class Theme:
                 border: none;
                 width: 24px;
             }}
+            QComboBox::down-arrow, QDateEdit::down-arrow {{
+                image: url({_arrow("chevron-down")});
+                width: 12px;
+                height: 12px;
+            }}
+            QDateEdit::drop-down {{
+                subcontrol-origin: padding;
+                subcontrol-position: center right;
+                border: none;
+                width: 28px;
+            }}
+            QSpinBox::up-button, QDoubleSpinBox::up-button,
+            QSpinBox::down-button, QDoubleSpinBox::down-button {{
+                subcontrol-origin: border;
+                border: none;
+                background: transparent;
+                width: 22px;
+            }}
+            QSpinBox::up-button, QDoubleSpinBox::up-button {{ subcontrol-position: top right; }}
+            QSpinBox::down-button, QDoubleSpinBox::down-button {{ subcontrol-position: bottom right; }}
+            QSpinBox::up-arrow, QDoubleSpinBox::up-arrow {{
+                image: url({_arrow("chevron-up")});
+                width: 10px;
+                height: 10px;
+            }}
+            QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {{
+                image: url({_arrow("chevron-down")});
+                width: 10px;
+                height: 10px;
+            }}
             QComboBox QAbstractItemView {{
                 border: 1px solid {Colors.INPUT_BORDER};
                 background: {Colors.CARD_BG};
@@ -508,6 +545,34 @@ class Theme:
                 border: none;
             }}
         """
+
+    @staticmethod
+    def style_tabs(tabs) -> None:
+        """Tabs as rounded pills in the brand colours, instead of the grey system tabs."""
+        tabs.setDocumentMode(True)  # no frame around the page
+        tabs.tabBar().setDrawBase(False)
+        tabs.setStyleSheet(
+            f"""
+            QTabWidget::pane {{ border: none; background: transparent; top: 6px; }}
+            QTabBar::tab {{
+                background: transparent;
+                color: {Colors.TEXT_SECONDARY};
+                border: 1px solid transparent;
+                border-radius: {Radius.MD}px;
+                padding: 7px 16px;
+                margin: 0 4px 0 0;
+                font-size: {Fonts.BODY}px;
+                font-weight: 500;
+            }}
+            QTabBar::tab:hover {{ background: {Colors.SIDEBAR_HOVER}; color: {Colors.TEXT_PRIMARY}; }}
+            QTabBar::tab:selected {{
+                background: {Colors.SIDEBAR_ACTIVE};
+                color: {Colors.TEXT_PRIMARY};
+                border-color: {Colors.BRAND_GOLD_LIGHT};
+                font-weight: 700;
+            }}
+            """
+        )
 
     @staticmethod
     def style_table(table) -> None:

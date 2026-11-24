@@ -33,6 +33,7 @@ from ui.components.bootstrap import Button
 from ui.components.carvings import attach_empty_state
 from ui.components.navbar import Navbar
 from ui.components.goto_dialog import GoToDialog
+from ui import icons
 from ui.theme import Theme, Colors, Fonts, Radius, Spacing
 
 from ui.dashboard_window import DashboardWindow
@@ -568,14 +569,21 @@ class MainWindow(QMainWindow):
                 btn.setVisible(self._compact or name not in self._collapsed)
 
     def _create_nav_button(self, icon: str, label: str, index: int) -> QPushButton:
-        btn = QPushButton(f"  {icon}   {label}")
+        btn = QPushButton(f"  {label}")
         btn.setProperty("icon_text", icon)
         btn.setProperty("label_text", label)
+        btn.setIconSize(QSize(18, 18))
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
         btn.setFixedHeight(40)
-        btn.setStyleSheet(self._nav_button_css(active=False))
+        self._style_nav(btn, active=False)
         btn.clicked.connect(lambda _, idx=index: self._switch_page(idx))
         return btn
+
+    def _style_nav(self, btn: QPushButton, active: bool) -> None:
+        """The button's look and its line icon, in the colour the state needs."""
+        btn.setStyleSheet(self._nav_button_css(active))
+        colour = Colors.SIDEBAR_ACTIVE_TEXT if active else Colors.SIDEBAR_TEXT
+        btn.setIcon(icons.icon(icons.for_label(btn.property("label_text")), colour))
 
     def _nav_button_css(self, active: bool) -> str:
         align = "center" if self._compact else "left"
@@ -657,7 +665,7 @@ class MainWindow(QMainWindow):
 
         # Update active state on nav buttons
         for i, btn in self._nav_mapping.items():
-            btn.setStyleSheet(self._nav_button_css(active=(i == index)))
+            self._style_nav(btn, active=(i == index))
         group = self._page_group.get(index)
         if group in self._collapsed:  # never leave the open page hidden in a folded section
             self._collapsed.discard(group)
@@ -686,9 +694,9 @@ class MainWindow(QMainWindow):
         current = self.content_stack.currentIndex()
         for index, btn in self._nav_mapping.items():
             icon, label = btn.property("icon_text"), btn.property("label_text")
-            btn.setText(icon if on else f"  {icon}   {label}")
+            btn.setText("" if on else f"  {label}")
             btn.setToolTip(label if on else "")
-            btn.setStyleSheet(self._nav_button_css(active=(index == current)))
+            self._style_nav(btn, active=(index == current))
         for btn, icon, words in self._footer:
             btn.setText(icon if on else f"{icon}  {words}")
             btn.setToolTip(words if on else "")
