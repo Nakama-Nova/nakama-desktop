@@ -140,9 +140,15 @@ class ReportsScreen(QWidget):
 
     def refresh_data(self):
         self._show(self._fetch())
+        self._refresh_gst()
+
+    def _refresh_gst(self):
+        if self.gst_panel.isVisible():
+            self.gst_panel.refresh()
 
     def refresh_async(self, _checked=False):
         load_async(self, self._fetch, self._show)
+        self._refresh_gst()
 
     def _show(self, data):
         dash, sales, low_stock = data

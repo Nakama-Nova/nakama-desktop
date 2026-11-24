@@ -43,7 +43,7 @@ def period_dates(key: str, today: date | None = None) -> tuple[date, date]:
 class GstSummaryPanel(QFrame):
     def __init__(self, report_service):
         super().__init__()
-        self._svc, self._data = report_service, None
+        self._svc, self._data, self._asked = report_service, None, False
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(10)
@@ -86,14 +86,19 @@ class GstSummaryPanel(QFrame):
         self.period.currentIndexChanged.connect(self._period_changed)
         self.start.dateChanged.connect(self.refresh)
         self.end.dateChanged.connect(self.refresh)
-        self._period_changed()
+        self._period_changed(refresh=False)  # nothing is asked of the server until the panel is on screen
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if self._data is None and not self._asked:
+            self.refresh()
 
     def dates(self) -> tuple[date, date]:
         if self.period.currentData() == "custom":
             return self.start.date().toPyDate(), self.end.date().toPyDate()
         return period_dates(self.period.currentData())
 
-    def _period_changed(self, _i=0):
+    def _period_changed(self, _i=0, refresh=True):
         custom = self.period.currentData() == "custom"
         a, b = period_dates("month") if custom else self.dates()
         for d, v in ((self.start, a), (self.end, b)):
@@ -101,9 +106,11 @@ class GstSummaryPanel(QFrame):
             d.setDate(QDate(v.year, v.month, v.day))
             d.blockSignals(False)
             d.setVisible(custom)
-        self.refresh()
+        if refresh:
+            self.refresh()
 
     def refresh(self, *_):
+        self._asked = True
         a, b = self.dates()
         load_async(self, lambda: self._svc.get_gst_summary(a.isoformat(), b.isoformat()), self._show)
 
