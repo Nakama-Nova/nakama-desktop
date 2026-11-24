@@ -30,6 +30,8 @@ from services.money import inr
 from services.event_bus import SALE_CREATED, EventBus
 from services.sales_service import BillPdfError, SalesService
 from services.session import Session
+from ui.receipt_dialog import ReceiptDialog, shop_details
+from ui.receipt_render import receipt_from_sale
 from ui.bill_payments import PaymentsDialog, ReturnDialog
 from ui.components.interactive import ChipBar
 from ui.errors import handle_permissions
@@ -331,7 +333,7 @@ class SalesHistoryScreen(QWidget):
 
     def _actions_width(self) -> int:
         """What the row buttons need (measured on Windows): View and Print, plus Payments, Return and Delete."""
-        w = 200
+        w = 310  # View, Print and Receipt
         if self._can_edit or Session.can("sales:payment:add") or Session.can("sales:payment:void"):
             w += 120
         if Session.can("sales:sale:return"):
@@ -347,6 +349,7 @@ class SalesHistoryScreen(QWidget):
         h.setSpacing(6)
         buttons = [("👁️ View", self._view_details, "See what was sold"), ("🖨️ Print", self._reprint_invoice, "Open the bill PDF")]
         if not cancelled:
+            buttons.append(("🧾 Receipt", self._receipt, "Print a receipt on a roll, A5 or A4"))
             if "payments" in sale and (Session.can("sales:payment:add") or Session.can("sales:payment:void")):
                 buttons.append(("💳 Payments", self._payments, "See, add or take off payments on this bill"))
             elif "payments" not in sale and self._can_edit:  # an older server: only the status and method
@@ -401,6 +404,14 @@ class SalesHistoryScreen(QWidget):
             return
         self._sales_service.edit_sale(str(sale["id"]), changes)
         self.refresh_async()
+
+    @handle_permissions
+    def _receipt(self, sale):
+        items = self._sales_service.get_sale_items(str(sale["id"]))
+        if not items:
+            QMessageBox.information(self, "Receipt", "No items found for this bill.")
+            return
+        ReceiptDialog(self, receipt_from_sale(sale, items, shop_details())).exec()
 
     @handle_permissions
     def _payments(self, sale):

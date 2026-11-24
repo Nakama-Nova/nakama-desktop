@@ -38,6 +38,8 @@ from ui.theme import Theme, Colors, Fonts
 from ui.components.place_picker import PlacePicker, fetch_places, selling_places
 from ui.errors import handle_permissions
 from ui.sales_history_screen import METHODS
+from ui.receipt_dialog import ReceiptDialog, shop_details
+from ui.receipt_render import receipt_from_sale
 from ui.workers import load_async
 from services.sales_service import BillPdfError, SalesService
 from services.customer_service import CustomerService
@@ -297,6 +299,14 @@ class SalesScreen(QWidget):
         )
         self.clear_btn.clicked.connect(self._clear_cart)
         col.addWidget(self.clear_btn)
+
+        # Quiet too: a paper receipt (80 mm roll, A5, A4) of the bill just made, even a provisional one made offline
+        self.receipt_btn = IconButton("🧾  Print last receipt")
+        self.receipt_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.receipt_btn.setStyleSheet(self.clear_btn.styleSheet().replace(Colors.RED, Colors.TEXT_PRIMARY))
+        self.receipt_btn.setEnabled(False)
+        self.receipt_btn.clicked.connect(self._print_last_receipt)
+        col.addWidget(self.receipt_btn)
 
         self._bill_shortcut = QShortcut(QKeySequence("Ctrl+Return"), self)
         self._bill_shortcut.activated.connect(self._generate_invoice)
@@ -620,6 +630,26 @@ class SalesScreen(QWidget):
         """Everything handed over: the first amount plus any split rows."""
         return received_total(self.received_in.value(), *[a.value() for _m, a, _r in self._split_rows])
 
+    _last_bill = None
+
+    def _remember_bill(self, sale: dict, provisional: bool):
+        """Keep the bill just made (before the cart is cleared) so its receipt can be printed."""
+        items = sale.get("items") or [
+            {"item_name": c.name, "quantity": c.quantity, "price_at_sale": c.price, "gst_percent": c.gst_pct} for c in self._cart
+        ]
+        sale = {
+            **sale, "customer_name": self.customer_input.text().strip(), "customer_phone": self.phone_input.text().strip(),
+            "customer_gstin": gst.clean(self.gstin_input.text()) or None,
+        }
+        self._last_bill = (sale, items, provisional)
+        self.receipt_btn.setEnabled(True)
+
+    def _print_last_receipt(self):
+        if not self._last_bill:
+            return
+        sale, items, provisional = self._last_bill
+        ReceiptDialog(self, receipt_from_sale(sale, items, shop_details(), provisional)).exec()
+
     def _gstin_changed(self, text: str):
         """Tell the cashier at once if a GSTIN is mistyped, or which state it belongs to."""
         problem, state = gst.gstin_problem(text), gst.state_of(text)
@@ -702,6 +732,7 @@ class SalesScreen(QWidget):
             if pay["payment_status"] != "pending"
             else ""
         )
+        self._remember_bill({"invoice_number": ref, "total_amount": self._total, "payment_status": pay["payment_status"], "payment_method": pay.get("payment_method")}, True)
         QMessageBox.information(
             self,
             "Saved offline",
@@ -815,6 +846,7 @@ class SalesScreen(QWidget):
             f"Bill {invoice_number} created successfully!{note}",
         )
 
+        self._remember_bill(sale_data, False)
         EventBus.emit(SALE_CREATED)
         self._clear_cart()
         self.customer_input.clear()
