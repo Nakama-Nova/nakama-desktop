@@ -41,6 +41,7 @@ from ui.dashboard_window import DashboardWindow
 from ui.inventory_window import InventoryWindow
 from ui.sales_screen import SalesScreen
 from ui.customers_screen import CustomersScreen
+from ui.leave_screen import LeaveScreen
 from ui.reports_screen import ReportsScreen
 from ui.sales_history_screen import SalesHistoryScreen
 from ui.attendance_screen import AttendanceScreen
@@ -128,6 +129,7 @@ class MainWindow(QMainWindow):
         ("🎨", "Designs", 16),
         ("🛠️", "Machines and tools", 19),
         ("👷", "Attendance", 6),
+        ("📅", "Leave", 23),
         ("💰", "Wages", 11),
         ("👥", "Staff", 10),
         ("💸", "Expenses", 12),
@@ -141,7 +143,7 @@ class MainWindow(QMainWindow):
         "Selling": ["New Bill", "Bill History", "Orders", "Buyers", "Letters"],
         "Stock and buying": ["Stock", "Materials", "Purchases", "Places"],
         "Workshop": ["3D Lab", "Restoration", "Designs", "Machines and tools"],
-        "People and pay": ["Attendance", "Wages", "Staff"],
+        "People and pay": ["Attendance", "Leave", "Wages", "Staff"],
         "Money": ["Expenses", "Profit", "Budgets", "Accounts", "Reports"],
         "Access": ["Roles"],
     }
@@ -162,6 +164,7 @@ class MainWindow(QMainWindow):
         "Designs": ("restoration:project:access",),
         "Machines and tools": ("machines:tool:view",),
         "Attendance": ("attendance:record:read_own", "attendance:record:read_all"),
+        "Leave": ("leave:request:create", "leave:request:approve"),
         "Wages": ("payroll:records:read_all",),  # plus the self-service rule in _can_see
         "Staff": ("people:user:create", "people:user:update"),
         "Expenses": ("expenses:expense:write",),
@@ -360,6 +363,7 @@ class MainWindow(QMainWindow):
         self.budgets_view = BudgetsScreen()
         self.finance_view = FinanceScreen()
         self.roles_view = RolesScreen()
+        self.leave_view = LeaveScreen()
 
         self.content_stack.addWidget(self.dashboard_view)  # 0
         self.content_stack.addWidget(self.sales_view)  # 1
@@ -384,6 +388,7 @@ class MainWindow(QMainWindow):
         self.content_stack.addWidget(self.budgets_view)  # 20
         self.content_stack.addWidget(self.finance_view)  # 21
         self.content_stack.addWidget(self.roles_view)  # 22
+        self.content_stack.addWidget(self.leave_view)  # 23
 
         Theme.stripe_tables(self)
         self._decorate_empty_states()

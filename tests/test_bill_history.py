@@ -56,9 +56,9 @@ def test_the_chips_count_and_filter_the_bills(qapp, history):
 @pytest.mark.parametrize(
     "role,expected",
     [
-        (UserRole.OWNER, ["View", "Print", "Payment", "Delete"]),
-        (UserRole.MANAGER, ["View", "Print", "Payment"]),  # may correct payment, never delete
-        (UserRole.SALES, ["View", "Print"]),
+        (UserRole.OWNER, ["View", "Print", "Receipt", "Payment", "Return", "Delete"]),
+        (UserRole.MANAGER, ["View", "Print", "Receipt", "Payment", "Return"]),  # may correct payment and take returns, never delete
+        (UserRole.SALES, ["View", "Print", "Receipt"]),
     ],
 )
 def test_who_gets_which_buttons(qapp, history, monkeypatch, role, expected):

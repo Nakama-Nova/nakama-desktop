@@ -18,10 +18,12 @@ _SALES_DESK = (
     "sales:sale:create", "sales:sale:read", "sales:order:create", "sales:order:read",
     "sales:order:payment_add", "sales:order:invoice", "sales:invoice:read",
     "sales:customer:read", "sales:customer:write", "purchases:purchase:read",
+    "sales:payment:add", "sales:credit_note:read",
 )
 _SALES_BOSS = _SALES_DESK + (
     "sales:sale:edit", "sales:order:update", "sales:order:delete", "sales:customer:delete",
     "purchases:purchase:create", "purchases:purchase:confirm",
+    "sales:payment:void", "sales:sale:return",
 )
 _FLOOR_VIEW = ("items:item:read", "attendance:record:read_own")
 _PRODUCTION_BOSS = (
@@ -57,7 +59,7 @@ BUILTIN_ACTIONS: dict[str, tuple[str, ...]] = {
     "manager": (
         ("finance:ledger:read", "iam:role:read", "iam:role:write", "iam:user_role:assign")
         + _PAYMASTER + _ATTENDANCE_BOSS + _SALES_BOSS + _PRODUCTION_BOSS
-        + _LAB_BOSS + _DOCS_BOSS + _PEOPLE_BOSS
+        + _LAB_BOSS + _DOCS_BOSS + _PEOPLE_BOSS + ("leave:request:create", "leave:request:approve", "leave:request:read_all")
     ),
     "accountant": ("finance:ledger:read", "finance:balance_sheet:read"),
     "sales": (

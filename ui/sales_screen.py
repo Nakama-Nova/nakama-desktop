@@ -23,6 +23,8 @@ from PyQt6.QtWidgets import (
     QHeaderView,
     QMessageBox,
     QSpinBox,
+    QDoubleSpinBox,
+    QComboBox,
     QCompleter,
     QComboBox,
     QFrame,
@@ -36,6 +38,8 @@ from ui.theme import Theme, Colors, Fonts
 from ui.components.place_picker import PlacePicker, fetch_places, selling_places
 from ui.errors import handle_permissions
 from ui.sales_history_screen import METHODS, is_cancelled
+from ui.receipt_dialog import ReceiptDialog, shop_details
+from ui.receipt_render import receipt_from_sale
 from ui.workers import load_async, run_async
 from services.sales_service import BillPdfError, SalesService
 from services.customer_service import CustomerService
@@ -43,6 +47,8 @@ from services.inventory_service import InventoryService
 from services.event_bus import EventBus, SALE_CREATED
 from services import app_settings
 from services.money import inr
+from services import gst
+from services.billing import change_or_balance, discount_amount, payment_status, received_total
 
 
 class QtyStepper(QFrame):
@@ -232,6 +238,17 @@ class SalesScreen(QWidget):
         self.customer_input.setStyleSheet(Theme.input_style())
         self.customer_input.setMinimumHeight(38)
         col.addWidget(self.customer_input)
+        self.gstin_input = QLineEdit()
+        self.gstin_input.setPlaceholderText("Buyer's GSTIN (only for a business buyer)")
+        self.gstin_input.setStyleSheet(Theme.input_style())
+        self.gstin_input.setMinimumHeight(38)
+        self.gstin_input.setMaxLength(15)
+        self.gstin_input.textChanged.connect(self._gstin_changed)
+        col.addWidget(self.gstin_input)
+        self.gstin_note = QLabel("")
+        self.gstin_note.setWordWrap(True)
+        self.gstin_note.setVisible(False)
+        col.addWidget(self.gstin_note)
         self.search_btn = IconButton("Find buyer by phone")
         self.search_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.search_btn.setStyleSheet(Theme.btn("secondary", "sm", outline=True))
@@ -260,6 +277,26 @@ class SalesScreen(QWidget):
         self.cgst_lbl = self._money_row(col, "CGST")
         self.sgst_lbl = self._money_row(col, "SGST")
 
+        # Discount: rupees or per cent off the bill total (the server takes the rupees off items + GST)
+        drow = QHBoxLayout()
+        drow_lbl = QLabel("Give discount")
+        drow_lbl.setStyleSheet(f"font-size: {Fonts.BODY}px; color: {Colors.TEXT_SECONDARY};")
+        self.discount_in = QDoubleSpinBox()
+        self.discount_in.setRange(0, 10_000_000)
+        self.discount_in.setDecimals(2)
+        self.discount_in.setStyleSheet(Theme.input_style())
+        self.discount_in.valueChanged.connect(self._update_totals)
+        self.discount_kind = QComboBox()
+        self.discount_kind.addItem("₹", "amount")
+        self.discount_kind.addItem("%", "percent")
+        self.discount_kind.setStyleSheet(Theme.input_style())
+        self.discount_kind.currentIndexChanged.connect(self._update_totals)
+        drow.addWidget(drow_lbl)
+        drow.addWidget(self.discount_in, 1)
+        drow.addWidget(self.discount_kind)
+        col.addLayout(drow)
+        self.discount_lbl = self._money_row(col, "Discount")
+
         total_row = QHBoxLayout()
         total_name = QLabel("Total")
         total_name.setStyleSheet(f"font-size: {Fonts.BODY}px; font-weight: 600; color: {Colors.TEXT_SECONDARY};")
@@ -284,6 +321,30 @@ class SalesScreen(QWidget):
         self.pay_pick.setStyleSheet(Theme.input_style())
         self.pay_pick.setMinimumHeight(38)
         col.addWidget(self.pay_pick)
+        rrow = QHBoxLayout()
+        rrow_lbl = QLabel("Received")
+        rrow_lbl.setStyleSheet(f"font-size: {Fonts.BODY}px; color: {Colors.TEXT_SECONDARY};")
+        self.received_in = QDoubleSpinBox()
+        self.received_in.setRange(0, 10_000_000)
+        self.received_in.setDecimals(2)
+        self.received_in.setPrefix("₹")
+        self.received_in.setStyleSheet(Theme.input_style())
+        self.received_in.valueChanged.connect(self._received_changed)
+        self.pay_pick.currentIndexChanged.connect(self._pay_pick_changed)
+        rrow.addWidget(rrow_lbl)
+        rrow.addWidget(self.received_in, 1)
+        col.addLayout(rrow)
+        self.split_box = QVBoxLayout()
+        col.addLayout(self.split_box)
+        self.split_btn = QPushButton("➕  Split payment (another method)")
+        self.split_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.split_btn.setStyleSheet(Theme.btn("secondary", "sm", outline=True))
+        self.split_btn.clicked.connect(self._add_split_row)
+        col.addWidget(self.split_btn)
+        self.pay_note = QLabel("")
+        self.pay_note.setStyleSheet(f"font-size: {Fonts.BODY}px; font-weight: 600;")
+        self.pay_note.setAlignment(Qt.AlignmentFlag.AlignRight)
+        col.addWidget(self.pay_note)
 
         self.invoice_btn = IconButton("Create bill")
         self.invoice_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -303,6 +364,14 @@ class SalesScreen(QWidget):
         )
         self.clear_btn.clicked.connect(self._clear_cart)
         col.addWidget(self.clear_btn)
+
+        # Quiet too: a paper receipt (80 mm roll, A5, A4) of the bill just made, even a provisional one made offline
+        self.receipt_btn = IconButton("🧾  Print last receipt")
+        self.receipt_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.receipt_btn.setStyleSheet(self.clear_btn.styleSheet().replace(Colors.RED, Colors.TEXT_PRIMARY))
+        self.receipt_btn.setEnabled(False)
+        self.receipt_btn.clicked.connect(self._print_last_receipt)
+        col.addWidget(self.receipt_btn)
 
         self._bill_shortcut = QShortcut(QKeySequence("Ctrl+Return"), self)
         self._bill_shortcut.activated.connect(self._generate_invoice)
@@ -538,13 +607,6 @@ class SalesScreen(QWidget):
             self._cart.pop(row)
             self._refresh_table()
 
-    def _payment(self) -> dict:
-        """What to tell the server about payment: the method and "paid", or just "pending"."""
-        method = self.pay_pick.currentData()
-        if method is None:
-            return {"payment_status": "pending"}
-        return {"payment_method": method, "payment_status": "paid"}
-
     def _default_payment_index(self) -> int:
         """Settings: a new bill starts as Cash or as Not paid yet."""
         return self.pay_pick.count() - 1 if app_settings.get("default_payment") == "none" else 0
@@ -559,6 +621,10 @@ class SalesScreen(QWidget):
         self._note("", "muted")
         self.pay_pick.setCurrentIndex(self._default_payment_index())  # back to the usual for the next bill
         self._cart.clear()
+        self._clear_split_rows()
+        self.gstin_input.clear()
+        self._received_touched = False  # the next bill starts as "paid in full, cash, no discount"
+        self.discount_in.setValue(0)
         self._refresh_table()
 
     # ------------------------------------------------------------------
@@ -627,12 +693,124 @@ class SalesScreen(QWidget):
         total_gst = sum(c.price * c.quantity * c.gst_pct / 100 for c in self._cart)
         cgst = total_gst / 2
         sgst = total_gst / 2
-        grand_total = subtotal + total_gst
+        gross = subtotal + total_gst
+        discount = discount_amount(gross, self.discount_kind.currentData(), self.discount_in.value())
+        grand_total = gross - discount
+        self._discount, self._total = discount, grand_total
 
         self.subtotal_lbl.setText(inr(subtotal))
         self.cgst_lbl.setText(inr(cgst))
         self.sgst_lbl.setText(inr(sgst))
+        self.discount_lbl.setText(f"-{inr(discount)}" if discount else inr(0))
         self.grandtotal_lbl.setText(inr(grand_total))
+        if not self._received_touched:  # until the cashier types an amount, the customer pays it all
+            self.received_in.blockSignals(True)
+            self.received_in.setValue(round(grand_total, 2))
+            self.received_in.blockSignals(False)
+        self._show_pay_note()
+
+    _received_touched = False
+    _discount = 0.0
+    _total = 0.0
+
+    _split_rows: list = []
+
+    def _add_split_row(self):
+        """Another payment on the same bill (part cash, part UPI...): a method and an amount."""
+        self._received_touched = True  # the cashier is now dividing the money: stop filling it in
+        row = QWidget()
+        h = QHBoxLayout(row)
+        h.setContentsMargins(0, 0, 0, 0)
+        method = QComboBox()
+        for label, value in METHODS:
+            method.addItem(label, value)
+        method.setStyleSheet(Theme.input_style())
+        amount = QDoubleSpinBox()
+        amount.setRange(0, 10_000_000)
+        amount.setDecimals(2)
+        amount.setPrefix("₹")
+        amount.setStyleSheet(Theme.input_style())
+        amount.setValue(max(0.0, round(self._total - self._received(), 2)))
+        amount.valueChanged.connect(self._received_changed)
+        h.addWidget(method)
+        h.addWidget(amount, 1)
+        self.split_box.addWidget(row)
+        self._split_rows = [*self._split_rows, (method, amount, row)]
+        self._show_pay_note()
+
+    def _clear_split_rows(self):
+        for _m, _a, row in self._split_rows:
+            row.setParent(None)
+            row.deleteLater()
+        self._split_rows = []
+
+    def _received(self) -> float:
+        """Everything handed over: the first amount plus any split rows."""
+        return received_total(self.received_in.value(), *[a.value() for _m, a, _r in self._split_rows])
+
+    _last_bill = None
+
+    def _remember_bill(self, sale: dict, provisional: bool):
+        """Keep the bill just made (before the cart is cleared) so its receipt can be printed."""
+        items = sale.get("items") or [
+            {"item_name": c.name, "quantity": c.quantity, "price_at_sale": c.price, "gst_percent": c.gst_pct} for c in self._cart
+        ]
+        sale = {
+            **sale, "customer_name": self.customer_input.text().strip(), "customer_phone": self.phone_input.text().strip(),
+            "customer_gstin": gst.clean(self.gstin_input.text()) or None,
+        }
+        self._last_bill = (sale, items, provisional)
+        self.receipt_btn.setEnabled(True)
+
+    def _print_last_receipt(self):
+        if not self._last_bill:
+            return
+        sale, items, provisional = self._last_bill
+        ReceiptDialog(self, receipt_from_sale(sale, items, shop_details(), provisional)).exec()
+
+    def _gstin_changed(self, text: str):
+        """Tell the cashier at once if a GSTIN is mistyped, or which state it belongs to."""
+        problem, state = gst.gstin_problem(text), gst.state_of(text)
+        if not text.strip() or (problem and len(text.strip()) < 15):
+            self.gstin_note.setVisible(False)
+        elif problem:
+            self.gstin_note.setStyleSheet(f"color: {Colors.DANGER}; font-size: {Fonts.BODY}px;")
+            self.gstin_note.setText(problem)
+            self.gstin_note.setVisible(True)
+        else:
+            self.gstin_note.setStyleSheet(f"color: {Colors.SUCCESS}; font-size: {Fonts.BODY}px;")
+            self.gstin_note.setText(f"GSTIN looks right. State: {state}.")
+            self.gstin_note.setVisible(True)
+
+    def _pay_pick_changed(self, _i=0):
+        paying = self.pay_pick.currentData() is not None  # "Not paid yet": nothing handed over
+        self.received_in.setEnabled(paying)
+        self.split_btn.setEnabled(paying)
+        self._show_pay_note()
+
+    def _received_changed(self, _v=0):
+        self._received_touched = True
+        self._show_pay_note()
+
+    def _show_pay_note(self):
+        kind, rupees = change_or_balance(self._total, self._received())
+        if not self._cart or rupees == 0 or self.pay_pick.currentData() is None:
+            self.pay_note.setText("")
+            return
+        word, colour = ("Hand back", Colors.SUCCESS) if kind == "change" else ("Balance to pay", Colors.ORANGE)
+        self.pay_note.setStyleSheet(f"font-size: {Fonts.BODY}px; font-weight: 600; color: {colour};")
+        self.pay_note.setText(f"{word} {inr(rupees)}")
+
+    def _payment(self) -> dict:
+        """What to tell the server about payment: the method and paid / part paid, or just "pending"."""
+        method = self.pay_pick.currentData()
+        if method is None:  # "Not paid yet"
+            return {"payment_status": "pending"}
+        status = payment_status(self._total, self._received())
+        if self._split_rows:  # more than one way: the server gets each payment
+            rows = [(self.pay_pick.currentData(), self.received_in.value())] + [(m.currentData(), a.value()) for m, a, _r in self._split_rows]
+            return {"payments": [{"amount": round(v, 2), "method": m} for m, v in rows if v > 0], "payment_status": status}
+        return {"payment_method": method, "payment_status": status}
 
     # ------------------------------------------------------------------
     # Offline billing
@@ -641,17 +819,27 @@ class SalesScreen(QWidget):
         """One id per distinct bill. If the connection drops after the server
         recorded it, the offline copy carries the same id and the server skips
         it instead of billing the buyer twice. Changing the cart makes a new bill."""
-        key = (phone, tuple((c.item_id, c.quantity) for c in self._cart))
+        pay = self._payment()
+        key = (phone, tuple((c.item_id, c.quantity) for c in self._cart), self._discount, pay.get("payment_method"), pay["payment_status"], str(pay.get("payments")))
         if key != self._bill_key:
             self._bill_key, self._bill_client_id = key, str(uuid.uuid4())
         return self._bill_client_id
 
-    def _save_offline(self, customer_name: str, phone: str, client_id: str):
+    def _save_offline(self, customer_name: str, phone: str, client_id: str) -> bool:
+        pay = self._payment()
+        if self._discount or "payments" in pay:  # the sync carries neither yet: a bill saved now would lose them
+            QMessageBox.warning(
+                self,
+                "This needs a connection",
+                "There is no connection, and a discount or a split payment cannot be saved offline yet.\n\n"
+                "Take it off to save this bill on this computer, or press Create bill again "
+                "when the connection is back (it will not be billed twice).",
+            )
+            return False
         lines = [
             {"item_id": c.item_id, "quantity": c.quantity, "price": c.price}
             for c in self._cart
         ]
-        pay = self._payment()
         ref = self._sales_service.queue_offline_sale(
             lines, customer_name, phone, client_id, self._sold_from(),
             payment_method=pay.get("payment_method"), payment_status=pay["payment_status"],
@@ -659,9 +847,10 @@ class SalesScreen(QWidget):
         paid_note = (
             "\n\nHow it was paid is kept with it. A server that has not been updated yet shows it as "
             "not paid until you correct it in Bill History."
-            if pay["payment_status"] == "paid"
+            if pay["payment_status"] != "pending"
             else ""
         )
+        self._remember_bill({"invoice_number": ref, "total_amount": self._total, "payment_status": pay["payment_status"], "payment_method": pay.get("payment_method")}, True)
         QMessageBox.information(
             self,
             "Saved offline",
@@ -673,6 +862,7 @@ class SalesScreen(QWidget):
         self._clear_cart()
         self.customer_input.clear()
         self.phone_input.clear()
+        return True
 
     # ------------------------------------------------------------------
     # Invoice generation
@@ -693,6 +883,10 @@ class SalesScreen(QWidget):
         if not self._cart:
             QMessageBox.warning(self, "Empty Bill", "Please add at least one item.")
             return
+        problem = gst.gstin_problem(self.gstin_input.text())
+        if problem:
+            QMessageBox.warning(self, "Buyer's GSTIN", problem + "\n\nCorrect it, or clear it for a buyer without one.")
+            return
 
         client_id = self._client_id_for_cart(phone)
 
@@ -701,8 +895,9 @@ class SalesScreen(QWidget):
             self._save_offline(customer_name, phone, client_id)
             return
 
+        buyer_gstin = [gst.clean(self.gstin_input.text())] if gst.clean(self.gstin_input.text()) else []
         try:
-            customer_id = self._customer_service.ensure_customer(customer_name, phone)
+            customer_id = self._customer_service.ensure_customer(customer_name, phone, *buyer_gstin)
             if customer_id is None:
                 QMessageBox.critical(
                     self, "Error", "Could not create buyer record. Check connection."
@@ -714,8 +909,12 @@ class SalesScreen(QWidget):
             ]
             place = self._sold_from()
             extra = {"location_id": place} if place else {}  # one shop: the server fills it in
+            pay = self._payment()
+            extra.update(pay)
+            if self._discount:
+                extra["discount"] = self._discount
             sale_data = self._sales_service.create_sale(
-                items=payload_items, customer_id=customer_id, client_id=client_id, **extra, **self._payment()
+                items=payload_items, customer_id=customer_id, client_id=client_id, **extra
             )
         except requests.RequestException:
             # The connection dropped after the online check. The server may or
@@ -747,12 +946,27 @@ class SalesScreen(QWidget):
                 "You can open it again from Bill History.",
             )
 
+        note = ""
+        kind, rupees = change_or_balance(self._total, self._received())
+        if pay["payment_status"] != "pending" and kind == "change" and rupees and pay.get("payment_method") == "cash":
+            note = f"\n\nHand back {inr(rupees)}."
+        elif kind == "balance":
+            note = f"\n\nBalance to collect: {inr(rupees)}."
+        # An older server would ignore the discount or the payment and bill in full: say so, never silently.
+        if float(sale_data.get("discount") or 0) != self._discount or (
+            sale_data.get("payment_status") and sale_data["payment_status"] != pay["payment_status"]
+        ):
+            note += (
+                "\n\n⚠️ The server did not record the discount or payment as entered. "
+                "Check this bill in Bill History and correct it."
+            )
         QMessageBox.information(
             self,
             "Bill created",
-            f"Bill {invoice_number} created successfully!",
+            f"Bill {invoice_number} created successfully!{note}",
         )
 
+        self._remember_bill(sale_data, False)
         EventBus.emit(SALE_CREATED)
         self._clear_cart()
         self.customer_input.clear()
