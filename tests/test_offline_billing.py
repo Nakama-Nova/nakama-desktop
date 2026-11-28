@@ -8,6 +8,7 @@ from database.outbox_repository import OutboxRepository
 from services.inventory_service import InventoryService
 from services.sales_service import SalesService
 from ui.sales_screen import CartItem, SalesScreen
+from conftest import create_bill
 
 LINES = [{"item_id": "11111111-1111-1111-1111-111111111111", "quantity": 2, "price": 100.0}]
 
@@ -34,7 +35,7 @@ def screen(qapp):
 
 
 def test_create_bill_without_connection_saves_it_offline(screen, dialogs):
-    screen._generate_invoice()  # server unreachable: is_online() is False
+    create_bill(screen)  # server unreachable: is_online() is False
     assert [d[1] for d in dialogs][-1].startswith("Saved offline")
     assert len(OutboxRepository().get_pending()) == 1
     assert screen._cart == [] and screen.phone_input.text() == ""
@@ -47,7 +48,7 @@ def test_connection_lost_mid_request_also_saves_offline(screen, dialogs, monkeyp
         raise requests.ConnectionError("dropped")
 
     monkeypatch.setattr(screen._customer_service, "ensure_customer", drop)
-    screen._generate_invoice()
+    create_bill(screen)
     assert [d[1] for d in dialogs][-1].startswith("Saved offline")
     assert len(OutboxRepository().get_pending()) == 1
 
@@ -125,7 +126,7 @@ def test_lost_response_queues_the_same_id_the_server_may_have_recorded(
         raise requests.ConnectionError("response lost after the server committed")
 
     monkeypatch.setattr(SalesService, "create_sale", lost)
-    screen._generate_invoice()
+    create_bill(screen)
 
     assert sent["client_id"]
     (entry,) = OutboxRepository().get_pending()
@@ -143,10 +144,10 @@ def test_retrying_the_same_bill_reuses_its_id_but_a_changed_cart_gets_a_new_one(
         return None  # the server answered with an error: the bill stays on screen
 
     monkeypatch.setattr(SalesService, "create_sale", fail)
-    screen._generate_invoice()
-    screen._generate_invoice()  # same cart: a retry of the same bill
+    create_bill(screen)
+    create_bill(screen)  # same cart: a retry of the same bill
     screen._cart[0].quantity = 3  # different bill
-    screen._generate_invoice()
+    create_bill(screen)
 
     assert ids[0] == ids[1] != ids[2]
 
@@ -164,11 +165,11 @@ def test_a_finished_bill_does_not_donate_its_id_to_the_next_one(
     monkeypatch.setattr(SalesService, "create_sale", ok)
     monkeypatch.setattr(SalesService, "fetch_and_save_pdf", lambda self, n: "bill.pdf")
     monkeypatch.setattr(SalesService, "open_pdf", staticmethod(lambda path: None))
-    screen._generate_invoice()
+    create_bill(screen)
     screen._cart = [CartItem(LINES[0]["item_id"], "Chair", 100.0, 0.0, 2)]
     screen.phone_input.setText("9876543210")
     screen.customer_input.setText("Meena")
-    screen._generate_invoice()  # an identical-looking second sale is a new sale
+    create_bill(screen)  # an identical-looking second sale is a new sale
 
     assert len(ids) == 2 and ids[0] != ids[1]
 
@@ -226,3 +227,74 @@ def test_the_client_reads_the_holds_from_the_server(monkeypatch):
     monkeypatch.setattr(api_client.APIClient, "_get", lambda self, path, token, **kw: seen.append(path) or {"i1": 2})
     assert api_client.APIClient("http://x").get_held_stock("t") == {"i1": 2}
     assert seen == ["/items/held"]
+
+
+# ------------------------------------------------------------------ Create bill runs off the GUI thread
+def test_create_bill_runs_on_a_worker_thread_and_locks_the_panel_meanwhile(screen, dialogs, monkeypatch):
+    import threading
+    import time
+
+    from PyQt6.QtCore import QCoreApplication
+
+    _go_online(screen, monkeypatch)
+    main = threading.get_ident()
+    seen = {}
+
+    def slow(self, items, customer_id=None, client_id=None, **_):
+        seen["thread"] = threading.get_ident()
+        seen["calls"] = seen.get("calls", 0) + 1
+        time.sleep(0.3)
+        return {"invoice_number": "INV-9"}
+
+    monkeypatch.setattr(SalesService, "create_sale", slow)
+    monkeypatch.setattr(SalesService, "fetch_and_save_pdf", lambda self, n: "bill.pdf")
+    monkeypatch.setattr(SalesService, "open_pdf", staticmethod(lambda path: None))
+
+    ended = []
+    screen.bill_finished.connect(ended.append)
+    screen._generate_invoice()
+    assert screen._bill_in_flight  # returned at once, the bill is still on its way
+    screen._generate_invoice()  # a second press (Ctrl+Enter) while it flies
+    deadline = time.monotonic() + 10
+    while not ended and time.monotonic() < deadline:
+        QCoreApplication.processEvents()
+        time.sleep(0.005)
+
+    assert ended == ["created"] and seen["calls"] == 1 and seen["thread"] != main
+    assert not screen._bill_in_flight and screen.workspace.isEnabled()
+    assert screen.invoice_btn.text() == "Create bill" and screen._cart == []
+
+
+def test_a_refused_bill_keeps_the_cart_and_says_so(screen, dialogs, monkeypatch):
+    _go_online(screen, monkeypatch)
+    monkeypatch.setattr(SalesService, "create_sale", lambda self, *a, **k: None)
+    assert create_bill(screen) == "server_refused"
+    assert [d[1] for d in dialogs][-1] == "Error" and screen._cart and not screen._bill_in_flight
+
+
+def test_a_forbidden_bill_shows_access_denied_and_unlocks(screen, dialogs, monkeypatch):
+    from services.api_client import ForbiddenError
+
+    _go_online(screen, monkeypatch)
+
+    def deny(*a, **k):
+        raise ForbiddenError("no")
+
+    monkeypatch.setattr(SalesService, "create_sale", deny)
+    assert create_bill(screen) == "failed"
+    assert [d[1] for d in dialogs][-1] == "Access Denied" and screen.workspace.isEnabled() and screen._cart
+
+
+def test_a_pdf_that_cannot_be_fetched_still_finishes_the_saved_bill(screen, dialogs, monkeypatch):
+    from services.sales_service import BillPdfError
+
+    _go_online(screen, monkeypatch)
+    monkeypatch.setattr(SalesService, "create_sale", lambda self, *a, **k: {"invoice_number": "INV-2"})
+
+    def nope(self, n):
+        raise BillPdfError("no pdf")
+
+    monkeypatch.setattr(SalesService, "fetch_and_save_pdf", nope)
+    assert create_bill(screen) == "created"
+    titles = [d[1] for d in dialogs]
+    assert "Bill saved, PDF not shown" in titles and titles[-1] == "Bill created" and screen._cart == []

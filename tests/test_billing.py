@@ -1,4 +1,5 @@
 from services.billing import change_or_balance, discount_amount, payment_status
+from conftest import create_bill
 
 
 def test_discount_in_rupees_or_percent_never_more_than_the_bill():
@@ -46,7 +47,7 @@ def test_till_sends_discount_and_payment_and_blocks_offline_discount(qapp, monke
     monkeypatch.setattr(SalesService, "create_sale", lambda self, **kw: sent.update(kw) or {"invoice_number": "INV-1", "discount": 118, "payment_status": "partial"})
     monkeypatch.setattr(SalesService, "fetch_and_save_pdf", lambda self, n: "b.pdf")
     monkeypatch.setattr(SalesService, "open_pdf", staticmethod(lambda p: None))
-    s._generate_invoice()
+    create_bill(s)
     assert sent["discount"] == 118 and sent["payment_method"] == "upi" and sent["payment_status"] == "partial"
     assert "Balance to collect" in msgs[-1] and "did not record" not in msgs[-1]
 
@@ -56,7 +57,7 @@ def test_till_sends_discount_and_payment_and_blocks_offline_discount(qapp, monke
     s.customer_input.setText("Meena")
     s.discount_in.setValue(10)
     monkeypatch.setattr(SalesService, "is_online", lambda self: False)
-    s._generate_invoice()
+    create_bill(s)
     assert "cannot be saved offline" in msgs[-1] and s._cart
 
 
