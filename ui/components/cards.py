@@ -115,3 +115,34 @@ class HeroCard(QFrame):
 
 
 CARD_BORDER = Colors.CARD_BORDER
+
+
+def glow_on_hover(widget: QWidget, color: str | None = None, blur: int = 22, alpha: int = 120) -> QGraphicsDropShadowEffect:
+    """A soft gold glow that fades in around the widget while the pointer is over it (a button,
+    the command search). For inputs use the focus ring that Theme.install provides instead."""
+    from PyQt6.QtCore import QEasingCurve, QPropertyAnimation
+
+    effect = QGraphicsDropShadowEffect(widget)
+    colour = QColor(color or Colors.INPUT_FOCUS)
+    colour.setAlpha(alpha)
+    effect.setColor(colour)
+    effect.setOffset(0, 0)
+    effect.setBlurRadius(0)  # invisible until the pointer arrives
+    widget.setGraphicsEffect(effect)
+    anim = QPropertyAnimation(effect, b"blurRadius", widget)
+    anim.setDuration(160)
+    anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+
+    class _Glow(QObject):
+        def eventFilter(self, obj, event):
+            kind = event.type()
+            if kind in (QEvent.Type.Enter, QEvent.Type.Leave):
+                anim.stop()
+                anim.setStartValue(effect.blurRadius())
+                anim.setEndValue(float(blur) if kind == QEvent.Type.Enter else 0.0)
+                anim.start()
+            return False
+
+    widget._glow = _Glow(widget)
+    widget.installEventFilter(widget._glow)
+    return effect

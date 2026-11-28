@@ -147,7 +147,7 @@ def test_settings_offers_it_and_asks_for_a_restart_when_it_changes(qapp, monkeyp
     shown = []
     monkeypatch.setattr(QMessageBox, "information", staticmethod(lambda *a, **k: shown.append(a[2])))
     d = SettingsDialog()
-    assert [d.theme.itemText(i) for i in range(d.theme.count())] == ["Light", "Dark"]
+    assert [d.theme.itemText(i) for i in range(d.theme.count())] == ["Light", "Dark", "Heritage glass"]
     assert d.theme.currentData() == "light"
     d.theme.setCurrentIndex(d.theme.findData("dark"))
     d._save()

@@ -106,6 +106,7 @@ class SettingsDialog(QDialog):
         self.theme = QComboBox()
         self.theme.addItem("Light", "light")
         self.theme.addItem("Dark", "dark")
+        self.theme.addItem("Heritage glass", "glass")
         self.theme.setCurrentIndex(max(0, self.theme.findData(values["theme"])))
         self.theme.setStyleSheet(Theme.input_style())
         look.addRow(QLabel("Colours", styleSheet=Theme.label()), self.theme)

@@ -42,6 +42,9 @@ from ui.sales_history_screen import METHODS, is_cancelled
 from ui.receipt_dialog import ReceiptDialog, shop_details
 from ui.receipt_render import receipt_from_sale
 from ui.workers import load_async, run_async
+from ui.components.glass import AsyncWorker, GlassCard, ResponsiveSplitWorkspace, ScrollableGlassPanel
+from ui.theme import tabular, tabular_font
+from services.api_client import ForbiddenError
 from services.sales_service import BillPdfError, SalesService
 from services.customer_service import CustomerService
 from services.inventory_service import InventoryService
@@ -77,6 +80,7 @@ class QtyStepper(QFrame):
         self.minus.setCursor(Qt.CursorShape.PointingHandCursor)
         self.minus.clicked.connect(lambda: self.setValue(self._value - 1))
         self.label = QLabel(str(value))
+        tabular(self.label)
         self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.label.setMinimumWidth(34)
         self.plus = QPushButton("+")
@@ -155,14 +159,9 @@ class SalesScreen(QWidget):
         hint.setStyleSheet(f"font-size: {Fonts.BODY}px; color: {Colors.TEXT_SECONDARY};")
         root.addWidget(hint)
 
-        body = QHBoxLayout()
-        body.setSpacing(16)
-        root.addLayout(body, 1)
-
-        # ── Left: add items, then the lines of the bill ──
-        left = QVBoxLayout()
-        left.setSpacing(12)
-        body.addLayout(left, 1)
+        # ── Left: add items, then the lines of the bill (a glass card) ──
+        items_card = GlassCard(padding=(16, 16, 16, 16), spacing=12, lift=False)
+        left = items_card.body
 
         item_row = QHBoxLayout()
         item_row.setSpacing(8)
@@ -214,44 +213,19 @@ class SalesScreen(QWidget):
         # Sized by the column modes above, not by the generic column-shrinking: on a narrow window
         # the item name gives way (it is cut with ...), the money and the quantity never are.
         self.table.setProperty("elastic", True)
+        self.table.setStyleSheet(
+            self.table.styleSheet() + "QTableWidget { background: transparent; border: none; }"
+        )
         left.addWidget(self.table, 1)
 
-        # ── Right: buyer, totals, Create bill ──
-        panel = QFrame()
-        panel.setObjectName("billpanel")
-        panel.setFixedWidth(340)
-        panel.setStyleSheet(
-            f"QFrame#billpanel {{ background: {Colors.CARD_BG}; border: 1px solid {Colors.CARD_BORDER};"
-            f" border-radius: 10px; }} QFrame#billpanel QLabel {{ border: none; background: transparent; }}"
-        )
-        # The buyer and payment details scroll when the window is short. The total, Create bill and
-        # the quiet buttons stay pinned under them, so they are never below the bottom of the screen.
-        outer = QVBoxLayout(panel)
-        outer.setContentsMargins(0, 0, 0, 0)
-        outer.setSpacing(0)
-        scroller = QScrollArea()
-        scroller.setWidgetResizable(True)
-        scroller.setFrameShape(QFrame.Shape.NoFrame)
-        scroller.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroller.setStyleSheet("QScrollArea { background: transparent; border: none; }")
-        inner = QWidget()
-        inner.setStyleSheet("background: transparent;")
-        col = QVBoxLayout(inner)
-        col.setContentsMargins(18, 16, 18, 8)
-        col.setSpacing(10)
-        scroller.setWidget(inner)
-        outer.addWidget(scroller, 1)
-        rule = QFrame()
-        rule.setFixedHeight(1)
-        rule.setStyleSheet(f"background: {Colors.CARD_BORDER}; border: none;")
-        outer.addWidget(rule)
-        foot_box = QWidget()
-        foot_box.setStyleSheet("background: transparent;")
-        foot = QVBoxLayout(foot_box)
-        foot.setContentsMargins(18, 10, 18, 12)
-        foot.setSpacing(6)
-        outer.addWidget(foot_box)
-        body.addWidget(panel)
+        # ── Right: buyer, totals, Create bill. The details scroll; the total and the buttons stay
+        # pinned under them (a ScrollableGlassPanel), so Create bill is never out of view. Beside the
+        # items on a wide window, under them on a narrow one (a ResponsiveSplitWorkspace). ──
+        panel = ScrollableGlassPanel()
+        col = panel.body
+        foot = panel.footer
+        self.workspace = ResponsiveSplitWorkspace(items_card, panel)
+        root.addWidget(self.workspace, 1)
 
         buyer_lbl = QLabel("Buyer")
         buyer_lbl.setStyleSheet(Theme.subheading())
@@ -333,6 +307,7 @@ class SalesScreen(QWidget):
             f"font-size: 30px; font-weight: 700; color: {Colors.TEXT_PRIMARY};"
         )
         self.grandtotal_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        tabular(self.grandtotal_lbl)
         total_row.addWidget(total_name)
         total_row.addWidget(self.grandtotal_lbl, 1)
         foot.addLayout(total_row)
@@ -416,6 +391,7 @@ class SalesScreen(QWidget):
         value = QLabel(inr(0))
         value.setStyleSheet(f"font-size: {Fonts.BODY}px; color: {Colors.TEXT_PRIMARY};")
         value.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        tabular(value)
         row.addWidget(label)
         row.addWidget(value, 1)
         layout.addLayout(row)
@@ -449,7 +425,7 @@ class SalesScreen(QWidget):
             return
         self._all_items = items
         self._show_recent()
-        names = [item["name"] for item in items]
+        names = [item["name"] for item in items] + [item["sku"] for item in items if item.get("sku")]
         self._completer.setModel(QStringListModel(names))
 
     def refresh_data(self):
@@ -494,18 +470,35 @@ class SalesScreen(QWidget):
     # ------------------------------------------------------------------
     # Customer lookup
     # ------------------------------------------------------------------
-    @handle_permissions
-    def _handle_customer_lookup(self):
+    def _handle_customer_lookup(self, _checked=False):
+        """Find the buyer by phone, on a worker thread: the button says it is looking, the window
+        stays alive, and the answer is used only if the phone on screen is still the one asked about."""
         phone = self.phone_input.text().strip()
         if not phone:
             QMessageBox.warning(self, "Missing Info", "Please enter a phone number.")
             return
+        worker = AsyncWorker(lambda: self._customer_service.search_by_phone(phone), self)
+        worker.loading.connect(self._lookup_loading)
+        worker.success.connect(lambda customer, p=phone: self._lookup_done(p, customer))
+        worker.error.connect(lambda exc, p=phone: self._lookup_failed(p, exc))
+        self._lookup_worker = worker  # keeps it alive until it answers
+        worker.start()
 
-        try:
-            customer = self._customer_service.search_by_phone(phone)
-        except requests.RequestException:
+    def _lookup_loading(self, on: bool) -> None:
+        self.search_btn.setEnabled(not on)
+        self.search_btn.setText("Finding…" if on else "Find buyer by phone")
+
+    def _lookup_failed(self, phone: str, exc) -> None:
+        if self.phone_input.text().strip() != phone:
+            return
+        if isinstance(exc, ForbiddenError):
+            QMessageBox.warning(self, "Access Denied", "You don’t have permission to perform this action.")
+        else:  # no connection (or the server would not say): the sale carries on with a typed name
             self._note("Can't look up buyers while offline. Type the name; it is saved with the bill.", "muted")
-            self.customer_input.setFocus()
+        self.customer_input.setFocus()
+
+    def _lookup_done(self, phone: str, customer) -> None:
+        if self.phone_input.text().strip() != phone:
             return
         if customer:
             name = customer.get("name", "")
@@ -550,16 +543,39 @@ class SalesScreen(QWidget):
             (i for i in self._all_items if i["name"].lower() == name_lower), None
         )
 
+    def _find_item(self, text: str) -> dict | None:
+        """The product a typed name or a scanned code means: its name, else its SKU (the label's
+        barcode holds the SKU, and a scanner types it and presses Enter)."""
+        found = self._find_item_by_name(text)
+        if found is not None:
+            return found
+        code = text.strip().lower()
+        return next((i for i in self._all_items if (i.get("sku") or "").strip().lower() == code), None) if code else None
+
+    def _item_detail(self, item_id: str) -> str:
+        """SKU and size for a bill line's tooltip, from the product list (empty if not known)."""
+        item = next((i for i in self._all_items if str(i.get("id")) == str(item_id)), None)
+        if item is None:
+            return ""
+        bits = [item.get("sku") or ""]
+        dims = item.get("dimensions_mm")
+        if isinstance(dims, dict):
+            sizes = [dims.get(k) for k in ("width", "height", "depth") if dims.get(k)]
+            if sizes:
+                bits.append(" × ".join(f"{float(v):g}" for v in sizes) + " mm")
+        return "  ·  ".join(b for b in bits if b)
+
     def _add_item_to_cart(self):
         name = self.search_input.text().strip()
         if not name:
             return
 
-        item_data = self._find_item_by_name(name)
+        item_data = self._find_item(name)
         if item_data is None:
-            QMessageBox.warning(self, "Not Found", f"Item '{name}' not found.")
+            QMessageBox.warning(self, "Not Found", f"No item with the name or code '{name}'.")
             return
         self._add_item(item_data)
+        self.search_input.setFocus()  # ready for the next scan
 
     def _add_item(self, item_data: dict) -> None:
         """Put one more of this product on the bill (the search box and the chips both land here)."""
@@ -663,7 +679,9 @@ class SalesScreen(QWidget):
 
         for row, ci in enumerate(self._cart):
             self.table.setRowHeight(row, 42)
-            self.table.setItem(row, self.COL_NAME, QTableWidgetItem(ci.name))
+            name_cell = QTableWidgetItem(ci.name)
+            name_cell.setToolTip(self._item_detail(ci.item_id) or ci.name)
+            self.table.setItem(row, self.COL_NAME, name_cell)
             self.table.setItem(row, self.COL_PRICE, self._number_cell(inr(ci.price)))
             self.table.setItem(row, self.COL_GST, self._number_cell(f"{ci.gst_pct:g}%"))
             self.table.setItem(row, self.COL_TOTAL, self._number_cell(inr(ci.line_total), bold=True))
@@ -701,10 +719,9 @@ class SalesScreen(QWidget):
         """A money or percent cell: right-aligned so the digits line up down the column."""
         cell = QTableWidgetItem(text)
         cell.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        if bold:
-            font = cell.font()
-            font.setBold(True)
-            cell.setFont(font)
+        font = tabular_font(cell.font())  # fixed-width figures: amounts line up down the column
+        font.setBold(bold)
+        cell.setFont(font)
         return cell
 
     def _on_qty_changed(self, row: int, value: int):

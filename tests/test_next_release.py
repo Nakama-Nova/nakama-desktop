@@ -14,6 +14,22 @@ ITEMS = [
 ]
 
 
+def _wait(condition, seconds=3.0):
+    """Let the event loop run until the condition holds (the buyer lookup answers from a worker thread)."""
+    import time
+
+    from PyQt6.QtCore import QCoreApplication
+
+    end = time.monotonic() + seconds
+    while time.monotonic() < end:
+        QCoreApplication.processEvents()
+        if condition():
+            return True
+        time.sleep(0.005)
+    return False
+
+
+
 def screen_with_items(qapp):
     s = SalesScreen()
     s._apply_items(ITEMS)
@@ -29,7 +45,7 @@ def test_a_found_buyer_is_a_line_under_the_fields_not_a_pop_up(qapp, monkeypatch
     boxes = []
     monkeypatch.setattr("ui.sales_screen.QMessageBox.information", lambda *a, **k: boxes.append(a))
     s._handle_customer_lookup()
-    assert s.customer_input.text() == "Lakshmi Interiors"
+    assert _wait(lambda: s.customer_input.text() == "Lakshmi Interiors")
     assert s.buyer_note.text() == "Lakshmi Interiors is already a buyer." and not boxes
 
 
@@ -57,7 +73,7 @@ def test_an_unknown_number_says_a_new_buyer_will_be_saved(qapp, monkeypatch):
     s.phone_input.setText("98450 12345")
     monkeypatch.setattr(s._customer_service, "search_by_phone", lambda p: None)
     s._handle_customer_lookup()
-    assert "saved as a new buyer" in s.buyer_note.text()
+    assert _wait(lambda: "saved as a new buyer" in s.buyer_note.text())
 
 
 def test_clearing_the_bill_clears_the_note(qapp):
