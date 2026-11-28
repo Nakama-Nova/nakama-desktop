@@ -27,6 +27,7 @@ from PyQt6.QtWidgets import (
     QCompleter,
     QComboBox,
     QFrame,
+    QScrollArea,
 )
 from PyQt6.QtCore import Qt, QStringListModel, pyqtSignal
 from PyQt6.QtGui import QKeySequence, QShortcut
@@ -36,10 +37,13 @@ from ui.icons import IconButton
 from ui.theme import Theme, Colors, Fonts
 from ui.components.place_picker import PlacePicker, fetch_places, selling_places
 from ui.errors import handle_permissions
-from ui.sales_history_screen import METHODS
+from ui.sales_history_screen import METHODS, is_cancelled
 from ui.receipt_dialog import ReceiptDialog, shop_details
 from ui.receipt_render import receipt_from_sale
-from ui.workers import load_async
+from ui.workers import load_async, run_async
+from ui.components.glass import AsyncWorker, GlassCard, ResponsiveSplitWorkspace, ScrollableGlassPanel
+from ui.theme import tabular, tabular_font
+from services.api_client import ForbiddenError
 from services.sales_service import BillPdfError, SalesService
 from services.customer_service import CustomerService
 from services.inventory_service import InventoryService
@@ -75,6 +79,7 @@ class QtyStepper(QFrame):
         self.minus.setCursor(Qt.CursorShape.PointingHandCursor)
         self.minus.clicked.connect(lambda: self.setValue(self._value - 1))
         self.label = QLabel(str(value))
+        tabular(self.label)
         self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.label.setMinimumWidth(34)
         self.plus = QPushButton("+")
@@ -153,14 +158,9 @@ class SalesScreen(QWidget):
         hint.setStyleSheet(f"font-size: {Fonts.BODY}px; color: {Colors.TEXT_SECONDARY};")
         root.addWidget(hint)
 
-        body = QHBoxLayout()
-        body.setSpacing(16)
-        root.addLayout(body, 1)
-
-        # ── Left: add items, then the lines of the bill ──
-        left = QVBoxLayout()
-        left.setSpacing(12)
-        body.addLayout(left, 1)
+        # ── Left: add items, then the lines of the bill (a glass card) ──
+        items_card = GlassCard(padding=(16, 16, 16, 16), spacing=12, lift=False)
+        left = items_card.body
 
         item_row = QHBoxLayout()
         item_row.setSpacing(8)
@@ -182,6 +182,18 @@ class SalesScreen(QWidget):
         item_row.addWidget(add_btn)
         left.addLayout(item_row)
 
+        # The last few products put on a bill here, one tap to add again
+        self.recent_row = QWidget()
+        recent_layout = QHBoxLayout(self.recent_row)
+        recent_layout.setContentsMargins(0, 0, 0, 0)
+        recent_layout.setSpacing(8)
+        recent_label = QLabel("Recently sold")
+        recent_label.setStyleSheet(f"font-size: {Fonts.BODY_SM}px; color: {Colors.TEXT_MUTED};")
+        recent_layout.addWidget(recent_label)
+        self._recent_layout = recent_layout
+        self.recent_row.hide()
+        left.addWidget(self.recent_row)
+
         self.table = QTableWidget()
         self.table.setColumnCount(6)
         self.table.setHorizontalHeaderLabels(
@@ -197,20 +209,22 @@ class SalesScreen(QWidget):
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
         Theme.style_table(self.table)
+        # Sized by the column modes above, not by the generic column-shrinking: on a narrow window
+        # the item name gives way (it is cut with ...), the money and the quantity never are.
+        self.table.setProperty("elastic", True)
+        self.table.setStyleSheet(
+            self.table.styleSheet() + "QTableWidget { background: transparent; border: none; }"
+        )
         left.addWidget(self.table, 1)
 
-        # ── Right: buyer, totals, Create bill ──
-        panel = QFrame()
-        panel.setObjectName("billpanel")
-        panel.setFixedWidth(340)
-        panel.setStyleSheet(
-            f"QFrame#billpanel {{ background: {Colors.CARD_BG}; border: 1px solid {Colors.CARD_BORDER};"
-            f" border-radius: 10px; }} QFrame#billpanel QLabel {{ border: none; background: transparent; }}"
-        )
-        col = QVBoxLayout(panel)
-        col.setContentsMargins(18, 16, 18, 16)
-        col.setSpacing(10)
-        body.addWidget(panel, 0, Qt.AlignmentFlag.AlignTop)
+        # ── Right: buyer, totals, Create bill. The details scroll; the total and the buttons stay
+        # pinned under them (a ScrollableGlassPanel), so Create bill is never out of view. Beside the
+        # items on a wide window, under them on a narrow one (a ResponsiveSplitWorkspace). ──
+        panel = ScrollableGlassPanel()
+        col = panel.body
+        foot = panel.footer
+        self.workspace = ResponsiveSplitWorkspace(items_card, panel)
+        root.addWidget(self.workspace, 1)
 
         buyer_lbl = QLabel("Buyer")
         buyer_lbl.setStyleSheet(Theme.subheading())
@@ -241,6 +255,10 @@ class SalesScreen(QWidget):
         self.search_btn.setStyleSheet(Theme.btn("secondary", "sm", outline=True))
         self.search_btn.clicked.connect(self._handle_customer_lookup)
         col.addWidget(self.search_btn)
+        self.buyer_note = QLabel("")
+        self.buyer_note.setWordWrap(True)
+        self.buyer_note.hide()
+        col.addWidget(self.buyer_note)
 
         # Where the bill is sold from: shown only when more than one place can sell
         self.place_box = QWidget()
@@ -288,9 +306,10 @@ class SalesScreen(QWidget):
             f"font-size: 30px; font-weight: 700; color: {Colors.TEXT_PRIMARY};"
         )
         self.grandtotal_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        tabular(self.grandtotal_lbl)
         total_row.addWidget(total_name)
         total_row.addWidget(self.grandtotal_lbl, 1)
-        col.addLayout(total_row)
+        foot.addLayout(total_row)
 
         # How the buyer paid. Cash is the usual counter sale; "Not paid yet" leaves the bill open.
         pay_lbl = QLabel("Paid by")
@@ -335,7 +354,7 @@ class SalesScreen(QWidget):
         self.invoice_btn.setStyleSheet(Theme.btn("primary", "lg"))
         self.invoice_btn.clicked.connect(self._generate_invoice)
         self.invoice_btn.setToolTip("Ctrl+Enter")
-        col.addWidget(self.invoice_btn)
+        foot.addWidget(self.invoice_btn)
 
         # Quiet on purpose: next to Create bill it must not be the easy button to hit
         self.clear_btn = IconButton("Clear bill")
@@ -346,7 +365,7 @@ class SalesScreen(QWidget):
             f"QPushButton:hover {{ color: {Colors.RED}; }}"
         )
         self.clear_btn.clicked.connect(self._clear_cart)
-        col.addWidget(self.clear_btn)
+        foot.addWidget(self.clear_btn)
 
         # Quiet too: a paper receipt (80 mm roll, A5, A4) of the bill just made, even a provisional one made offline
         self.receipt_btn = IconButton("🧾  Print last receipt")
@@ -354,7 +373,7 @@ class SalesScreen(QWidget):
         self.receipt_btn.setStyleSheet(self.clear_btn.styleSheet().replace(Colors.RED, Colors.TEXT_PRIMARY))
         self.receipt_btn.setEnabled(False)
         self.receipt_btn.clicked.connect(self._print_last_receipt)
-        col.addWidget(self.receipt_btn)
+        foot.addWidget(self.receipt_btn)
 
         self._bill_shortcut = QShortcut(QKeySequence("Ctrl+Return"), self)
         self._bill_shortcut.activated.connect(self._generate_invoice)
@@ -371,6 +390,7 @@ class SalesScreen(QWidget):
         value = QLabel(inr(0))
         value.setStyleSheet(f"font-size: {Fonts.BODY}px; color: {Colors.TEXT_PRIMARY};")
         value.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        tabular(value)
         row.addWidget(label)
         row.addWidget(value, 1)
         layout.addLayout(row)
@@ -403,7 +423,8 @@ class SalesScreen(QWidget):
         if not items:
             return
         self._all_items = items
-        names = [item["name"] for item in items]
+        self._show_recent()
+        names = [item["name"] for item in items] + [item["sku"] for item in items if item.get("sku")]
         self._completer.setModel(QStringListModel(names))
 
     def refresh_data(self):
@@ -448,36 +469,69 @@ class SalesScreen(QWidget):
     # ------------------------------------------------------------------
     # Customer lookup
     # ------------------------------------------------------------------
-    @handle_permissions
-    def _handle_customer_lookup(self):
+    def _handle_customer_lookup(self, _checked=False):
+        """Find the buyer by phone, on a worker thread: the button says it is looking, the window
+        stays alive, and the answer is used only if the phone on screen is still the one asked about."""
         phone = self.phone_input.text().strip()
         if not phone:
             QMessageBox.warning(self, "Missing Info", "Please enter a phone number.")
             return
+        worker = AsyncWorker(lambda: self._customer_service.search_by_phone(phone), self)
+        worker.loading.connect(self._lookup_loading)
+        worker.success.connect(lambda customer, p=phone: self._lookup_done(p, customer))
+        worker.error.connect(lambda exc, p=phone: self._lookup_failed(p, exc))
+        self._lookup_worker = worker  # keeps it alive until it answers
+        worker.start()
 
-        try:
-            customer = self._customer_service.search_by_phone(phone)
-        except requests.RequestException:
-            QMessageBox.information(
-                self,
-                "No internet",
-                "Can't look up buyers right now. Type the buyer's name — it is "
-                "saved with the bill.",
-            )
-            self.customer_input.setFocus()
+    def _lookup_loading(self, on: bool) -> None:
+        self.search_btn.setEnabled(not on)
+        self.search_btn.setText("Finding…" if on else "Find buyer by phone")
+
+    def _lookup_failed(self, phone: str, exc) -> None:
+        if self.phone_input.text().strip() != phone:
+            return
+        if isinstance(exc, ForbiddenError):
+            QMessageBox.warning(self, "Access Denied", "You don’t have permission to perform this action.")
+        else:  # no connection (or the server would not say): the sale carries on with a typed name
+            self._note("Can't look up buyers while offline. Type the name; it is saved with the bill.", "muted")
+        self.customer_input.setFocus()
+
+    def _lookup_done(self, phone: str, customer) -> None:
+        if self.phone_input.text().strip() != phone:
             return
         if customer:
-            self.customer_input.setText(customer.get("name", ""))
-            QMessageBox.information(
-                self, "Buyer found", f"Buyer found: {customer.get('name')}"
-            )
+            name = customer.get("name", "")
+            self.customer_input.setText(name)
+            self._note(f"{name} is already a buyer.", "good")
+            customer_id = customer.get("id")
+            if customer_id:  # how many bills they have had, without holding up the sale
+                run_async(
+                    lambda: SalesService().get_sales(customer_id=str(customer_id)),
+                    lambda sales, n=name, p=phone: self._show_history(n, p, sales),
+                    lambda _exc: None,
+                )
         else:
-            QMessageBox.information(
-                self,
-                "Not Found",
-                "No buyer found. Enter the name — we'll create a new record automatically.",
-            )
+            self._note("No buyer has this number yet. The name you type is saved as a new buyer.", "warn")
             self.customer_input.setFocus()
+
+    def _note(self, text: str, tone: str) -> None:
+        """A line under the buyer fields, instead of a pop-up in the middle of a sale."""
+        colour = {"good": Colors.SUCCESS, "warn": Colors.ORANGE, "muted": Colors.TEXT_MUTED}[tone]
+        self.buyer_note.setText(text)
+        self.buyer_note.setStyleSheet(f"font-size: {Fonts.BODY_SM}px; color: {colour};")
+        self.buyer_note.setVisible(bool(text))
+
+    def _show_history(self, name: str, phone: str, sales) -> None:
+        """The earlier-bills count, if this is still the buyer on screen."""
+        if self.phone_input.text().strip() != phone or sales is None:
+            return
+        earlier = sum(1 for s in sales if not is_cancelled(s))
+        self._note(
+            f"{name} is already a buyer, with {earlier} earlier bill{'s' if earlier != 1 else ''}."
+            if earlier
+            else f"{name} is already a buyer, with no earlier bills.",
+            "good",
+        )
 
     # ------------------------------------------------------------------
     # Cart operations
@@ -488,16 +542,42 @@ class SalesScreen(QWidget):
             (i for i in self._all_items if i["name"].lower() == name_lower), None
         )
 
+    def _find_item(self, text: str) -> dict | None:
+        """The product a typed name or a scanned code means: its name, else its SKU (the label's
+        barcode holds the SKU, and a scanner types it and presses Enter)."""
+        found = self._find_item_by_name(text)
+        if found is not None:
+            return found
+        code = text.strip().lower()
+        return next((i for i in self._all_items if (i.get("sku") or "").strip().lower() == code), None) if code else None
+
+    def _item_detail(self, item_id: str) -> str:
+        """SKU and size for a bill line's tooltip, from the product list (empty if not known)."""
+        item = next((i for i in self._all_items if str(i.get("id")) == str(item_id)), None)
+        if item is None:
+            return ""
+        bits = [item.get("sku") or ""]
+        dims = item.get("dimensions_mm")
+        if isinstance(dims, dict):
+            sizes = [dims.get(k) for k in ("width", "height", "depth") if dims.get(k)]
+            if sizes:
+                bits.append(" × ".join(f"{float(v):g}" for v in sizes) + " mm")
+        return "  ·  ".join(b for b in bits if b)
+
     def _add_item_to_cart(self):
         name = self.search_input.text().strip()
         if not name:
             return
 
-        item_data = self._find_item_by_name(name)
+        item_data = self._find_item(name)
         if item_data is None:
-            QMessageBox.warning(self, "Not Found", f"Item '{name}' not found.")
+            QMessageBox.warning(self, "Not Found", f"No item with the name or code '{name}'.")
             return
+        self._add_item(item_data)
+        self.search_input.setFocus()  # ready for the next scan
 
+    def _add_item(self, item_data: dict) -> None:
+        """Put one more of this product on the bill (the search box and the chips both land here)."""
         item_id = str(item_data["id"])
         existing = next((c for c in self._cart if c.item_id == item_id), None)
         sellable = self._sellable_now(item_data)
@@ -523,7 +603,47 @@ class SalesScreen(QWidget):
             )
 
         self.search_input.clear()
+        self._remember_recent(item_id)
         self._refresh_table()
+
+    def _remember_recent(self, item_id: str) -> None:
+        try:
+            ids = [item_id] + [i for i in app_settings.get("recent_items") if i != item_id]
+            app_settings.set_value("recent_items", ids[:5])
+        except OSError:
+            pass  # a preference that could not be saved is not worth stopping a sale for
+        self._show_recent()
+
+    def _show_recent(self) -> None:
+        """Chips for the products most recently put on a bill (hidden until there are any)."""
+        while self._recent_layout.count() > 1:  # keep the "Recently sold" label
+            item = self._recent_layout.takeAt(1)
+            old = item.widget()
+            if old is not None:
+                old.hide()
+                old.setParent(None)  # gone at once, not when Qt gets round to deleting it
+                old.deleteLater()
+        by_id = {str(i["id"]): i for i in self._all_items}
+        shown = 0
+        for item_id in app_settings.get("recent_items"):
+            data = by_id.get(item_id)
+            if data is None:
+                continue
+            name = data["name"]
+            chip = QPushButton(name if len(name) <= 26 else name[:25] + "…")
+            chip.setToolTip(f"Add {name}")
+            chip.setCursor(Qt.CursorShape.PointingHandCursor)
+            chip.setStyleSheet(
+                f"QPushButton {{ background: {Colors.CARD_BG}; color: {Colors.TEXT_SECONDARY};"
+                f" border: 1px solid {Colors.INPUT_BORDER}; border-radius: 14px; padding: 4px 12px;"
+                f" font-size: {Fonts.BODY_SM}px; }}"
+                f"QPushButton:hover {{ border-color: {Colors.BRAND_GOLD}; color: {Colors.TEXT_PRIMARY}; }}"
+            )
+            chip.clicked.connect(lambda _=False, d=data: self._add_item(d))
+            self._recent_layout.addWidget(chip)
+            shown += 1
+        self._recent_layout.addStretch()
+        self.recent_row.setVisible(shown > 0)
 
     def _remove_item(self, row: int):
         if 0 <= row < len(self._cart):
@@ -541,6 +661,7 @@ class SalesScreen(QWidget):
 
     def _clear_cart(self):
         self._bill_key = None
+        self._note("", "muted")
         self.pay_pick.setCurrentIndex(self._default_payment_index())  # back to the usual for the next bill
         self._cart.clear()
         self._clear_split_rows()
@@ -557,7 +678,9 @@ class SalesScreen(QWidget):
 
         for row, ci in enumerate(self._cart):
             self.table.setRowHeight(row, 42)
-            self.table.setItem(row, self.COL_NAME, QTableWidgetItem(ci.name))
+            name_cell = QTableWidgetItem(ci.name)
+            name_cell.setToolTip(self._item_detail(ci.item_id) or ci.name)
+            self.table.setItem(row, self.COL_NAME, name_cell)
             self.table.setItem(row, self.COL_PRICE, self._number_cell(inr(ci.price)))
             self.table.setItem(row, self.COL_GST, self._number_cell(f"{ci.gst_pct:g}%"))
             self.table.setItem(row, self.COL_TOTAL, self._number_cell(inr(ci.line_total), bold=True))
@@ -578,11 +701,11 @@ class SalesScreen(QWidget):
                     border-radius: 4px;
                     font-size: 14px;
                     font-weight: bold;
-                    background: white;
+                    background: {Colors.CARD_BG};
                 }}
                 QPushButton:hover {{
                     background: {Colors.ERROR_BG};
-                    color: #B3261E;
+                    color: {Colors.RED};
                 }}
             """)
             rm_btn.clicked.connect(lambda _, r=row: self._remove_item(r))
@@ -595,10 +718,9 @@ class SalesScreen(QWidget):
         """A money or percent cell: right-aligned so the digits line up down the column."""
         cell = QTableWidgetItem(text)
         cell.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        if bold:
-            font = cell.font()
-            font.setBold(True)
-            cell.setFont(font)
+        font = tabular_font(cell.font())  # fixed-width figures: amounts line up down the column
+        font.setBold(bold)
+        cell.setFont(font)
         return cell
 
     def _on_qty_changed(self, row: int, value: int):
@@ -770,8 +892,8 @@ class SalesScreen(QWidget):
             payment_method=pay.get("payment_method"), payment_status=pay["payment_status"],
         )
         paid_note = (
-            "\n\nHow it was paid is kept with it, but the server shows it as not paid until "
-            "you correct it in Bill History."
+            "\n\nHow it was paid is kept with it. A server that has not been updated yet shows it as "
+            "not paid until you correct it in Bill History."
             if pay["payment_status"] != "pending"
             else ""
         )

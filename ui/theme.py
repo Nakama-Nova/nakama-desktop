@@ -104,6 +104,11 @@ class Colors:
     TABLE_HOVER = "#F7E7C2"
     LOW_STOCK_BG = "#F7E7C2"
 
+    # Glass (see GlassCard): "r,g,b,alpha" strings
+    GLASS_FILL = "255,255,255,0.86"
+    GLASS_EDGE = "90,42,6,0.12"
+    GLASS_SHEEN = "255,255,255,0.55"
+
     # Status
     SUCCESS_BG = "#DDEFE4"
     WARNING_BG = "#F7E7C2"
@@ -244,6 +249,9 @@ class Theme:
             return  # once is enough: re-applying a style sheet re-polishes every open window
         app.setStyleSheet(Theme.global_stylesheet())
         app._bootstrap_behaviour = BootstrapBehaviour(app)
+        from ui.components.dialog_fit import install as fit_dialogs
+
+        fit_dialogs()  # every dialog stays on the screen it opens on
 
     @staticmethod
     def stripe_tables(widget) -> None:
@@ -352,7 +360,7 @@ class Theme:
         # A line is one text row; Qt adds the padding on top of it.
         if outline:
             # Gold and the light tints are too pale as text on white: use the dark form.
-            text = shade(base, 0.45) if role in ("secondary", "warning") else base
+            text = (tint(base, 0.15) if Colors.DARK_MODE else shade(base, 0.45)) if role in ("secondary", "warning") else base
             if role == "light":
                 text = Colors.TEXT_SECONDARY
             hover_bg, hover_text = base, on_base
@@ -379,8 +387,8 @@ class Theme:
                 }}
                 QPushButton:disabled {{
                     background-color: transparent;
-                    color: {tint(text, 0.5)};
-                    border-color: {tint(border, 0.5)};
+                    color: {shade(text, 0.45) if Colors.DARK_MODE else tint(text, 0.5)};
+                    border-color: {shade(border, 0.45) if Colors.DARK_MODE else tint(border, 0.5)};
                 }}
             """
         hover = shade(base, 0.15) if role != "light" else Colors.SIDEBAR_HOVER
@@ -405,8 +413,8 @@ class Theme:
                 border-color: {pressed};
             }}
             QPushButton:disabled {{
-                background-color: {tint(base, 0.6)};
-                border-color: {tint(base, 0.6)};
+                background-color: {shade(base, 0.5) if Colors.DARK_MODE else tint(base, 0.6)};
+                border-color: {shade(base, 0.5) if Colors.DARK_MODE else tint(base, 0.6)};
                 color: {tint(on_base, 0.3) if on_base != "#FFFFFF" else "#FFFFFF"};
             }}
         """
@@ -483,9 +491,9 @@ class Theme:
         if role in ("light",):
             base = Colors.TEXT_SECONDARY
         return f"""
-            background-color: {tint(base, 0.85)};
-            color: {shade(base, 0.4)};
-            border: 1px solid {tint(base, 0.6)};
+            background-color: {soft(base, 0.85, 0.78)};
+            color: {ink(base)};
+            border: 1px solid {mix(base, Colors.CARD_BG, 0.55) if Colors.DARK_MODE else tint(base, 0.6)};
             border-radius: {Radius.MD}px;
             padding: 12px {Spacing.MD}px;
             font-size: {Fonts.BODY_SM}px;
@@ -641,3 +649,226 @@ class Theme:
     def muted() -> str:
         """Secondary text (Bootstrap .text-muted)."""
         return f"font-size: {Fonts.BODY_SM}px; color: {Colors.TEXT_MUTED};"
+
+
+# ----------------------------------------------------------------------
+# Light and dark: one palette applied before any screen is built
+# ----------------------------------------------------------------------
+Colors.DARK_MODE = False
+Colors.THEME = "light"
+LIGHT_PALETTE = {k: v for k, v in vars(Colors).items() if k.isupper() and isinstance(v, str)}
+
+# Warm, not blue-grey: the same teak and gold, with the lights turned down. Text colours are the
+# ones meant for a dark surface (brighter greens, ambers and reds), and the primary button turns
+# gold so it still stands out.
+DARK_PALETTE = {
+    "BRAND_BROWN": "#E2B25A",  # where the brand brown was text on a light page, it is gold on a dark one
+    "PRIMARY": "#D9A441",
+    "SECONDARY": "#E2B25A",
+    "SUCCESS": "#3E9C6A",
+    "DANGER": "#D2453D",
+    "WARNING": "#E2B25A",
+    "INFO": "#C48A4A",
+    "LIGHT": "#2E2116",
+    "DARK": "#120C07",
+    "SIDEBAR_BG": "#21170F",
+    "SIDEBAR_HOVER": "#2E2116",
+    "SIDEBAR_ACTIVE": "#4A3414",
+    "SIDEBAR_TEXT": "#D8C3A4",
+    "SIDEBAR_ACTIVE_TEXT": "#FFE2A8",
+    "SIDEBAR_ACCENT": "#D9A441",
+    "SIDEBAR_HEADING": "#A78F70",
+    "NAVBAR_BG": "#21170F",
+    "BG": "#1B130C",
+    "CARD_BG": "#261B12",
+    "CARD_BORDER": "#3A2B1B",
+    "TEXT_PRIMARY": "#F4E9D6",
+    "TEXT_SECONDARY": "#CDB89A",
+    "TEXT_MUTED": "#B39B7B",
+    "GREEN": "#6CC391",
+    "GREEN_DARK": "#4FAE7A",
+    "ORANGE": "#E8B64F",
+    "RED": "#F0877F",
+    "PURPLE": "#D1A06F",
+    "BLUE": "#D1A06F",
+    "TEAL": "#6CC391",
+    "BORDER": "#3A2B1B",
+    "INPUT_BORDER": "#4A3822",
+    "INPUT_FOCUS": "#D9A441",
+    "INPUT_FOCUS_RING": "#6B4C16",
+    "INPUT_DISABLED_BG": "#2A1E14",
+    "TABLE_HEADER_BG": "#2E2116",
+    "TABLE_ALT_ROW": "#21170F",
+    "TABLE_HOVER": "#3D2C14",
+    "LOW_STOCK_BG": "#3E2E12",
+    "SUCCESS_BG": "#17301F",
+    "WARNING_BG": "#3E2E12",
+    "ERROR_BG": "#3B1A17",
+}
+
+
+def _build_roles() -> dict:
+    primary_text = Colors.BRAND_DARK if Colors.DARK_MODE else "#FFFFFF"  # dark text on the gold button
+    return {
+        "primary": (Colors.PRIMARY, primary_text),
+        "secondary": (Colors.SECONDARY, Colors.BRAND_DARK),
+        "success": (Colors.SUCCESS, "#FFFFFF"),
+        "danger": (Colors.DANGER, "#FFFFFF"),
+        "warning": (Colors.WARNING, Colors.BRAND_DARK),
+        "info": (Colors.INFO, "#FFFFFF"),
+        "light": (Colors.LIGHT, Colors.TEXT_PRIMARY),
+        "dark": (Colors.DARK, "#FFFFFF"),
+    }
+
+
+def apply_theme(name: str) -> None:
+    """Switch the whole palette to "light", "dark" or "glass" (Heritage glass: the dark palette
+    with the charred-teak and burnished-gold tokens on top). Call it before any screen is built (the
+    program does at start-up, from the saved setting): screens read the colours as they are built."""
+    glass = name == "glass"
+    dark = name in ("dark", "glass")
+    for key, value in LIGHT_PALETTE.items():
+        if not dark:
+            setattr(Colors, key, value)
+            continue
+        chosen = DARK_PALETTE.get(key, value)
+        setattr(Colors, key, GLASS_PALETTE.get(key, chosen) if glass else chosen)
+    Colors.DARK_MODE = dark
+    Colors.THEME = name if name in THEMES else "light"
+    ROLES.clear()
+    ROLES.update(_build_roles())
+    Theme.btn.cache_clear()
+
+
+# ----------------------------------------------------------------------
+# Heritage glass: charred teak canvas, frosted walnut cards, burnished gold
+# ----------------------------------------------------------------------
+# Applied on top of the dark palette (apply_theme("glass")). The "glass" tokens (GLASS_FILL,
+# GLASS_EDGE, GLASS_SHEEN) are "r,g,b,alpha" strings: GlassCard paints them translucent over the
+# canvas, while QSS-styled widgets use the opaque CARD_BG, which is the same colour pre-blended.
+GLASS_PALETTE = {
+    "BG": "#15110E",  # the canvas, between #120F0D and #1A1512
+    "CARD_BG": "#221B16",
+    "CARD_BORDER": "#352C24",
+    "BORDER": "#352C24",
+    "SIDEBAR_BG": "#17120F",
+    "NAVBAR_BG": "#17120F",
+    "SIDEBAR_HOVER": "#241D18",
+    "SIDEBAR_ACTIVE": "#3A2C17",
+    "SIDEBAR_TEXT": "#BDB3A8",
+    "SIDEBAR_ACTIVE_TEXT": "#F5D9A4",
+    "SIDEBAR_ACCENT": "#E0B46C",
+    "SIDEBAR_HEADING": "#968D83",
+    "TEXT_PRIMARY": "#F7F3EE",  # warm ivory
+    "TEXT_SECONDARY": "#A89F96",  # sandstone
+    "TEXT_MUTED": "#988F85",
+    "PRIMARY": "#D4A359",  # burnished gold
+    "SECONDARY": "#E0B46C",
+    "WARNING": "#E0B46C",
+    "BRAND_BROWN": "#E0B46C",
+    "INFO": "#C99556",
+    "LIGHT": "#2B231C",
+    "DARK": "#0F0C0A",
+    "INPUT_BORDER": "#4A3E32",
+    "INPUT_FOCUS": "#E0B46C",
+    "INPUT_FOCUS_RING": "#6B4F1E",
+    "INPUT_DISABLED_BG": "#201A15",
+    "TABLE_HEADER_BG": "#2B231C",
+    "TABLE_ALT_ROW": "#1D1814",
+    "TABLE_HOVER": "#33271A",
+    "GREEN": "#74C69D",
+    "ORANGE": "#EBB75B",
+    "RED": "#F28B82",
+    "PURPLE": "#D6A86F",
+    "BLUE": "#D6A86F",
+    "TEAL": "#74C69D",
+    "GLASS_FILL": "36,29,24,0.78",  # rgba(36, 29, 24, 0.78): frosted warm walnut
+    "GLASS_EDGE": "218,185,138,0.14",  # rgba(218, 185, 138, 0.14): a hairline of bronze
+    "GLASS_SHEEN": "255,255,255,0.05",
+}
+DARK_PALETTE.update(
+    {"GLASS_FILL": "38,27,18,0.82", "GLASS_EDGE": "218,185,138,0.14", "GLASS_SHEEN": "255,243,220,0.04"}
+)
+THEMES = ("light", "dark", "glass")
+
+
+def rgba(token: str, alpha: float | None = None):
+    """A QColor from a "r,g,b,alpha" token (alpha 0..1), optionally with another alpha."""
+    from PyQt6.QtGui import QColor
+
+    r, g, b, a = (float(x) for x in token.split(","))
+    return QColor(int(r), int(g), int(b), int(round((a if alpha is None else alpha) * 255)))
+
+
+def tabular_font(font):
+    """The same font with fixed-width figures, so amounts, SKUs and GST lines align in columns."""
+    from PyQt6.QtGui import QFont
+
+    out = QFont(font)
+    try:
+        out.setFeature(QFont.Tag("tnum"), 1)
+    except Exception:  # an older Qt: the figures simply stay proportional
+        pass
+    return out
+
+
+def tabular(widget):
+    """Give a label (or any widget with text) tabular figures. Returns the widget."""
+    widget.setFont(tabular_font(widget.font()))
+    return widget
+
+
+def soft(color: str, light: float = 0.88, dark: float = 0.80) -> str:
+    """A quiet background in `color`'s hue that suits the current surface: pale on a light page,
+    a deep tint of the card colour on a dark one."""
+    return mix(color, Colors.CARD_BG, dark if Colors.DARK_MODE else light)
+
+
+def ink(color: str) -> str:
+    """Text in `color`'s hue that reads on `soft(color)`."""
+    return tint(color, 0.45) if Colors.DARK_MODE else shade(color, 0.4)
+
+
+def native_dark_palette():
+    """A Qt palette to match, so the parts a style sheet cannot reach (message boxes, menus,
+    the calendar) are dark too."""
+    from PyQt6.QtGui import QColor, QPalette
+
+    p = QPalette()
+    for role, color in (
+        (QPalette.ColorRole.Window, Colors.BG),
+        (QPalette.ColorRole.WindowText, Colors.TEXT_PRIMARY),
+        (QPalette.ColorRole.Base, Colors.CARD_BG),
+        (QPalette.ColorRole.AlternateBase, Colors.TABLE_ALT_ROW),
+        (QPalette.ColorRole.Text, Colors.TEXT_PRIMARY),
+        (QPalette.ColorRole.Button, Colors.CARD_BG),
+        (QPalette.ColorRole.ButtonText, Colors.TEXT_PRIMARY),
+        (QPalette.ColorRole.ToolTipBase, Colors.DARK),
+        (QPalette.ColorRole.ToolTipText, "#FFFFFF"),
+        (QPalette.ColorRole.Highlight, Colors.SIDEBAR_ACTIVE),
+        (QPalette.ColorRole.HighlightedText, Colors.TEXT_PRIMARY),
+        (QPalette.ColorRole.PlaceholderText, Colors.TEXT_MUTED),
+        (QPalette.ColorRole.Link, Colors.BRAND_GOLD_LIGHT),
+    ):
+        p.setColor(role, QColor(color))
+    return p
+
+
+def _transparent_cell_widgets() -> None:
+    """A widget put in a table cell (a row of buttons) took the page colour as its background,
+    which showed as a patch against the row's own colour (white, striped or dark). Unless it
+    paints its own background, it is now transparent."""
+    from PyQt6.QtWidgets import QTableWidget
+
+    original = QTableWidget.setCellWidget
+
+    def set_cell_widget(self, row, column, widget):
+        if widget is not None and not widget.property("cell_background_set"):
+            widget.setProperty("cell_background_set", True)
+            widget.setStyleSheet("QWidget { background: transparent; }" + widget.styleSheet())
+        original(self, row, column, widget)
+
+    QTableWidget.setCellWidget = set_cell_widget
+
+
+_transparent_cell_widgets()

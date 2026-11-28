@@ -31,7 +31,8 @@ from services import notifications_service as ns
 from ui.assets import logo_path, scaled_pixmap
 from ui.components.bootstrap import Button
 from ui.components.carvings import attach_empty_state
-from ui.components.navbar import Navbar
+from ui.components.glass import AnimatedSidebar, BusyLine, CommandTopBar
+from ui.components.pages import ScrollingPages
 from ui.components.goto_dialog import GoToDialog
 from ui import icons
 from ui.icons import IconButton
@@ -77,7 +78,7 @@ SYNC_INTERVAL_MS = 60_000
 
 SIDEBAR_WIDTH = 232
 COMPACT_WIDTH = 80  # icons only, on a window narrower than COMPACT_BELOW
-COMPACT_BELOW = 1280
+COMPACT_BELOW = 1200  # below this the sidebar glides to an icon-only rail
 LOGO_BOX = QSize(56, 76)  # the logo is 3:4; this box keeps it sharp and inside the header
 
 # What each list screen says when it has no rows (title, hint, carving set). The screens
@@ -202,9 +203,9 @@ class MainWindow(QMainWindow):
         main_layout.setSpacing(0)
 
         # ── Sidebar ───────────────────────────────────
-        self.sidebar = QFrame()
+        self.sidebar = AnimatedSidebar(SIDEBAR_WIDTH, COMPACT_WIDTH)
         self.sidebar.setObjectName("sidebar")
-        self.sidebar.setFixedWidth(SIDEBAR_WIDTH)
+        self.sidebar.settled.connect(self._apply_compact_labels)  # labels come back once the rail has widened
         self.sidebar.setStyleSheet(
             f"QFrame#sidebar {{ background-color: {Colors.SIDEBAR_BG};"
             f" border-right: 1px solid {Colors.CARD_BORDER}; }}"
@@ -231,6 +232,8 @@ class MainWindow(QMainWindow):
         logo = scaled_pixmap(logo_path(), LOGO_BOX.height(), False, self.devicePixelRatioF())
         if not logo.isNull():
             self.logo_lbl.setPixmap(logo)
+        if Colors.DARK_MODE:  # the logo is brown and gold: give it a light plate to sit on
+            self.logo_lbl.setStyleSheet("background: #FBF6EC; border-radius: 12px;")
         brand_layout.addWidget(self.logo_lbl)
 
         brand_text = QVBoxLayout()
@@ -317,7 +320,7 @@ class MainWindow(QMainWindow):
         content_layout.setSpacing(0)
 
         # Navbar: page title on the left; notifications, who is signed in, sign out on the right
-        self.navbar = Navbar()
+        self.navbar = CommandTopBar()
         # Notifications: a count of what is new, and the list
         self.bell_btn = Button("🔔", "secondary", "sm", outline=True)
         self.bell_btn.setToolTip("Notifications")
@@ -329,9 +332,11 @@ class MainWindow(QMainWindow):
         self.navbar.add_right(self.role_badge)
         self.navbar.goto_requested.connect(self._open_goto)
         content_layout.addWidget(self.navbar)
-        on_busy_changed(self.navbar.set_busy)  # "Loading…" while a screen fetches in the background
+        self.busy_line = BusyLine()  # a thin gold line under the bar while anything loads in the background
+        content_layout.addWidget(self.busy_line)
+        on_busy_changed(self.busy_line.set_busy)  # the line glides while a screen fetches in the background
 
-        self.content_stack = QStackedWidget()
+        self.content_stack = ScrollingPages()  # a screen too big for the window scrolls instead of being cut off
         self.update_banner = UpdateBanner()
         content_layout.addWidget(self.update_banner)
         content_layout.addWidget(self.content_stack)
@@ -418,6 +423,7 @@ class MainWindow(QMainWindow):
         )
 
         # Desktop notifications (website orders, money received, low stock, finished scans)
+        QTimer.singleShot(2500, self._load_person)  # who is signed in, for the top bar, once the window is up
         self.notifier = Notifier(self)
         self.notifier.changed.connect(self._show_unread)
         self.notifier.open_screen.connect(self._open_screen)
@@ -431,6 +437,17 @@ class MainWindow(QMainWindow):
         # Run one cycle shortly after startup too, rather than waiting a
         # full interval for the first sync.
         QTimer.singleShot(2000, self._sync_async)
+
+    def _load_person(self):
+        """Ask the server for this person's name in the background: it only decorates the top bar."""
+        from services.api_client import APIClient
+        from ui.workers import run_async
+
+        def apply(me):
+            if isinstance(me, dict):
+                self.navbar.set_person(me.get("full_name") or me.get("username") or "")
+
+        run_async(lambda: APIClient()._get("/auth/me", Session.get_token(), quiet=True), apply, lambda _exc: None)
 
     def _refresh_connection(self):
         """Online unless the last request found the server down; waiting = bills not yet sent."""
@@ -696,7 +713,14 @@ class MainWindow(QMainWindow):
     def _set_compact(self, on: bool):
         """A narrow window gives the sidebar's room to the page: icons only, labels as tooltips."""
         self._compact = on
-        self.sidebar.setFixedWidth(COMPACT_WIDTH if on else SIDEBAR_WIDTH)
+        if on:  # icon-only first, then the rail narrows around it
+            self._apply_compact_labels(True)
+        self.sidebar.set_collapsed(on)  # glides; for a rail that is widening, the labels return when it settles
+
+    def _apply_compact_labels(self, on: bool):
+        """What the rail shows at each width: icons only (the names are tooltips) or icons and names."""
+        if on != self._compact:  # a later change of mind: ignore the earlier glide finishing
+            return
         m = Spacing.SM + 4 if on else Spacing.MD
         self._brand_layout.setContentsMargins(m, Spacing.MD, m, Spacing.MD)
         for w in self._brand_words + self._headings:

@@ -52,9 +52,19 @@ def test_connection_lost_mid_request_also_saves_offline(screen, dialogs, monkeyp
     assert len(OutboxRepository().get_pending()) == 1
 
 
-def test_buyer_search_offline_is_a_message_not_a_crash(screen, dialogs):
+def test_buyer_search_offline_is_a_note_not_a_crash_or_a_pop_up(screen, dialogs):
+    screen.phone_input.setText("9876543210")
     screen._handle_customer_lookup()
-    assert dialogs[-1][1] == "No internet"
+    import time
+
+    from PyQt6.QtCore import QCoreApplication
+
+    end = time.monotonic() + 3  # the lookup answers from a worker thread
+    while time.monotonic() < end and screen.buyer_note.isHidden():
+        QCoreApplication.processEvents()
+        time.sleep(0.005)
+    assert not screen.buyer_note.isHidden() and "offline" in screen.buyer_note.text()
+    assert not dialogs  # nothing interrupts the sale
 
 
 class FakeApi:

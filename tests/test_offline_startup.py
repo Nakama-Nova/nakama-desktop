@@ -47,6 +47,22 @@ def test_keyboard_shortcuts_move_around_and_find_the_search_box(qapp):
     assert w.focusWidget() is w.places_view.search
 
 
+def _wait(condition, seconds=3.0):
+    """The sidebar glides between widths (about 0.2 s) and the names return when it has widened:
+    wait for that instead of assuming it is instant."""
+    import time
+
+    from PyQt6.QtCore import QCoreApplication
+
+    end = time.monotonic() + seconds
+    while time.monotonic() < end:
+        QCoreApplication.processEvents()
+        if condition():
+            return True
+        time.sleep(0.005)
+    return False
+
+
 def test_tables_fit_their_window_and_the_sidebar_folds_when_it_is_narrow(qapp):
     from PyQt6.QtWidgets import QTableWidget, QTableWidgetItem
 
@@ -55,13 +71,13 @@ def test_tables_fit_their_window_and_the_sidebar_folds_when_it_is_narrow(qapp):
     w.show()
     w.resize(1100, 700)
     settle()
-    assert w._compact and w.sidebar.width() == 80
+    assert _wait(lambda: w.sidebar.width() == 80 and w._compact)
     first = w._nav_buttons[0]  # icons only: no text, the name is the tooltip
     assert first.text() == "" and not first.icon().isNull() and first.toolTip() == first.property("label_text")
     w.resize(1500, 800)
     settle()
-    assert not w._compact and w.sidebar.width() == 232
-    assert w._nav_buttons[0].property("label_text") in w._nav_buttons[0].text()
+    assert _wait(lambda: w.sidebar.width() == 232 and not w._compact)
+    assert _wait(lambda: first.property("label_text") in first.text())  # the names return once it has widened
 
     w._switch_page(10, refresh=False)  # Staff
     table = w.staff_view.table if hasattr(w.staff_view, "table") else w.content_stack.currentWidget().findChild(QTableWidget)

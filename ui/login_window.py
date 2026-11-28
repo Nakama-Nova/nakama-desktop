@@ -52,6 +52,11 @@ def save_login_prefs(remember: bool, username: str) -> None:
 
 
 LOGO_SIZE = QSize(120, 162)  # the logo is 3:4
+# The logo and the painted carvings are made for a cream ground, so this panel stays cream in the
+# dark theme too: a lit showcase beside the dark sign-in card.
+BRAND_PANEL_TOP = "#FBF6EC"
+BRAND_PANEL_BOTTOM = "#F1E2C3"
+BRAND_PANEL_INK = "#5A2A06"
 FORM_MAX_WIDTH = 420
 
 
@@ -88,7 +93,7 @@ class LoginWindow(QWidget):
         panel.setObjectName("brandPanel")
         panel.setStyleSheet(
             "QFrame#brandPanel { background: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
-            f" stop:0 {Colors.BG}, stop:1 #F1E2C3); border: none;"
+            f" stop:0 {BRAND_PANEL_TOP}, stop:1 {BRAND_PANEL_BOTTOM}); border: none;"
             f" border-right: 1px solid {Colors.CARD_BORDER}; }}"
             "QFrame#brandPanel QLabel { background: transparent; border: none; }"
         )
@@ -108,7 +113,7 @@ class LoginWindow(QWidget):
         tagline.setAlignment(Qt.AlignmentFlag.AlignCenter)
         tagline.setStyleSheet(
             f"font-family: '{Fonts.HEADING_FAMILY}', Georgia, serif; font-size: 22px;"
-            f" font-weight: 600; color: {Colors.BRAND_BROWN};"
+            f" font-weight: 600; color: {BRAND_PANEL_INK};"
         )
         col.addWidget(tagline)
 

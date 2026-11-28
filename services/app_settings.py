@@ -26,8 +26,10 @@ DEFAULTS = {
     "default_payment": "cash",  # how a new bill starts on New Bill: "cash" or "none" (not paid yet)
     "open_bill_pdf": True,  # open the bill's PDF as soon as it is created
     "auto_updates": True,  # check for a newer version in the background (installed program only)
+    "theme": "light",  # "light", "dark" or "glass"; read when the program starts
+    "recent_items": [],  # ids of the last products put on a bill here, newest first (quick-add chips)
 }
-_CHOICES = {"default_payment": ("cash", "none")}
+_CHOICES = {"default_payment": ("cash", "none"), "theme": ("light", "dark", "glass")}
 
 
 def settings_path() -> Path:
@@ -39,6 +41,8 @@ def _valid(key: str, value) -> bool:
         return False
     if key in _CHOICES:
         return value in _CHOICES[key]
+    if key == "recent_items":
+        return isinstance(value, list) and all(isinstance(v, str) for v in value)
     return isinstance(value, type(DEFAULTS[key]))
 
 

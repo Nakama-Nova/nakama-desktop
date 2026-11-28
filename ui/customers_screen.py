@@ -278,7 +278,7 @@ class CustomersScreen(QWidget):
                     border: 1px solid {Colors.BORDER};
                     border-radius: 4px;
                     padding: 2px;
-                    background: white;
+                    background: {Colors.CARD_BG};
                 }}
                 QPushButton:hover {{
                     background: {Colors.ERROR_BG};

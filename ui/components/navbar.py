@@ -7,7 +7,8 @@ not repeat it. It carries what belongs to the whole desk instead: a quick "Go to
 notifications bell, and the account menu (change password, sign out).
 """
 
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import QSize, Qt, pyqtSignal
+from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -19,7 +20,8 @@ from PyQt6.QtWidgets import (
 )
 
 from ui.icons import IconButton
-from ui.theme import Colors, Fonts, Radius, Spacing, shade, tint
+from ui.icons import avatar_pixmap, initials
+from ui.theme import Colors, Fonts, Radius, Spacing, ink, soft
 
 NAVBAR_HEIGHT = 52
 
@@ -86,22 +88,36 @@ class Navbar(QFrame):
         base = Colors.SUCCESS if online and not waiting else Colors.ORANGE
         self.conn_lbl.setText("●  " + connection_text(online, waiting))
         self.conn_lbl.setStyleSheet(
-            f"font-size: {Fonts.CAPTION + 1}px; font-weight: 600; color: {shade(base, 0.25)};"
-            f" background: {tint(base, 0.88)}; border-radius: 11px; padding: 3px 10px;"
+            f"font-size: {Fonts.CAPTION + 1}px; font-weight: 600; color: {ink(base)};"
+            f" background: {soft(base)}; border-radius: 11px; padding: 3px 10px;"
         )
 
     def add_right(self, widget: QWidget) -> None:
         self.right.addWidget(widget)
 
+    def set_person(self, name: str) -> None:
+        """Once the server has said who is signed in: their initials on a round avatar and their
+        name beside the role. (Until then, and offline, the button shows just the role.)"""
+        btn = getattr(self, "_account_btn", None)
+        name = (name or "").strip()
+        if btn is None or not name:
+            return
+        btn.setIcon(QIcon(avatar_pixmap(initials(name), Colors.BRAND_BROWN, "#FFF3DC", 28)))
+        btn.setText(f"{name.split()[0]}  \u00b7  {self._role_text}" if len(name.split()) > 1 else f"{name}  \u00b7  {self._role_text}")
+        btn.setToolTip(f"{name}, {self._role_text}")
+
     def make_account_button(self, role_text: str, on_password, on_sign_out, on_settings=None) -> QToolButton:
         """The signed-in person's menu: their role, settings, change password, sign out."""
         btn = QToolButton()
         btn.setText(role_text)
+        btn.setIconSize(QSize(28, 28))
+        btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self._account_btn, self._role_text = btn, role_text
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
         btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         btn.setStyleSheet(
             f"QToolButton {{ background: {Colors.CARD_BG}; color: {Colors.TEXT_PRIMARY};"
-            f" border: 1px solid {Colors.CARD_BORDER}; border-radius: 15px; padding: 5px 14px;"
+            f" border: 1px solid {Colors.CARD_BORDER}; border-radius: 18px; padding: 3px 14px 3px 4px; min-height: 28px;"
             f" font-size: {Fonts.BODY}px; font-weight: 600; }}"
             f"QToolButton:hover {{ border-color: {Colors.BRAND_GOLD}; }}"
             "QToolButton::menu-indicator { image: none; }"
