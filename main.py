@@ -35,19 +35,19 @@ def exception_hook(exctype, value, traceback):
         return  # already reported: the user was signed out with an explanation
     if issubclass(exctype, requests.Timeout):
         QMessageBox.warning(
-            None,
+            QApplication.activeWindow(),
             "Server not answering",
             "The server is taking too long to answer. Check the connection and try again.",
         )
     elif issubclass(exctype, requests.RequestException):
         QMessageBox.warning(
-            None, "No connection", "Cannot reach the server. Check the connection and try again."
+            QApplication.activeWindow(), "No connection", "Cannot reach the server. Check the connection and try again."
         )
     elif issubclass(exctype, ForbiddenError):
-        QMessageBox.warning(None, "Permission Denied 🛡️", str(value))
+        QMessageBox.warning(QApplication.activeWindow(), "Permission Denied 🛡️", str(value))
     elif issubclass(exctype, APIError):
         if not value.reported:
-            QMessageBox.critical(None, "Server Error ❌", str(value))
+            QMessageBox.critical(QApplication.activeWindow(), "Server Error ❌", str(value))
     else:
         sys.__excepthook__(exctype, value, traceback)
 
