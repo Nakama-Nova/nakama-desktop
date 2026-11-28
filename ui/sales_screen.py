@@ -24,7 +24,6 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QSpinBox,
     QDoubleSpinBox,
-    QComboBox,
     QCompleter,
     QComboBox,
     QFrame,
@@ -733,7 +732,10 @@ class SalesScreen(QWidget):
         if self._split_rows:  # more than one way: the server gets each payment
             rows = [(self.pay_pick.currentData(), self.received_in.value())] + [(m.currentData(), a.value()) for m, a, _r in self._split_rows]
             return {"payments": [{"amount": round(v, 2), "method": m} for m, v in rows if v > 0], "payment_status": status}
-        return {"payment_method": method, "payment_status": status}
+        out = {"payment_method": method, "payment_status": status}
+        if status == "partial":  # without the amount the server cannot know what is still owed
+            out["payments"] = [{"amount": round(self._received(), 2), "method": method}]
+        return out
 
     # ------------------------------------------------------------------
     # Offline billing
@@ -750,7 +752,7 @@ class SalesScreen(QWidget):
 
     def _save_offline(self, customer_name: str, phone: str, client_id: str) -> bool:
         pay = self._payment()
-        if self._discount or "payments" in pay:  # the sync carries neither yet: a bill saved now would lose them
+        if self._discount or len(pay.get("payments") or []) > 1:  # the sync carries neither yet: a bill saved now would lose them
             QMessageBox.warning(
                 self,
                 "This needs a connection",

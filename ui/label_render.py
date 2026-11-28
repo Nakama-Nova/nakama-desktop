@@ -54,6 +54,8 @@ def paint_qr(p: QPainter, sku: str, box: QRectF, logo: QImage | None) -> None:
 def paint_barcode(p: QPainter, sku: str, box: QRectF, k: float) -> bool:
     """Code 128 across `box`. Returns False (and draws nothing) when it would be too narrow to scan."""
     bars = qr_service.barcode_bars(sku)
+    if not bars:  # a code with letters Code 128 cannot hold: the QR alone carries it
+        return False
     mod = box.width() / len(bars)
     if mod < MIN_BAR_MM * k:
         return False

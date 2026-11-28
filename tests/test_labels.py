@@ -60,3 +60,9 @@ def test_dialog_counts_and_skips_products_without_a_code(qapp):
     d.copies.setValue(4)
     assert len(d.labels()) == 4 and "1 sheet" in d.count.text()
     assert d.start.maximum() == 21 and d.pdf_btn.isEnabled()
+
+
+def test_a_code_with_letters_code_128_cannot_hold_still_gets_a_qr_label(qapp):
+    assert qr_service.barcode_bars("VS-ö1") == "" and qr_service.barcode_bars("VS-00123") != ""
+    img = label_render.label_image(BY_KEY["label_60x40"], {**ITEM, "sku": "VS-ö1"}, dpi=300)  # no bar code, no crash
+    assert not img.isNull()

@@ -12,6 +12,7 @@ import os
 
 import segno
 from barcode import Code128
+from barcode.errors import BarcodeError
 
 # When the shop has a public product page, set this (for example https://shop.example/p) and
 # the QR opens that page; until then the QR holds "VS:<code>", which the staff app reads.
@@ -37,5 +38,9 @@ def qr_matrix(sku: str) -> list[list[int]]:
 
 
 def barcode_bars(sku: str) -> str:
-    """Code 128 as a string of 1 (bar) and 0 (space), one character per module."""
-    return Code128(sku).build()[0]
+    """Code 128 as a string of 1 (bar) and 0 (space), one character per module; empty when the code
+    has letters Code 128 cannot hold (the label then carries the QR alone)."""
+    try:
+        return Code128(sku).build()[0]
+    except BarcodeError:
+        return ""

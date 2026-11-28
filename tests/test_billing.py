@@ -35,7 +35,7 @@ def test_till_sends_discount_and_payment_and_blocks_offline_discount(qapp, monke
     assert s._discount == 118 and s._total == 1062 and s.received_in.value() == 1062
     s.received_in.setValue(500)  # the cashier types an amount: part paid, then it stays put
     s.pay_pick.setCurrentIndex(1)
-    assert s._payment() == {"payment_method": "upi", "payment_status": "partial"}
+    assert s._payment() == {"payment_method": "upi", "payment_status": "partial", "payments": [{"amount": 500, "method": "upi"}]}
     assert "Balance" in s.pay_note.text()
 
     s.phone_input.setText("9876543210")
@@ -48,6 +48,7 @@ def test_till_sends_discount_and_payment_and_blocks_offline_discount(qapp, monke
     monkeypatch.setattr(SalesService, "open_pdf", staticmethod(lambda p: None))
     s._generate_invoice()
     assert sent["discount"] == 118 and sent["payment_method"] == "upi" and sent["payment_status"] == "partial"
+    assert sent["payments"] == [{"amount": 500, "method": "upi"}]  # the amount, so the server knows the balance
     assert "Balance to collect" in msgs[-1] and "did not record" not in msgs[-1]
 
     # offline: a discount cannot travel through the sync, so the bill is not saved
@@ -68,3 +69,40 @@ def test_refund_estimate_spreads_the_bill_discount_over_the_lines():
     assert refund_estimate(lines, 150) == 450  # the 10 % discount (150 of 1500) comes off the refund too
     assert refund_estimate([(1000, 2, 0)], 0) == 0
     assert received_total(300.10, 199.90) == 500
+
+
+def test_a_part_payment_by_one_method_sends_the_amount_so_the_balance_is_known(qapp):
+    from ui.sales_screen import CartItem, SalesScreen
+
+    s = SalesScreen()
+    s._cart = [CartItem("i1", "Chair", 1000.0, 0.0, 1)]
+    s._update_totals()
+    s.pay_pick.setCurrentIndex(s.pay_pick.findData("upi"))
+    s.received_in.setValue(400)
+    assert s._payment() == {"payment_method": "upi", "payment_status": "partial", "payments": [{"amount": 400, "method": "upi"}]}
+    s.received_in.setValue(1000)  # paid in full: no payment list needed, the server records the total
+    assert s._payment() == {"payment_method": "upi", "payment_status": "paid"}
+    s.pay_pick.setCurrentIndex(s.pay_pick.count() - 1)  # Not paid yet
+    assert s._payment() == {"payment_status": "pending"}
+
+
+def test_a_part_paid_bill_can_still_be_saved_offline(qapp, monkeypatch):
+    import json
+
+    from database.outbox_repository import OutboxRepository
+    from PyQt6.QtWidgets import QMessageBox
+    from services.sales_service import SalesService
+    from ui.sales_screen import CartItem, SalesScreen
+
+    monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: None)
+    s = SalesScreen()
+    s._cart = [CartItem("i1", "Chair", 1000.0, 0.0, 1)]
+    s.phone_input.setText("9876543210")
+    s.customer_input.setText("Meena")
+    s._update_totals()
+    s.received_in.setValue(400)
+    monkeypatch.setattr(SalesService, "is_online", lambda self: False)
+    s._generate_invoice()
+    (entry,) = OutboxRepository().get_pending()
+    payload = json.loads(entry.payload)
+    assert payload["payment_status"] == "partial" and payload["payment_method"] == "cash"
