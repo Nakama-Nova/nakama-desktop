@@ -1,6 +1,7 @@
 """Receipts on paper: the figures, the provisional wording, the roll that grows with the bill, the PDF."""
 
 from ui import receipt_render as rr
+from conftest import create_bill
 
 SALE = {
     "invoice_number": "NTD-0007", "created_at": "2026-11-24T10:00:00", "sub_total": 1000, "tax_total": 180,
@@ -61,7 +62,7 @@ def test_the_till_keeps_the_last_bill_for_a_receipt(qapp, monkeypatch):
     s.phone_input.setText("9876543210")
     s.customer_input.setText("Meena")
     monkeypatch.setattr(SalesService, "is_online", lambda self: False)
-    s._generate_invoice()  # saved offline
+    create_bill(s)  # saved offline
     sale, items, provisional = s._last_bill
     assert provisional and sale["customer_name"] == "Meena" and items[0]["item_name"] == "Chair" and s.receipt_btn.isEnabled()
 

@@ -4,6 +4,7 @@ import pytest
 
 from services.money import inr
 from ui.sales_screen import CartItem, SalesScreen
+from conftest import create_bill
 
 
 @pytest.mark.parametrize(
@@ -96,7 +97,7 @@ def test_the_online_bill_carries_how_it_was_paid(qapp, monkeypatch):
 
     monkeypatch.setattr(SalesService, "create_sale", create)
     monkeypatch.setattr("ui.sales_screen.QMessageBox.critical", lambda *a, **k: None)
-    w._generate_invoice()
+    create_bill(w)
     assert seen == {"payment_method": "upi", "payment_status": "paid"}
 
 
@@ -114,7 +115,7 @@ def test_an_offline_bill_keeps_the_method_and_says_the_server_shows_it_unpaid(qa
     shown = []
     monkeypatch.setattr(SalesService, "is_online", lambda self: False)
     monkeypatch.setattr("ui.sales_screen.QMessageBox.information", lambda *a, **k: shown.append(a[2]))
-    w._generate_invoice()
+    create_bill(w)
     (entry,) = OutboxRepository().get_pending()
     payload = json.loads(entry.payload)
     assert payload["payment_method"] == "card" and payload["payment_status"] == "paid"
@@ -135,7 +136,7 @@ def test_a_bill_not_paid_yet_is_queued_without_a_method(qapp, monkeypatch):
     shown = []
     monkeypatch.setattr(SalesService, "is_online", lambda self: False)
     monkeypatch.setattr("ui.sales_screen.QMessageBox.information", lambda *a, **k: shown.append(a[2]))
-    w._generate_invoice()
+    create_bill(w)
     (entry,) = OutboxRepository().get_pending()
     payload = json.loads(entry.payload)
     assert payload["payment_method"] is None and payload["payment_status"] == "pending"

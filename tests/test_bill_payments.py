@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import QMessageBox
 from services.sales_service import SalesService
 from ui.bill_payments import PaymentsDialog, ReturnDialog
 from ui.sales_screen import CartItem, SalesScreen
+from conftest import create_bill
 
 SALE = {
     "id": "s1", "invoice_number": "INV-1", "total_amount": 1000, "discount": 0,
@@ -38,7 +39,7 @@ def test_split_payment_at_the_till_sends_each_payment(qapp, monkeypatch):
     monkeypatch.setattr(SalesService, "create_sale", lambda self, **kw: sent.update(kw) or {"invoice_number": "INV-9", "payment_status": "paid"})
     monkeypatch.setattr(SalesService, "fetch_and_save_pdf", lambda self, n: "b.pdf")
     monkeypatch.setattr(SalesService, "open_pdf", staticmethod(lambda p: None))
-    s._generate_invoice()
+    create_bill(s)
     assert sent["payments"] == [{"amount": 400, "method": "cash"}, {"amount": 600, "method": "upi"}]
     assert s._split_rows == []  # the next bill starts with one payment again
 
@@ -54,7 +55,7 @@ def test_a_split_payment_is_not_saved_offline(qapp, monkeypatch):
     s.received_in.setValue(400)
     s._add_split_row()
     monkeypatch.setattr(SalesService, "is_online", lambda self: False)
-    s._generate_invoice()
+    create_bill(s)
     assert "split payment" in shown[-1] and s._cart
 
 
@@ -141,7 +142,7 @@ def test_gstin_check_and_the_till_field(qapp, monkeypatch):
     s.customer_input.setText("Meena")
     warned = []
     monkeypatch.setattr(QMessageBox, "warning", lambda *a, **k: warned.append(a[2]))
-    s._generate_invoice()
+    create_bill(s)
     assert warned and "Correct it" in warned[-1] and s._cart  # a mistyped GSTIN stops the bill
 
 

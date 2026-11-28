@@ -86,3 +86,20 @@ def dialogs(monkeypatch):
     for kind in ("information", "warning", "critical", "question"):
         monkeypatch.setattr(QMessageBox, kind, make(kind))
     return seen
+
+
+def create_bill(screen, seconds: float = 10.0) -> str:
+    """Press Create bill and wait for it to finish (it runs on a worker thread); returns how it ended."""
+    import time
+
+    from PyQt6.QtCore import QCoreApplication
+
+    ended = []
+    screen.bill_finished.connect(ended.append)
+    screen._generate_invoice()
+    deadline = time.monotonic() + seconds
+    while screen._bill_in_flight and time.monotonic() < deadline:
+        QCoreApplication.processEvents()
+        time.sleep(0.005)
+    screen.bill_finished.disconnect(ended.append)
+    return ended[-1] if ended else "not-started"  # validation stops (missing phone, ...) never start a bill

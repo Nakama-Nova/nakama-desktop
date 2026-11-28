@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import QMessageBox
 
 from services import app_settings
 from ui.settings_dialog import SettingsDialog
+from conftest import create_bill
 
 
 # ------------------------------------------------------------------ the settings file
@@ -242,7 +243,7 @@ def test_the_bill_pdf_opens_only_when_the_setting_says_so(qapp, monkeypatch, ope
     monkeypatch.setattr(SalesService, "fetch_and_save_pdf", lambda self, n: "bill.pdf")
     monkeypatch.setattr(SalesService, "open_pdf", staticmethod(lambda path: opened.append(path)))
     monkeypatch.setattr("ui.sales_screen.QMessageBox.information", lambda *a, **k: None)
-    s._generate_invoice()
+    create_bill(s)
     assert opened == (["bill.pdf"] if open_it else [])
 
 

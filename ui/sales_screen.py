@@ -910,10 +910,15 @@ class SalesScreen(QWidget):
         return True
 
     # ------------------------------------------------------------------
-    # Invoice generation
+    # Invoice generation: checked here, sent from a worker thread, finished here
     # ------------------------------------------------------------------
+    _bill_in_flight = False
+    bill_finished = pyqtSignal(str)  # how it ended: created, offline, buyer_failed, server_refused, no_invoice, failed
+
     @handle_permissions
     def _generate_invoice(self):
+        if self._bill_in_flight:
+            return  # this bill is already on its way: a second press (or Ctrl+Enter) must not send it twice
         phone = self.phone_input.text().strip()
         customer_name = self.customer_input.text().strip()
 
@@ -934,62 +939,127 @@ class SalesScreen(QWidget):
             return
 
         client_id = self._client_id_for_cart(phone)
+        request = self._bill_request(customer_name, phone, client_id)
+        worker = AsyncWorker(lambda: self._bill_in_background(request), self)
+        worker.loading.connect(self._bill_busy)
+        worker.success.connect(lambda outcome, r=request: self._bill_done(outcome, r))
+        worker.error.connect(lambda exc, r=request: self._bill_failed(exc, r))
+        self._bill_worker = worker  # kept until it answers
+        self._bill_in_flight = True
+        worker.start()
 
-        # No connection: keep the sale on this computer and sync it later.
+    def _bill_request(self, customer_name: str, phone: str, client_id: str) -> dict:
+        """Everything the worker needs, copied now, so it never reads a widget."""
+        gstin = gst.clean(self.gstin_input.text())
+        place = self._sold_from()
+        pay = self._payment()
+        extra = {"location_id": place} if place else {}  # one shop: the server fills it in
+        extra.update(pay)
+        if self._discount:
+            extra["discount"] = self._discount
+        return {
+            "name": customer_name,
+            "phone": phone,
+            "client_id": client_id,
+            "gstin": [gstin] if gstin else [],
+            "items": [{"item_id": c.item_id, "quantity": c.quantity} for c in self._cart],
+            "extra": extra,
+            "pay": pay,
+        }
+
+    def _bill_in_background(self, request: dict) -> dict:
+        """The network part of Create bill, on a worker thread: no widgets, no dialogs, and what
+        happened comes back as plain data. A refused sale queues the server's own reason, which the
+        GUI thread shows first, as it did when this ran in the foreground."""
         if not self._sales_service.is_online():
-            self._save_offline(customer_name, phone, client_id)
-            return
-
-        buyer_gstin = [gst.clean(self.gstin_input.text())] if gst.clean(self.gstin_input.text()) else []
+            return {"kind": "offline"}
         try:
-            customer_id = self._customer_service.ensure_customer(customer_name, phone, *buyer_gstin)
+            customer_id = self._customer_service.ensure_customer(request["name"], request["phone"], *request["gstin"])
             if customer_id is None:
-                QMessageBox.critical(
-                    self, "Error", "Could not create buyer record. Check connection."
-                )
-                return
-
-            payload_items = [
-                {"item_id": c.item_id, "quantity": c.quantity} for c in self._cart
-            ]
-            place = self._sold_from()
-            extra = {"location_id": place} if place else {}  # one shop: the server fills it in
-            pay = self._payment()
-            extra.update(pay)
-            if self._discount:
-                extra["discount"] = self._discount
-            sale_data = self._sales_service.create_sale(
-                items=payload_items, customer_id=customer_id, client_id=client_id, **extra
+                return {"kind": "buyer_failed"}
+            sale = self._sales_service.create_sale(
+                items=request["items"], customer_id=customer_id, client_id=request["client_id"], **request["extra"]
             )
         except requests.RequestException:
-            # The connection dropped after the online check. The server may or
-            # may not have recorded the bill; the shared client_id covers both.
-            self._save_offline(customer_name, phone, client_id)
-            return
-        if sale_data is None:
-            QMessageBox.critical(
-                self, "Error", "Failed to create bill. Check backend connection."
-            )
-            return
-
-        invoice_number = sale_data.get("invoice_number")
+            # The connection dropped after the online check. The server may or may not have recorded
+            # the bill; the shared client_id covers both.
+            return {"kind": "offline"}
+        if sale is None:
+            return {"kind": "server_refused"}
+        invoice_number = sale.get("invoice_number")
         if not invoice_number:
-            QMessageBox.critical(
-                self, "Error", "Bill created but invoice number missing."
-            )
-            return
-
+            return {"kind": "no_invoice", "sale": sale}
+        outcome = {"kind": "created", "sale": sale, "pdf": None, "pdf_error": None}
         try:
-            pdf = self._sales_service.fetch_and_save_pdf(invoice_number)
-            if app_settings.get("open_bill_pdf"):  # Settings: some counters would rather not have it pop up
-                self._sales_service.open_pdf(pdf)
-        except BillPdfError as exc:
+            outcome["pdf"] = self._sales_service.fetch_and_save_pdf(invoice_number)
+        except BillPdfError as exc:  # the bill is saved; only its PDF failed
+            outcome["pdf_error"] = str(exc)
+        return outcome
+
+    def _bill_busy(self, on: bool) -> None:
+        """While the bill is on its way the panel is locked (nothing can change what is being sent)."""
+        self.workspace.setEnabled(not on)
+        self.invoice_btn.setText("Creating bill…" if on else "Create bill")
+
+    def _bill_done(self, outcome: dict, request: dict) -> None:
+        kind = outcome["kind"]
+        try:
+            if kind == "offline":
+                self._save_offline(request["name"], request["phone"], request["client_id"])
+            elif kind == "buyer_failed":
+                QMessageBox.critical(self, "Error", "Could not create buyer record. Check connection.")
+            elif kind == "server_refused":
+                QMessageBox.critical(self, "Error", "Failed to create bill. Check backend connection.")
+            elif kind == "no_invoice":
+                QMessageBox.critical(self, "Error", "Bill created but invoice number missing.")
+            elif kind == "created":
+                self._bill_created(outcome, request["pay"])
+        finally:
+            self._bill_in_flight = False
+            self.bill_finished.emit(kind)
+
+    def _bill_failed(self, exc, request: dict) -> None:
+        """The worker raised instead of answering: refused, signed out, or something unexpected."""
+        from services.api_client import SessionExpiredError
+        from ui.workers import _default_error
+
+        kind = "failed"
+        try:
+            if isinstance(exc, ForbiddenError):
+                QMessageBox.warning(
+                    self, "Access Denied", "You don’t have permission to perform this action.", QMessageBox.StandardButton.Ok
+                )
+            elif isinstance(exc, SessionExpiredError):
+                pass  # the expiry hook has already told the user and gone to sign-in
+            elif isinstance(exc, requests.RequestException):
+                kind = "offline"
+                self._save_offline(request["name"], request["phone"], request["client_id"])
+            else:
+                _default_error(exc)
+        finally:
+            self._bill_in_flight = False
+            self.bill_finished.emit(kind)
+
+    def _bill_created(self, outcome: dict, pay: dict) -> None:
+        sale_data = outcome["sale"]
+        invoice_number = sale_data["invoice_number"]
+        if outcome["pdf_error"] is not None:
             QMessageBox.warning(
                 self,
                 "Bill saved, PDF not shown",
-                f"Bill {invoice_number} was saved, but its PDF could not be opened.\n\n{exc}\n\n"
+                f"Bill {invoice_number} was saved, but its PDF could not be opened.\n\n{outcome['pdf_error']}\n\n"
                 "You can open it again from Bill History.",
             )
+        elif outcome["pdf"] is not None and app_settings.get("open_bill_pdf"):  # Settings: some counters would rather not
+            try:
+                self._sales_service.open_pdf(outcome["pdf"])
+            except BillPdfError as exc:
+                QMessageBox.warning(
+                    self,
+                    "Bill saved, PDF not shown",
+                    f"Bill {invoice_number} was saved, but its PDF could not be opened.\n\n{exc}\n\n"
+                    "You can open it again from Bill History.",
+                )
 
         note = ""
         kind, rupees = change_or_balance(self._total, self._received())
